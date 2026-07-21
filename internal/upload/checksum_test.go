@@ -32,10 +32,10 @@ func TestDigestFileCRC32CGoldenVectors(t *testing.T) {
 		data []byte
 		want string // base64(big-endian crc32c)
 	}{
-		{"rfc3720 32 zeros", make([]byte, 32), "ipE2qg=="},         // 0x8A9136AA
+		{"rfc3720 32 zeros", make([]byte, 32), "ipE2qg=="},              // 0x8A9136AA
 		{"rfc3720 32 ones", bytes.Repeat([]byte{0xff}, 32), "YqirQw=="}, // 0x62A8AB43
-		{"rfc3720 incrementing", incrementing, "Rt15Tg=="},          // 0x46DD794E
-		{"hello world", []byte("hello world"), "yZRlqg=="},          // 0xC99465AA
+		{"rfc3720 incrementing", incrementing, "Rt15Tg=="},              // 0x46DD794E
+		{"hello world", []byte("hello world"), "yZRlqg=="},              // 0xC99465AA
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
