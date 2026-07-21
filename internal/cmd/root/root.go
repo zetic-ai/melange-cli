@@ -23,7 +23,10 @@ which lets you deploy, benchmark, and manage on-device AI models.
 
 Authenticate by setting MELANGE_API_KEY or by running melange auth login.
 Data is written to stdout; progress and diagnostics go to stderr.
-Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupted.`,
+Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupted.
+
+Reference topics: melange help environment, melange help exit-codes,
+melange help formatting.`,
 
 		Example: `  # List repositories as JSON
   melange repo list --json
@@ -77,6 +80,12 @@ Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupte
 	cmd.AddCommand(repo.NewCmdRepo(f))
 	cmd.AddCommand(model.NewCmdModel(f))
 	cmd.AddCommand(apicmd.NewCmdAPI(f))
+
+	// Additional help topics (gh-style): hidden, non-runnable commands that
+	// only print reference documentation via `melange help <topic>`.
+	for _, topic := range helpTopics {
+		cmd.AddCommand(newHelpTopic(topic))
+	}
 
 	return cmd
 }
