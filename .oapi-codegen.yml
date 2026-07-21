@@ -1,0 +1,8 @@
+# Config for oapi-codegen (run via `make gen`).
+# Input: openapi/public-v1.3.0.json (down-converted from the vendored
+# openapi/public-v1.json backend export — see openapi/SPEC_SOURCE).
+package: gen
+generate:
+  - types
+  - client
+output: internal/api/gen/client.gen.go
