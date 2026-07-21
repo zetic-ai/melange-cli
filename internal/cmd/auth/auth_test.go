@@ -122,6 +122,16 @@ func TestLoginJSON(t *testing.T) {
 	assert.Equal(t, "keyring", got.Storage)
 }
 
+func TestLoginJQ(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	e.in.WriteString("ztp_abc123\n")
+
+	err := run(t, e, "auth", "login", "--with-token", "--jq", ".storage")
+	require.NoError(t, err)
+	assert.Equal(t, "keyring\n", e.out.String())
+}
+
 func TestLoginBadPrefix(t *testing.T) {
 	e := setup(t)
 	e.in.WriteString("sk-not-melange\n")
@@ -294,6 +304,36 @@ func TestStatusJSON(t *testing.T) {
 	assert.Equal(t, "ci-token", got.TokenName)
 }
 
+func TestStatusJQ(t *testing.T) {
+	e := setup(t)
+	t.Setenv(config.EnvAPIKey, "ztp_env")
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+
+	err := run(t, e, "auth", "status", "--jq", ".account")
+	require.NoError(t, err)
+	assert.Equal(t, "Zetic\n", e.out.String())
+}
+
+func TestStatusTemplate(t *testing.T) {
+	e := setup(t)
+	t.Setenv(config.EnvAPIKey, "ztp_env")
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+
+	err := run(t, e, "auth", "status", "--template", "{{.host}} {{.token_source}}")
+	require.NoError(t, err)
+	assert.Equal(t, "api.zetic.ai env:MELANGE_API_KEY", e.out.String())
+}
+
+func TestStatusJQTemplateConflictExits2(t *testing.T) {
+	e := setup(t)
+	t.Setenv(config.EnvAPIKey, "ztp_env")
+
+	err := run(t, e, "auth", "status", "--jq", ".host", "--template", "{{.host}}")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Empty(t, e.reg.Requests, "usage errors must not reach the API")
+}
+
 // ---------------------------------------------------------------------------
 // token
 // ---------------------------------------------------------------------------
@@ -358,4 +398,12 @@ func TestLogoutNotesEnvStillWins(t *testing.T) {
 	err := run(t, e, "auth", "logout")
 	require.NoError(t, err)
 	assert.Contains(t, e.errOut.String(), "MELANGE_API_KEY")
+}
+
+func TestLogoutExampleDoesNotUseHiddenHostFlag(t *testing.T) {
+	e := setup(t)
+	require.NoError(t, run(t, e, "auth", "logout", "--help"))
+	help := e.out.String()
+	assert.NotContains(t, help, "--host", "examples must not rely on the hidden --host flag")
+	assert.Contains(t, help, "MELANGE_HOST", "host targeting is documented via the env var")
 }

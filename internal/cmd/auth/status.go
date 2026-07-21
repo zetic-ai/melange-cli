@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func newCmdStatus(f *cmdutil.Factory) *cobra.Command {
-	var jsonOutput bool
+	var exporter *cmdutil.Exporter
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -59,9 +58,8 @@ token was rejected.`,
 				return err
 			}
 
-			out := f.IOStreams.Out
-			if jsonOutput {
-				return json.NewEncoder(out).Encode(map[string]any{
+			if exporter != nil {
+				return exporter.Write(f.IOStreams, map[string]any{
 					"host":         host.hostKey,
 					"account":      me.Account.Name,
 					"scopes":       me.Token.Scopes,
@@ -70,6 +68,7 @@ token was rejected.`,
 					"storage":      storageLocation(token.Source),
 				})
 			}
+			out := f.IOStreams.Out
 			fmt.Fprintf(out, "Host: %s\n", host.hostKey)
 			fmt.Fprintf(out, "Account: %s (%s)\n", me.Account.Name, me.Account.Type)
 			fmt.Fprintf(out, "User: %s\n", me.User.Email)
@@ -81,7 +80,7 @@ token was rejected.`,
 		},
 	}
 
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output status as JSON")
+	cmdutil.AddJSONFlags(cmd, &exporter)
 
 	return cmd
 }

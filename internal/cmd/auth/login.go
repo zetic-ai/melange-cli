@@ -2,7 +2,6 @@ package auth
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +19,7 @@ func newCmdLogin(f *cmdutil.Factory) *cobra.Command {
 	var (
 		withToken       bool
 		insecureStorage bool
-		jsonOutput      bool
+		exporter        *cmdutil.Exporter
 	)
 
 	cmd := &cobra.Command{
@@ -86,8 +85,8 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 				return err
 			}
 
-			if jsonOutput {
-				return json.NewEncoder(f.IOStreams.Out).Encode(map[string]any{
+			if exporter != nil {
+				return exporter.Write(f.IOStreams, map[string]any{
 					"host":    host.hostKey,
 					"account": me.Account.Name,
 					"scopes":  me.Token.Scopes,
@@ -104,7 +103,7 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 	cmd.Flags().BoolVar(&withToken, "with-token", false, "Read the token from standard input")
 	cmd.Flags().BoolVar(&insecureStorage, "insecure-storage", false,
 		"Store the token in the config file when the OS keyring is unavailable")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output the result as JSON")
+	cmdutil.AddJSONFlags(cmd, &exporter)
 
 	return cmd
 }
