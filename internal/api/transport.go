@@ -1,11 +1,17 @@
 package api
 
 import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
+	"strings"
+	"syscall"
 	"time"
 )
 
@@ -62,17 +68,32 @@ const (
 // jittered exponential backoff. Retry-After is honored (capped) on 429s.
 type retryTransport struct {
 	base  http.RoundTripper
-	sleep func(time.Duration) // injectable for tests
+	sleep func(context.Context, time.Duration) error // injectable for tests
 }
 
 func newRetryTransport(base http.RoundTripper) *retryTransport {
-	return &retryTransport{base: base, sleep: time.Sleep}
+	return &retryTransport{base: base, sleep: sleepContext}
+}
+
+// sleepContext blocks for d or until ctx is done, returning ctx.Err() when
+// interrupted so a canceled request never waits out the backoff delay.
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if !retryEligible(req) {
 		return t.base.RoundTrip(req)
 	}
+	// Per the RoundTripper contract, never mutate the caller's request.
+	req = req.Clone(req.Context())
 
 	var resp *http.Response
 	var err error
@@ -90,6 +111,9 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		var delay time.Duration
 		switch {
 		case err != nil:
+			if !isRetryableTransportErr(err) {
+				return nil, err
+			}
 			delay = backoff(attempt)
 		case retryableStatus(resp.StatusCode):
 			if ra := parseRetryAfter(resp.Header.Get("Retry-After")); ra > 0 {
@@ -109,8 +133,40 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBodyBytes))
 			_ = resp.Body.Close()
 		}
-		t.sleep(delay)
+		if sleepErr := t.sleep(req.Context(), delay); sleepErr != nil {
+			return nil, sleepErr
+		}
 	}
+}
+
+// isRetryableTransportErr reports whether a transport-level error is worth
+// retrying: timeouts and connection resets/refusals are transient, while
+// context cancellation and TLS certificate failures are not.
+func isRetryableTransportErr(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var (
+		certVerify  *tls.CertificateVerificationError
+		unknownCA   x509.UnknownAuthorityError
+		hostnameErr x509.HostnameError
+		certInvalid x509.CertificateInvalidError
+	)
+	if errors.As(err, &certVerify) || errors.As(err, &unknownCA) ||
+		errors.As(err, &hostnameErr) || errors.As(err, &certInvalid) {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	// url.Error and friends often carry only stringly-typed causes.
+	msg := err.Error()
+	return strings.Contains(msg, "connection reset") || strings.Contains(msg, "connection refused")
 }
 
 // retryEligible reports whether the request may be retried at all: it must be

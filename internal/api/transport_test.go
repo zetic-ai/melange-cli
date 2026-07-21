@@ -1,10 +1,15 @@
 package api
 
 import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -18,7 +23,10 @@ import (
 func newTestRetry(base http.RoundTripper) (*retryTransport, *[]time.Duration) {
 	sleeps := &[]time.Duration{}
 	rt := newRetryTransport(base)
-	rt.sleep = func(d time.Duration) { *sleeps = append(*sleeps, d) }
+	rt.sleep = func(_ context.Context, d time.Duration) error {
+		*sleeps = append(*sleeps, d)
+		return nil
+	}
 	return rt, sleeps
 }
 
@@ -176,6 +184,89 @@ func TestRetryConnectionErrorExhausted(t *testing.T) {
 	assert.Nil(t, resp)
 	assert.ErrorIs(t, err, boom)
 	assert.Len(t, reg.Requests, 4)
+}
+
+func TestRetryBackoffCancellationReturnsPromptly(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(
+		httpmock.REST("GET", "/v1/me"),
+		httpmock.WithHeader(httpmock.StatusStringResponse(429, ""), "Retry-After", "30"),
+	)
+
+	// Production sleep: context-aware, so cancellation interrupts the backoff.
+	rt := newRetryTransport(reg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://api.zetic.ai/v1/me", nil)
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	resp, err := rt.RoundTrip(req) //nolint:bodyclose
+	elapsed := time.Since(start)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, resp)
+	assert.Less(t, elapsed, 5*time.Second, "cancellation must not wait out the 30s Retry-After")
+}
+
+func TestRetryCertificateErrorNotRetried(t *testing.T) {
+	reg := &httpmock.Registry{}
+	certErr := &url.Error{
+		Op:  "Get",
+		URL: "https://api.zetic.ai/v1/me",
+		Err: &tls.CertificateVerificationError{Err: x509.UnknownAuthorityError{}},
+	}
+	reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.ErrorResponse(certErr))
+
+	rt, sleeps := newTestRetry(reg)
+	req, _ := http.NewRequest("GET", "https://api.zetic.ai/v1/me", nil)
+	resp, err := rt.RoundTrip(req) //nolint:bodyclose
+	require.Error(t, err)
+
+	var unknownCA x509.UnknownAuthorityError
+	assert.ErrorAs(t, err, &unknownCA)
+	assert.Nil(t, resp)
+	assert.Len(t, reg.Requests, 1, "certificate errors must not be retried")
+	assert.Empty(t, *sleeps)
+}
+
+func TestRetryECONNRESETRetried(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reset := &url.Error{Op: "Get", URL: "https://api.zetic.ai/v1/me", Err: syscall.ECONNRESET}
+	reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.ErrorResponse(reset))
+	reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, "ok"))
+
+	rt, _ := newTestRetry(reg)
+	req, _ := http.NewRequest("GET", "https://api.zetic.ai/v1/me", nil)
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Len(t, reg.Requests, 2)
+}
+
+func TestRetryDoesNotMutateCallerRequest(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("POST", "/v1/models"), httpmock.StatusStringResponse(503, "unavailable"))
+	reg.Register(httpmock.REST("POST", "/v1/models"), httpmock.StatusStringResponse(200, "ok"))
+
+	rt, _ := newTestRetry(reg)
+	req, _ := http.NewRequest("POST", "https://api.zetic.ai/v1/models", strings.NewReader(`{"n":1}`))
+	req.Header.Set("Idempotency-Key", "idem-1")
+	origBody := req.Body
+
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, 200, resp.StatusCode)
+	require.Len(t, reg.Requests, 2)
+	assert.True(t, req.Body == origBody, "retry must not swap the caller's request body")
 }
 
 func TestRetryBackoffDoubles(t *testing.T) {
