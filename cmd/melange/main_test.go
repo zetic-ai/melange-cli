@@ -60,6 +60,18 @@ func TestRunCompletionBash(t *testing.T) {
 	assert.Equal(t, 0, code, "completion bash should exit 0")
 }
 
+// TestRunHelpTopicsExitZero pins the help-topic contract through the real
+// Run() path: `melange help <topic>` is a successful documentation read and
+// must exit 0 for every registered topic (regression: C9 review).
+func TestRunHelpTopicsExitZero(t *testing.T) {
+	for _, topic := range []string{"environment", "exit-codes", "formatting"} {
+		t.Run(topic, func(t *testing.T) {
+			code := Run([]string{"help", topic})
+			assert.Equal(t, 0, code, "melange help %s must exit 0", topic)
+		})
+	}
+}
+
 // TestHelpContainsExitCodes captures the --help output and asserts it
 // documents the exit-code contract (including 130 for interrupted).
 func TestHelpContainsExitCodes(t *testing.T) {
