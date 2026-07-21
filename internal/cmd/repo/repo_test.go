@@ -432,6 +432,8 @@ func TestRepoCreateHappy(t *testing.T) {
 	assert.Equal(t, "general", body["model_type"], "--model-type defaults to general")
 	assert.NotContains(t, body, "description")
 	assert.NotContains(t, body, "tags")
+	assert.NotContains(t, body, "is_private", "unset flags stay out of the body")
+	assert.NotContains(t, body, "use_case")
 
 	assert.Contains(t, e.errOut.String(), "✓ Created repository zetic/whisper-tiny")
 	assert.Empty(t, e.out.String(), "stdout stays clean without --json")
@@ -455,44 +457,22 @@ func TestRepoCreateWithFlagsAndJSON(t *testing.T) {
 	assert.Equal(t, body+"\n", e.out.String(), "--json emits the created resource")
 }
 
-func TestRepoCreatePrivateAndUseCaseComposePatch(t *testing.T) {
+func TestRepoCreatePrivateAndUseCaseSinglePost(t *testing.T) {
 	e := setup(t)
-	created := whisperRepo()
-	created.IsPrivate = false
-	created.UseCase = nil
-	patched := marshal(t, whisperRepo())
-	e.reg.Register(httpmock.REST("POST", "/v1/repos"), jsonStub(201, marshal(t, created)))
-	e.reg.Register(httpmock.REST("PATCH", "/v1/repos/zetic/whisper-tiny"), jsonStub(200, patched))
+	created := marshal(t, whisperRepo())
+	e.reg.Register(httpmock.REST("POST", "/v1/repos"), jsonStub(201, created))
 
 	require.NoError(t, run(t, e, "repo", "create", "whisper-tiny",
-		"--private", "--use-case", "speech", "--json"))
+		"--private", "--use-case", "speech", "--tag", "asr", "--json"))
 
-	require.Len(t, e.reg.Requests, 2)
-	patch := requestBody(t, e.reg.Requests[1])
-	assert.Equal(t, true, patch["is_private"])
-	assert.Equal(t, "speech", patch["use_case"])
+	require.Len(t, e.reg.Requests, 1, "create must be a single atomic POST — no follow-up PATCH")
+	body := requestBody(t, e.reg.Requests[0])
+	assert.Equal(t, "whisper-tiny", body["name"])
+	assert.Equal(t, true, body["is_private"])
+	assert.Equal(t, "speech", body["use_case"])
+	assert.Equal(t, []any{"asr"}, body["tags"])
 
-	assert.Equal(t, patched+"\n", e.out.String(), "the final resource reflects the patch")
-	e.reg.Verify(t)
-}
-
-func TestRepoCreatePatchFailureReportsRepoWasCreated(t *testing.T) {
-	e := setup(t)
-	created := whisperRepo()
-	created.IsPrivate = false
-	created.UseCase = nil
-	e.reg.Register(httpmock.REST("POST", "/v1/repos"), jsonStub(201, marshal(t, created)))
-	e.reg.Register(httpmock.REST("PATCH", "/v1/repos/zetic/whisper-tiny"),
-		jsonStub(403, `{"type":"error","error":{"type":"permission_error","message":"token lacks the write scope"},"request_id":"req_5"}`))
-
-	err := run(t, e, "repo", "create", "whisper-tiny", "--private", "--use-case", "speech")
-	require.Error(t, err)
-	assert.Equal(t, 1, cmdutil.ExitCode(err))
-	assert.Contains(t, err.Error(), "was created",
-		"the user must learn the repo exists despite the failed update")
-	assert.Contains(t, err.Error(), "zetic/whisper-tiny",
-		"the error must name the repository that was created")
-	require.Len(t, e.reg.Requests, 2, "POST then PATCH")
+	assert.Equal(t, created+"\n", e.out.String(), "--json emits the created resource")
 	e.reg.Verify(t)
 }
 

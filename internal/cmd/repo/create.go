@@ -35,8 +35,7 @@ func newCmdCreate(f *cmdutil.Factory) *cobra.Command {
 
 On success a confirmation goes to stderr and stdout stays empty; with
 --json the created resource object is written to stdout exactly as the
-API returned it. --private and --use-case are applied with a follow-up
-update after creation.
+API returned it.
 
 Creating repositories requires a token with the write scope.
 
@@ -82,6 +81,13 @@ Exit codes: 0 created, 1 API error (including a 409 name conflict and
 			if len(tags) > 0 {
 				body.Tags = &tags
 			}
+			if private {
+				body.IsPrivate = &private
+			}
+			if useCase != "" {
+				uc := gen.CreateRepoRequestUseCase(useCase)
+				body.UseCase = &uc
+			}
 
 			resp, err := g.CreateRepoWithResponse(ctx, body)
 			if err != nil {
@@ -100,33 +106,6 @@ Exit codes: 0 created, 1 API error (including a 409 name conflict and
 			raw := resp.Body
 			if repo == nil {
 				return fmt.Errorf("unexpected response creating repository %s (HTTP %d)", name, resp.StatusCode())
-			}
-
-			// The create endpoint does not accept is_private/use_case; apply
-			// them with a follow-up update.
-			if private || useCase != "" {
-				update := gen.UpdateRepoJSONRequestBody{}
-				if private {
-					update.IsPrivate = &private
-				}
-				if useCase != "" {
-					uc := gen.UpdateRepoRequestUseCase(useCase)
-					update.UseCase = &uc
-				}
-				uresp, err := g.UpdateRepoWithResponse(ctx, repo.Account, repo.Name, update)
-				if err == nil {
-					err = api.ErrorFrom(uresp.StatusCode(), uresp.HTTPResponse.Header, uresp.Body)
-				}
-				if err != nil {
-					return fmt.Errorf("repository %s was created, but applying --private/--use-case failed: %w",
-						repo.FullName, err)
-				}
-				if uresp.JSON200 == nil {
-					return fmt.Errorf("unexpected response updating repository %s (HTTP %d)",
-						repo.FullName, uresp.StatusCode())
-				}
-				repo = uresp.JSON200
-				raw = uresp.Body
 			}
 
 			ios := f.IOStreams
