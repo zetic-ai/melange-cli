@@ -1,0 +1,26 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - misspell
+    - gofmt
+
+linters-settings:
+  gofmt:
+    simplify: true
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    # Test files have relaxed errcheck (e.g., buffer writes never fail)
+    - path: _test\.go
+      linters:
+        - errcheck
