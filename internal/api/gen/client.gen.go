@@ -351,10 +351,10 @@ type MeResponse struct {
 
 // MeToken defines model for MeToken.
 type MeToken struct {
-	ExpiresAt  *string  `json:"expires_at,omitempty"`
-	LastUsedAt *string  `json:"last_used_at,omitempty"`
-	Name       string   `json:"name"`
-	Scopes     []string `json:"scopes"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	Name       string     `json:"name"`
+	Scopes     []string   `json:"scopes"`
 }
 
 // MeUser defines model for MeUser.

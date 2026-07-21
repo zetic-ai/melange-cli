@@ -658,6 +658,7 @@
           "expires_at": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
@@ -669,6 +670,7 @@
           "last_used_at": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
@@ -1370,7 +1372,7 @@
     "description": "External developer API for Zetic. Authenticate with `Authorization: Bearer <token>`.",
     "title": "Zetic Public API",
     "version": "1.0.0",
-    "x-backend-commit": "e5955cf071ab45fe93f454ea7f729bff731c5421"
+    "x-backend-commit": "c76fc089723844cd1b7c2c09d1cf10788dd03955"
   },
   "openapi": "3.0.3",
   "paths": {
