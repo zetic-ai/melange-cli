@@ -24,8 +24,15 @@ var errPlaintextHTTP = errors.New("refusing to send credentials over plaintext H
 
 // authTransport sets the Authorization and User-Agent headers, and refuses to
 // attach credentials to plaintext HTTP requests targeting non-loopback hosts.
+//
+// The token is host-bound: it is only attached when the request targets the
+// configured host. This matters because http.Client re-issues redirected
+// requests through the whole transport chain, so without this check a
+// cross-host redirect (e.g. to a storage bucket) would re-add the token that
+// net/http itself deliberately strips.
 type authTransport struct {
 	base      http.RoundTripper
+	host      string // configured API host (URL.Host, including any port)
 	token     string
 	userAgent string
 }
@@ -35,7 +42,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if t.userAgent != "" {
 		req.Header.Set("User-Agent", t.userAgent)
 	}
-	if t.token != "" {
+	if t.token != "" && strings.EqualFold(req.URL.Host, t.host) {
 		if req.URL.Scheme == "http" && !isLoopback(req.URL.Hostname()) {
 			return nil, errPlaintextHTTP
 		}

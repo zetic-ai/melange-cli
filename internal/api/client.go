@@ -47,7 +47,7 @@ func NewClient(opts Options) (*Client, error) {
 		rt = &debugTransport{base: rt, out: opts.Debug}
 	}
 	retry := newRetryTransport(rt)
-	rt = &authTransport{base: retry, token: opts.Token, userAgent: opts.UserAgent}
+	rt = &authTransport{base: retry, host: baseURL.Host, token: opts.Token, userAgent: opts.UserAgent}
 
 	return &Client{
 		baseURL: baseURL,
@@ -55,10 +55,13 @@ func NewClient(opts Options) (*Client, error) {
 	}, nil
 }
 
-// Do sends a request to a path relative to the client's host (e.g. "/v1/me")
-// and returns the raw response. The caller owns the response body.
+// Do sends a request to a path relative to the client's host (e.g. "/v1/me",
+// optionally with a query string like "/v1/repos?limit=5") and returns the
+// raw response. The caller owns the response body.
 func (c *Client) Do(ctx context.Context, method, path string, body io.Reader, headers map[string]string) (*http.Response, error) {
-	u := c.baseURL.JoinPath(path)
+	p, query, _ := strings.Cut(path, "?")
+	u := c.baseURL.JoinPath(p)
+	u.RawQuery = query
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)

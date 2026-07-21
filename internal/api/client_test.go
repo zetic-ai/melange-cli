@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 
@@ -243,6 +244,62 @@ func TestClientCustomHeaders(t *testing.T) {
 
 	require.Len(t, reg.Requests, 1)
 	assert.Equal(t, "idem-42", reg.Requests[0].Header.Get("Idempotency-Key"))
+}
+
+func TestClientDoPathWithQuery(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/repos"), httpmock.StatusStringResponse(200, "{}"))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
+	resp, err := client.Do(context.Background(), "GET", "/v1/repos?limit=5&search=whisper", nil, nil)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	require.Len(t, reg.Requests, 1)
+	got := reg.Requests[0].URL
+	assert.Equal(t, "/v1/repos", got.Path)
+	assert.Equal(t, "limit=5&search=whisper", got.RawQuery,
+		"a query string in the path must survive as a real query, not a path segment")
+}
+
+func TestClientCrossHostRedirectStripsAuthorization(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/artifacts/download"),
+		httpmock.WithHeader(httpmock.StatusStringResponse(302, ""),
+			"Location", "https://storage.example.com/blob"))
+	reg.Register(httpmock.REST("GET", "/blob"), httpmock.StatusStringResponse(200, "DATA"))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
+	resp, err := client.Do(context.Background(), "GET", "/v1/artifacts/download", nil, nil)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "DATA", string(body), "the redirect must still be followed")
+
+	require.Len(t, reg.Requests, 2)
+	assert.Equal(t, "Bearer ztp_secret", reg.Requests[0].Header.Get("Authorization"))
+	assert.Equal(t, "storage.example.com", reg.Requests[1].URL.Host)
+	assert.Empty(t, reg.Requests[1].Header.Get("Authorization"),
+		"the host-bound token must never be sent to a foreign host")
+}
+
+func TestClientSameHostRedirectKeepsAuthorization(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/old"),
+		httpmock.WithHeader(httpmock.StatusStringResponse(302, ""),
+			"Location", "https://api.zetic.ai/v1/new"))
+	reg.Register(httpmock.REST("GET", "/v1/new"), httpmock.StatusStringResponse(200, "ok"))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
+	resp, err := client.Do(context.Background(), "GET", "/v1/old", nil, nil)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	require.Len(t, reg.Requests, 2)
+	assert.Equal(t, "Bearer ztp_secret", reg.Requests[1].Header.Get("Authorization"),
+		"same-host redirects keep the credentials")
 }
 
 var _ http.RoundTripper = (*httpmock.Registry)(nil)
