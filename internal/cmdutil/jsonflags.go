@@ -56,24 +56,35 @@ func AddJSONFlags(cmd *cobra.Command, exporter **Exporter) {
 			return nil
 		}
 
-		e := &Exporter{}
-		if jqExpr != "" {
-			q, err := gojq.Parse(jqExpr)
-			if err != nil {
-				return FlagError{Err: fmt.Errorf("invalid --jq expression: %w", err)}
-			}
-			e.jq = q
-		}
-		if tmplStr != "" {
-			tmpl, err := template.New("template").Funcs(templateFuncs()).Parse(tmplStr)
-			if err != nil {
-				return FlagError{Err: fmt.Errorf("invalid --template: %w", err)}
-			}
-			e.tmpl = tmpl
+		e, err := NewExporter(jqExpr, tmplStr)
+		if err != nil {
+			return FlagError{Err: err}
 		}
 		*exporter = e
 		return nil
 	}
+}
+
+// NewExporter builds an Exporter directly from a jq expression and/or Go
+// template string (either may be empty). Commands that own their output
+// contract (e.g. `melange api`) use this instead of AddJSONFlags.
+func NewExporter(jqExpr, tmplStr string) (*Exporter, error) {
+	e := &Exporter{}
+	if jqExpr != "" {
+		q, err := gojq.Parse(jqExpr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --jq expression: %w", err)
+		}
+		e.jq = q
+	}
+	if tmplStr != "" {
+		tmpl, err := template.New("template").Funcs(templateFuncs()).Parse(tmplStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --template: %w", err)
+		}
+		e.tmpl = tmpl
+	}
+	return e, nil
 }
 
 // Write renders data to ios.Out in the selected mode. data is either a

@@ -148,3 +148,35 @@ func TestJSONFlagsJQAndTemplateConflict(t *testing.T) {
 	assert.Contains(t, err.Error(), "--jq")
 	assert.Contains(t, err.Error(), "--template")
 }
+
+// ---------------------------------------------------------------------------
+// NewExporter (direct construction, used by `melange api`)
+// ---------------------------------------------------------------------------
+
+func TestNewExporterJQ(t *testing.T) {
+	e, err := cmdutil.NewExporter(".results[].full_name", "")
+	require.NoError(t, err)
+
+	ios, _, out, _ := iostreams.Test()
+	require.NoError(t, e.Write(ios, json.RawMessage(pageBody)))
+	assert.Equal(t, "zetic/whisper-tiny\nacme/detr\n", out.String())
+}
+
+func TestNewExporterTemplate(t *testing.T) {
+	e, err := cmdutil.NewExporter("", "{{.count}}")
+	require.NoError(t, err)
+
+	ios, _, out, _ := iostreams.Test()
+	require.NoError(t, e.Write(ios, json.RawMessage(pageBody)))
+	assert.Equal(t, "2", out.String())
+}
+
+func TestNewExporterInvalidExpressions(t *testing.T) {
+	_, err := cmdutil.NewExporter(".foo[", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid --jq expression")
+
+	_, err = cmdutil.NewExporter("", "{{.count")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid --template")
+}
