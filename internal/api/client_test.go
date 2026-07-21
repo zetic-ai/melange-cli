@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -129,6 +130,9 @@ func TestClientJSONReturnsAPIError(t *testing.T) {
 	assert.Equal(t, "req_9", apiErr.RequestID)
 }
 
+// TestGetMe exercises the generated-client path: the wire call goes through
+// gen.ClientWithResponses but reuses the wrapper's transport chain, so the
+// Bearer token and User-Agent still apply.
 func TestGetMe(t *testing.T) {
 	reg := &httpmock.Registry{}
 	body := `{
@@ -141,7 +145,7 @@ func TestGetMe(t *testing.T) {
 			"last_used_at": "2026-07-20T10:00:00Z"
 		}
 	}`
-	reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, body))
+	reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.JSONResponse(200, json.RawMessage(body)))
 
 	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
 	me, err := client.GetMe(context.Background())
@@ -153,7 +157,61 @@ func TestGetMe(t *testing.T) {
 	assert.Equal(t, "org", me.Account.Type)
 	assert.Equal(t, "ci-token", me.Token.Name)
 	assert.Equal(t, []string{"repo:read", "model:write"}, me.Token.Scopes)
-	assert.Equal(t, "2027-01-01T00:00:00Z", me.Token.ExpiresAt)
+	require.NotNil(t, me.Token.ExpiresAt)
+	assert.Equal(t, "2027-01-01T00:00:00Z", *me.Token.ExpiresAt)
+
+	require.Len(t, reg.Requests, 1)
+	got := reg.Requests[0]
+	assert.Equal(t, "Bearer ztp_secret", got.Header.Get("Authorization"),
+		"gen client must ride the wrapper's auth transport")
+	assert.Equal(t, testUA, got.Header.Get("User-Agent"))
+}
+
+func TestGetMeNon2xxReturnsAPIError(t *testing.T) {
+	reg := &httpmock.Registry{}
+	body := `{"type":"error","error":{"type":"authentication_error","message":"invalid token"},"request_id":"req_7"}`
+	reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(401, body))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_bad", reg, nil)
+	_, err := client.GetMe(context.Background())
+	require.Error(t, err)
+
+	var apiErr *api.Error
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, 401, apiErr.StatusCode)
+	assert.Equal(t, "authentication_error", apiErr.Type)
+	assert.Equal(t, "req_7", apiErr.RequestID)
+}
+
+func TestErrorFrom(t *testing.T) {
+	t.Run("2xx is nil", func(t *testing.T) {
+		assert.NoError(t, api.ErrorFrom(200, nil, []byte(`{}`)))
+		assert.NoError(t, api.ErrorFrom(201, nil, nil))
+	})
+
+	t.Run("envelope body", func(t *testing.T) {
+		body := []byte(`{"type":"error","error":{"type":"invalid_request_error","message":"name taken",` +
+			`"fields":[{"field":"name","message":"already exists"}]},"request_id":"req_9"}`)
+		err := api.ErrorFrom(409, nil, body)
+		var apiErr *api.Error
+		require.ErrorAs(t, err, &apiErr)
+		assert.Equal(t, 409, apiErr.StatusCode)
+		assert.Equal(t, "invalid_request_error", apiErr.Type)
+		assert.Equal(t, "name taken", apiErr.Message)
+		require.Len(t, apiErr.Fields, 1)
+		assert.Equal(t, "name", apiErr.Fields[0].Field)
+	})
+
+	t.Run("non-envelope body falls back to status", func(t *testing.T) {
+		header := http.Header{}
+		header.Set("X-Request-ID", "req_lb")
+		err := api.ErrorFrom(503, header, []byte("upstream connect error"))
+		var apiErr *api.Error
+		require.ErrorAs(t, err, &apiErr)
+		assert.Equal(t, "http_error", apiErr.Type)
+		assert.Equal(t, "upstream connect error", apiErr.Message)
+		assert.Equal(t, "req_lb", apiErr.RequestID)
+	})
 }
 
 func TestDebugOutputNeverContainsToken(t *testing.T) {

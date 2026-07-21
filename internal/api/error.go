@@ -75,14 +75,28 @@ func HandleResponse(resp *http.Response) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	return ErrorFrom(resp.StatusCode, resp.Header, body)
+}
 
-	apiErr := &Error{
-		StatusCode: resp.StatusCode,
-		RequestID:  resp.Header.Get("X-Request-ID"),
-		RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+// ErrorFrom converts an already-read response into an error: nil for 2xx,
+// otherwise an *Error decoded from the server error envelope (with a
+// status-derived fallback for non-envelope bodies). It is the uniform way to
+// surface non-2xx results from generated-client responses, which carry the
+// body as bytes.
+func ErrorFrom(status int, header http.Header, body []byte) error {
+	if status >= 200 && status < 300 {
+		return nil
 	}
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	apiErr := &Error{
+		StatusCode: status,
+		RequestID:  header.Get("X-Request-ID"),
+		RetryAfter: parseRetryAfter(header.Get("Retry-After")),
+	}
+	if len(body) > maxErrorBodyBytes {
+		body = body[:maxErrorBodyBytes]
+	}
 
 	var env errorEnvelope
 	if err := json.Unmarshal(body, &env); err == nil && env.Type == "error" &&
@@ -97,8 +111,8 @@ func HandleResponse(resp *http.Response) error {
 	}
 
 	// Non-envelope body (proxy, load balancer, GCS, ...): derive from status.
-	apiErr.Type = fallbackType(resp.StatusCode)
-	apiErr.Message = fallbackMessage(body, resp.StatusCode)
+	apiErr.Type = fallbackType(status)
+	apiErr.Message = fallbackMessage(body, status)
 	return apiErr
 }
 
