@@ -40,7 +40,10 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: "~> v2"
+          # Pinned minor: goreleaser removes deprecated options (e.g. `brews`)
+          # in later minors; float again once the formula/cask question is
+          # settled deliberately.
+          version: "~> v2.17"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
