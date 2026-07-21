@@ -1,5 +1,210 @@
 {
   "components": {
+    "parameters": {
+      "IdempotencyKey": {
+        "description": "Optional client-generated key that makes the mutation safely retryable: replaying a request with the same key returns the original outcome instead of repeating the side effect. See each operation's description for its exact replay semantics.",
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The request is malformed in a way schema validation does not express: empty or duplicate file paths, an invalid path, a file with a non-positive size, or a `source` that was not declared at upload creation.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The request conflicts with the current state of the resource.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The token's scopes or the caller's repository role do not allow this operation.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The requested resource does not exist or is not visible to the caller.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Rate limit or quota exceeded; retry after the number of seconds given in the `Retry-After` header.",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before retrying.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RequestTooLarge": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "A declared file exceeds the per-file size limit; nothing was uploaded.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Unexpected server error; quote `request_id` when reporting it — it correlates the failure with server logs.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "A dependency needed to fulfil the request is temporarily unavailable (e.g. upload URL signing failed); the operation had no lasting effect — retry later.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Authentication failed: the bearer token is missing, malformed, expired or revoked. The response carries a `WWW-Authenticate: Bearer` challenge.",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Always `Bearer` (RFC 9110 challenge).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The request failed validation; `error.fields` lists the offending fields.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "schemas": {
       "ActiveUpload": {
         "properties": {
@@ -352,6 +557,75 @@
         "title": "CreateUploadResponse",
         "type": "object"
       },
+      "ErrorEnvelope": {
+        "description": "Standard error envelope returned by every non-2xx response of the public API.",
+        "properties": {
+          "error": {
+            "properties": {
+              "fields": {
+                "description": "Per-field validation details (422 only).",
+                "items": {
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "message": {
+                "description": "Human-readable explanation.",
+                "type": "string"
+              },
+              "type": {
+                "description": "Stable machine-readable error code.",
+                "enum": [
+                  "api_error",
+                  "authentication_error",
+                  "conflict_error",
+                  "invalid_request_error",
+                  "method_not_allowed",
+                  "not_found_error",
+                  "overloaded_error",
+                  "permission_error",
+                  "rate_limit_error",
+                  "request_too_large"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "message"
+            ],
+            "type": "object"
+          },
+          "request_id": {
+            "description": "Correlation id, also sent as the `X-Request-ID` response header.",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "error",
+          "request_id"
+        ],
+        "type": "object"
+      },
       "FileArrival": {
         "properties": {
           "path": {
@@ -384,24 +658,6 @@
           "uploaded"
         ],
         "title": "FileArrival",
-        "type": "object"
-      },
-      "Input": {
-        "properties": {
-          "limit": {
-            "default": 100,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "default": 0,
-            "minimum": 0,
-            "title": "Offset",
-            "type": "integer"
-          }
-        },
-        "title": "Input",
         "type": "object"
       },
       "IssuedSessionFile": {
@@ -1372,7 +1628,7 @@
     "description": "External developer API for Zetic. Authenticate with `Authorization: Bearer <token>`.",
     "title": "Zetic Public API",
     "version": "1.0.0",
-    "x-backend-commit": "c76fc089723844cd1b7c2c09d1cf10788dd03955"
+    "x-backend-commit": "f2e556a61dd239e0b42bd34785b6fef0f6b88f0e"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -1390,6 +1646,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1405,6 +1676,8 @@
     },
     "/v1/projects": {
       "post": {
+        "deprecated": true,
+        "description": "Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_projects_create_project",
         "parameters": [],
         "requestBody": {
@@ -1427,6 +1700,24 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1442,6 +1733,8 @@
     },
     "/v1/projects/{project_name}": {
       "delete": {
+        "deprecated": true,
+        "description": "Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_projects_delete_project",
         "parameters": [
           {
@@ -1465,6 +1758,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1480,7 +1788,8 @@
     },
     "/v1/projects/{project_name}/uploads": {
       "get": {
-        "description": "List active (source IS NULL) upload sessions for the project.\n\nClients should call this before starting a new upload to detect an\nin-flight session and offer recovery options (status, cancel, resume).",
+        "deprecated": true,
+        "description": "List active (source IS NULL) upload sessions for the project.\n\nClients should call this before starting a new upload to detect an\nin-flight session and offer recovery options (status, cancel, resume).\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_list_active_uploads",
         "parameters": [
           {
@@ -1503,6 +1812,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1516,7 +1840,8 @@
         ]
       },
       "post": {
-        "description": "Start an upload session. Returns presigned PUT URLs for each requested file.",
+        "deprecated": true,
+        "description": "Start an upload session. Returns presigned PUT URLs for each requested file.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_create_upload",
         "parameters": [
           {
@@ -1549,6 +1874,30 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1564,7 +1913,8 @@
     },
     "/v1/projects/{project_name}/uploads/{upload_id}": {
       "delete": {
-        "description": "Cancel an in-flight upload; deletes the row and best-effort removes GCS objects.",
+        "deprecated": true,
+        "description": "Cancel an in-flight upload; deletes the row and best-effort removes GCS objects.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_cancel_upload",
         "parameters": [
           {
@@ -1589,6 +1939,24 @@
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1602,7 +1970,8 @@
         ]
       },
       "get": {
-        "description": "Return per-file arrival status for the upload session.\n\nAfter complete, the row's source is populated; clients\nshould switch to `GET /versions/{id}` at that point. We still serve this\nendpoint with the file list for traceability.",
+        "deprecated": true,
+        "description": "Return per-file arrival status for the upload session.\n\nAfter complete, the row's source is populated; clients\nshould switch to `GET /versions/{id}` at that point. We still serve this\nendpoint with the file list for traceability.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_get_upload",
         "parameters": [
           {
@@ -1634,6 +2003,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1649,7 +2033,8 @@
     },
     "/v1/projects/{project_name}/uploads/{upload_id}/complete": {
       "post": {
-        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.",
+        "deprecated": true,
+        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_complete_upload",
         "parameters": [
           {
@@ -1691,6 +2076,30 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1706,7 +2115,8 @@
     },
     "/v1/projects/{project_name}/uploads/{upload_id}/files": {
       "post": {
-        "description": "Re-issue presigned PUT URLs for paths declared at session creation.\n\nUse when a previously-issued URL has expired and the client wants to retry\nupload of the same file. Paths not declared at creation are rejected.",
+        "deprecated": true,
+        "description": "Re-issue presigned PUT URLs for paths declared at session creation.\n\nUse when a previously-issued URL has expired and the client wants to retry\nupload of the same file. Paths not declared at creation are rejected.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_reissue_upload_urls",
         "parameters": [
           {
@@ -1748,6 +2158,30 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1763,6 +2197,7 @@
     },
     "/v1/repos": {
       "get": {
+        "description": "Results are ordered by created_at descending, then id descending.",
         "operationId": "list_repos",
         "parameters": [
           {
@@ -1782,11 +2217,13 @@
             }
           },
           {
+            "description": "Page size. Values greater than 100 are clamped to 100.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "maximum": 100,
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
@@ -1814,6 +2251,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1849,6 +2301,24 @@
               }
             },
             "description": "Created"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1888,6 +2358,21 @@
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1932,6 +2417,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -1986,6 +2486,24 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -2021,6 +2539,9 @@
               "title": "Repo Name",
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -2053,6 +2574,30 @@
               }
             },
             "description": "Created"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
         "security": [
@@ -2068,7 +2613,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads": {
       "get": {
-        "description": "Active + recent (last 10) upload sessions for the repo. Fixed small\nwindow, so no pagination on purpose.",
+        "description": "Active + recent (last 10) upload sessions for the repo. Fixed small\nwindow, so no pagination on purpose.\n\nResults are ordered by created_at descending, then id descending.",
         "operationId": "list_model_uploads",
         "parameters": [
           {
@@ -2100,6 +2645,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -2144,6 +2704,9 @@
               "title": "Upload Id",
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
@@ -2156,6 +2719,24 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -2210,6 +2791,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -2254,6 +2850,9 @@
               "title": "Upload Id",
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
@@ -2266,6 +2865,24 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -2310,6 +2927,9 @@
               "title": "Upload Id",
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -2332,6 +2952,27 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [
@@ -2388,6 +3029,21 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
           }
         },
         "security": [

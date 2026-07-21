@@ -278,8 +278,8 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 		ManifestVersion: gen.N2,
 		Files:           manifestFiles(specs),
 	}
-	resp, err := g.CreateModelUploadWithResponse(ctx, opts.account, opts.name, body,
-		withIdempotencyKey(newIdempotencyKey()))
+	resp, err := g.CreateModelUploadWithResponse(ctx, opts.account, opts.name,
+		&gen.CreateModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()}, body)
 	if err != nil {
 		return err
 	}
@@ -516,8 +516,8 @@ func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 // reissueURL fetches a fresh signed resumable-start URL for one file.
 func reissueURL(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State, sf *upload.StateFile) error {
 	resp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, st.SessionID,
-		gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: []string{sf.ClientFileID}},
-		withIdempotencyKey(newIdempotencyKey()))
+		&gen.ReissueUploadFilesParams{IdempotencyKey: newIdempotencyKeyParam()},
+		gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: []string{sf.ClientFileID}})
 	if err != nil {
 		return err
 	}
@@ -547,7 +547,7 @@ func saveState(st *upload.State) {
 func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State) error {
 	ios := opts.f.IOStreams
 	resp, err := g.CompleteModelUploadWithResponse(ctx, opts.account, opts.name, st.SessionID,
-		withIdempotencyKey(newIdempotencyKey()))
+		&gen.CompleteModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			printResumeHint(opts, st)
@@ -724,8 +724,8 @@ func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.Cli
 
 	if len(pending) > 0 {
 		rresp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, opts.resumeID,
-			gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: pending},
-			withIdempotencyKey(newIdempotencyKey()))
+			&gen.ReissueUploadFilesParams{IdempotencyKey: newIdempotencyKeyParam()},
+			gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: pending})
 		if err != nil {
 			return nil, err
 		}
@@ -763,7 +763,7 @@ func runCancel(ctx context.Context, opts *uploadOptions) error {
 		return err
 	}
 	resp, err := g.CancelModelUploadWithResponse(ctx, opts.account, opts.name, opts.cancelID,
-		withIdempotencyKey(newIdempotencyKey()))
+		&gen.CancelModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
 	if err != nil {
 		return err
 	}

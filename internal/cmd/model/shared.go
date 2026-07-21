@@ -73,12 +73,12 @@ func newIdempotencyKey() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// withIdempotencyKey sets the Idempotency-Key header on a generated request.
-func withIdempotencyKey(key string) gen.RequestEditorFn {
-	return func(_ context.Context, req *http.Request) error {
-		req.Header.Set("Idempotency-Key", key)
-		return nil
-	}
+// newIdempotencyKeyParam returns a fresh key as the pointer type the
+// generated params structs take. The key is generated once per logical
+// call, so the api retry transport replays the same key on 5xx retries.
+func newIdempotencyKeyParam() *gen.IdempotencyKey {
+	k := gen.IdempotencyKey(newIdempotencyKey())
+	return &k
 }
 
 // canceledSilently maps to exit 130 (context.Canceled) while suppressing the
