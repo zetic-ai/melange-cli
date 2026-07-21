@@ -516,7 +516,8 @@ func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 // reissueURL fetches a fresh signed resumable-start URL for one file.
 func reissueURL(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State, sf *upload.StateFile) error {
 	resp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, st.SessionID,
-		gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: []string{sf.ClientFileID}})
+		gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: []string{sf.ClientFileID}},
+		withIdempotencyKey(newIdempotencyKey()))
 	if err != nil {
 		return err
 	}
@@ -723,7 +724,8 @@ func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.Cli
 
 	if len(pending) > 0 {
 		rresp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, opts.resumeID,
-			gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: pending})
+			gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: pending},
+			withIdempotencyKey(newIdempotencyKey()))
 		if err != nil {
 			return nil, err
 		}
@@ -760,7 +762,8 @@ func runCancel(ctx context.Context, opts *uploadOptions) error {
 	if err != nil {
 		return err
 	}
-	resp, err := g.CancelModelUploadWithResponse(ctx, opts.account, opts.name, opts.cancelID)
+	resp, err := g.CancelModelUploadWithResponse(ctx, opts.account, opts.name, opts.cancelID,
+		withIdempotencyKey(newIdempotencyKey()))
 	if err != nil {
 		return err
 	}

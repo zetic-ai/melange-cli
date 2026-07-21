@@ -59,7 +59,8 @@ func splitRepoFlag(value string) (account, name string, err error) {
 }
 
 // newIdempotencyKey returns a random UUIDv4. Sent as Idempotency-Key on
-// create/complete so the api retry transport may safely replay them.
+// create/complete/reissue/cancel (all replay-safe per ADR-5) so the api
+// retry transport may safely replay them.
 func newIdempotencyKey() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {

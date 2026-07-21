@@ -643,6 +643,15 @@ func TestUploadExpiredSignatureReissuesAndRestartsFile(t *testing.T) {
 	require.NoError(t, run(t, e, "upload", "-R", repoArg, model))
 	e.reg.Verify(t)
 	assertNoSecretLeaks(t, e)
+
+	// The reissue call is replay-safe server-side (ADR-5): it must carry an
+	// Idempotency-Key so the transport can retry it on 5xx.
+	for _, req := range e.reg.Requests {
+		if req.URL.Path == "/v1/repos/zetic/whisper/models/uploads/up_1/files" {
+			assert.NotEmpty(t, req.Header.Get("Idempotency-Key"),
+				"reissue must carry an Idempotency-Key")
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -759,4 +768,23 @@ func TestCancelRemovesStateFile(t *testing.T) {
 	assert.Contains(t, e.errOut.String(), "✓")
 	_, err := upload.LoadState("up_1")
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestCancelRetriesOn502WithIdempotencyKey(t *testing.T) {
+	e := setup(t)
+	path := "/v1/repos/zetic/whisper/models/uploads/up_1"
+	// Cancel is replay-safe server-side (ADR-5); the Idempotency-Key makes
+	// the transport retry the DELETE on a transient 502.
+	e.reg.Register(httpmock.REST("DELETE", path), jsonStub(502, `{}`))
+	e.reg.Register(httpmock.REST("DELETE", path), jsonStub(200, `{"id":"up_1","state":"CANCELED"}`))
+
+	require.NoError(t, run(t, e, "upload", "--cancel", "up_1", "-R", repoArg))
+	e.reg.Verify(t)
+
+	require.Len(t, e.reg.Requests, 2, "the 502 must be retried")
+	key := e.reg.Requests[0].Header.Get("Idempotency-Key")
+	assert.NotEmpty(t, key, "cancel must carry an Idempotency-Key")
+	assert.Equal(t, key, e.reg.Requests[1].Header.Get("Idempotency-Key"),
+		"the retry must replay the same key")
+	assert.Contains(t, e.errOut.String(), "✓")
 }
