@@ -26,7 +26,7 @@ const meBody = `{
 		"name": "ci-token",
 		"scopes": ["repo:read", "model:write"],
 		"expires_at": "2027-01-01T00:00:00Z",
-		"last_used_at": ""
+		"last_used_at": null
 	}
 }`
 
