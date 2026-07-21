@@ -125,8 +125,11 @@ func runUploadCommand(ctx context.Context, opts *uploadOptions, args []string) e
 		return cmdutil.FlagError{Err: errors.New("--resume, --cancel, and --sessions are mutually exclusive")}
 	}
 	if (opts.cancelID != "" || opts.sessions) && (len(args) > 0 || len(opts.inputs) > 0 ||
-		len(opts.external) > 0 || opts.inputManifest != "" || opts.dryRun) {
+		len(opts.external) > 0 || opts.inputManifest != "") {
 		return cmdutil.FlagError{Err: errors.New("file arguments cannot be combined with --cancel/--sessions")}
+	}
+	if opts.dryRun && modes > 0 {
+		return cmdutil.FlagError{Err: errors.New("--dry-run cannot be combined with --resume, --cancel, or --sessions")}
 	}
 	if opts.inputManifest != "" && (len(args) > 0 || len(opts.inputs) > 0 || len(opts.external) > 0) {
 		return cmdutil.FlagError{Err: errors.New(
@@ -422,7 +425,7 @@ func transferAll(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 			return err
 		}
 		sf.Uploaded = true
-		saveState(opts, st)
+		saveState(st)
 	}
 	return nil
 }
@@ -444,7 +447,7 @@ func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 		}
 		sf.SessionURI = ""
 		sf.Offset = 0
-		saveState(opts, st)
+		saveState(st)
 		return nil
 	}
 
@@ -468,7 +471,7 @@ func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 			}
 			sf.SessionURI = uri
 			sf.Offset = 0
-			saveState(opts, st)
+			saveState(st)
 		} else {
 			// Resuming an existing session: the server's committed offset is
 			// authoritative — the state offset is only a hint.
@@ -493,7 +496,7 @@ func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 		err := up.UploadFile(ctx, sf.SessionURI, sf.LocalPath, sf.Size, from, func(committed int64) {
 			sf.Offset = committed
 			prog.update(committed)
-			saveState(opts, st)
+			saveState(st)
 		})
 		if errors.Is(err, upload.ErrSessionExpired) {
 			if rerr := reissue(); rerr != nil {
@@ -533,7 +536,7 @@ func reissueURL(ctx context.Context, opts *uploadOptions, g *gen.ClientWithRespo
 
 // saveState persists progress best-effort: a failed save must never abort a
 // running upload (the server offset query recovers on resume anyway).
-func saveState(opts *uploadOptions, st *upload.State) {
+func saveState(st *upload.State) {
 	_ = st.Save()
 }
 

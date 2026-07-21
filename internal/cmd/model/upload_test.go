@@ -178,6 +178,14 @@ func TestUploadModeFlagsExclusive(t *testing.T) {
 	assert.Equal(t, 2, cmdutil.ExitCode(err))
 }
 
+func TestUploadDryRunExclusiveWithSessionModes(t *testing.T) {
+	e := setup(t)
+	err := run(t, e, "upload", "-R", repoArg, "--resume", "up_1", "--dry-run")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err), "--dry-run must never reach a mutating mode")
+	assert.Empty(t, e.reg.Requests)
+}
+
 func TestUploadDuplicateBasenamesExit2(t *testing.T) {
 	e := setup(t)
 	dir, model, _ := modelDir(t)
@@ -336,6 +344,33 @@ func requestBody(t *testing.T, req *http.Request) map[string]any {
 	var m map[string]any
 	require.NoError(t, json.Unmarshal(raw, &m))
 	return m
+}
+
+func TestUploadJSONEmitsCompleteResponse(t *testing.T) {
+	e := setup(t)
+	_, model, _ := modelDir(t)
+
+	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models"),
+		jsonStub(201, sessionBody(issuedFile("f0", "zt_x/model.onnx", sigF0))))
+	e.reg.Register(gcsStart("/sig-f0"), locationResponse(201, sessF0))
+	e.reg.Register(gcsPut("/sess-f0", "bytes 0-999/1000"), httpmock.StatusStringResponse(200, ""))
+	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models/uploads/up_1/complete"),
+		jsonStub(200, completeOK()))
+
+	require.NoError(t, run(t, e, "upload", "-R", repoArg, model, "--json"))
+	assert.JSONEq(t, completeOK(), e.out.String(), "--json emits the complete response verbatim")
+}
+
+func TestUploadInputManifestDryRun(t *testing.T) {
+	e := setup(t)
+	_, model, input := modelDir(t)
+	manifest := filepath.Join(t.TempDir(), "manifest.json")
+	doc := fmt.Sprintf(`{"manifest_version":2,"files":[{"path":%q,"role":"model"},{"path":%q,"role":"input"}]}`, model, input)
+	require.NoError(t, os.WriteFile(manifest, []byte(doc), 0o600))
+
+	require.NoError(t, run(t, e, "upload", "-R", repoArg, "--input-manifest", manifest, "--dry-run"))
+	assert.Empty(t, e.reg.Requests)
+	assert.Contains(t, e.out.String(), "{tag}/inputs/00_audio.bin")
 }
 
 func TestUploadCompleteReportsFailureAsExit1(t *testing.T) {
