@@ -289,7 +289,11 @@ func TestRepoListPaginateMergesPages(t *testing.T) {
 
 	require.NoError(t, run(t, e, "repo", "list", "--paginate", "--json"))
 
-	assert.Equal(t, page(t, 3, r1, r2, r3)+"\n", e.out.String(),
+	// The merged envelope is rebuilt from the last page's keys, so keys come
+	// out in sorted order; the count is the server's.
+	want := `{"count":3,"results":[` +
+		marshal(t, r1) + `,` + marshal(t, r2) + `,` + marshal(t, r3) + `]}`
+	assert.Equal(t, want+"\n", e.out.String(),
 		"merged envelope keeps the server count")
 
 	require.Len(t, e.reg.Requests, 2)
@@ -299,6 +303,24 @@ func TestRepoListPaginateMergesPages(t *testing.T) {
 	q2 := e.reg.Requests[1].URL.Query()
 	assert.Equal(t, "100", q2.Get("limit"))
 	assert.Equal(t, "2", q2.Get("offset"), "second page starts after the merged results")
+	e.reg.Verify(t)
+}
+
+func TestRepoListPaginateCarriesUnknownEnvelopeKeys(t *testing.T) {
+	e := setup(t)
+	r1, r2 := whisperRepo(), detrRepo()
+	// Envelope with a key the CLI does not know about: it must survive the
+	// merge (carried through from the last page) rather than being dropped.
+	p1 := `{"results":[` + marshal(t, r1) + `],"count":2,"next_hint":"page-2"}`
+	p2 := `{"results":[` + marshal(t, r2) + `],"count":2,"next_hint":"done"}`
+	e.reg.Register(httpmock.REST("GET", "/v1/repos"), jsonStub(200, p1))
+	e.reg.Register(httpmock.REST("GET", "/v1/repos"), jsonStub(200, p2))
+
+	require.NoError(t, run(t, e, "repo", "list", "--paginate", "--json"))
+
+	want := `{"count":2,"next_hint":"done","results":[` + marshal(t, r1) + `,` + marshal(t, r2) + `]}`
+	assert.Equal(t, want+"\n", e.out.String(),
+		"unknown envelope keys must be carried through --paginate verbatim")
 	e.reg.Verify(t)
 }
 

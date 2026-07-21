@@ -17,8 +17,9 @@ import (
 // paginatePageSize is the server page size used by --paginate.
 const paginatePageSize = 100
 
-// pageEnvelope mirrors the paginated list envelope while keeping each result's
-// bytes exactly as the API returned them.
+// pageEnvelope mirrors the known keys of the paginated list envelope while
+// keeping each result's bytes exactly as the API returned them. The merge in
+// --paginate additionally carries every unknown envelope key through verbatim.
 type pageEnvelope struct {
 	Results []json.RawMessage `json:"results"`
 	Count   int               `json:"count"`
@@ -96,7 +97,10 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 			var envelope json.RawMessage
 
 			if paginate {
-				merged := pageEnvelope{Results: []json.RawMessage{}}
+				mergedResults := []json.RawMessage{}
+				// The last page's envelope, key by key: unknown keys the
+				// server may add survive the merge verbatim.
+				var envelopeKeys map[string]json.RawMessage
 				for offset := 0; ; {
 					resp, err := fetch(paginatePageSize, &offset)
 					if err != nil {
@@ -106,15 +110,23 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 					if err := json.Unmarshal(resp.Body, &page); err != nil {
 						return fmt.Errorf("decoding repository page: %w", err)
 					}
+					envelopeKeys = nil // keep the LAST page only, not a merge of all pages
+					if err := json.Unmarshal(resp.Body, &envelopeKeys); err != nil {
+						return fmt.Errorf("decoding repository page: %w", err)
+					}
 					repos = append(repos, resp.JSON200.Results...)
-					merged.Results = append(merged.Results, page.Results...)
-					merged.Count = page.Count
+					mergedResults = append(mergedResults, page.Results...)
 					offset += len(page.Results)
 					if len(page.Results) == 0 || offset >= page.Count {
 						break
 					}
 				}
-				envelope, err = json.Marshal(merged)
+				results, err := json.Marshal(mergedResults)
+				if err != nil {
+					return err
+				}
+				envelopeKeys["results"] = results
+				envelope, err = json.Marshal(envelopeKeys)
 				if err != nil {
 					return err
 				}
