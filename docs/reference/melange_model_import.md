@@ -23,7 +23,7 @@ exactly as the API returned it (with --wait, the final status is
 emitted instead).
 
 Exit codes: 0 success, 1 API error or failed conversion under --wait,
-2 usage error, 4 not authenticated.
+2 usage error, 4 not authenticated, 130 interrupted.
 
 ```
 melange model import HF_REPO [flags]
