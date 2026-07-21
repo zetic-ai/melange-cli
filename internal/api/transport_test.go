@@ -269,6 +269,71 @@ func TestRetryDoesNotMutateCallerRequest(t *testing.T) {
 	assert.True(t, req.Body == origBody, "retry must not swap the caller's request body")
 }
 
+// ---------------------------------------------------------------------------
+// auth transport host matching
+// ---------------------------------------------------------------------------
+
+// authRequest sends one GET through an authTransport bound to cfgHost and
+// returns the Authorization header the base transport saw.
+func authRequest(t *testing.T, cfgHost, rawURL string) string {
+	t.Helper()
+	reg := &httpmock.Registry{}
+	u, err := url.Parse(rawURL)
+	require.NoError(t, err)
+	reg.Register(httpmock.REST("GET", strings.TrimPrefix(u.Path, "/")),
+		httpmock.StatusStringResponse(200, "ok"))
+
+	at := &authTransport{base: reg, host: cfgHost, token: "ztp_secret"}
+	req, err := http.NewRequest("GET", rawURL, nil)
+	require.NoError(t, err)
+	resp, err := at.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	require.Len(t, reg.Requests, 1)
+	return reg.Requests[0].Header.Get("Authorization")
+}
+
+func TestAuthHostASCIICaseInsensitive(t *testing.T) {
+	assert.Equal(t, "Bearer ztp_secret",
+		authRequest(t, "API.Zetic.AI", "https://api.zetic.ai/v1/me"),
+		"host comparison stays case-insensitive for ASCII")
+}
+
+func TestAuthHostUnicodeFoldingRejected(t *testing.T) {
+	// U+212A (KELVIN SIGN) simple-folds to 'k'; a homoglyph host must never
+	// receive the token even though strings.EqualFold would match it.
+	assert.Empty(t,
+		authRequest(t, "kelvin.example.com", "https://\u212Aelvin.example.com/v1/me"),
+		"Unicode-folded homoglyph host must not match the configured host")
+}
+
+func TestAuthHostDefaultPortNormalization(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfgHost string
+		rawURL  string
+		want    bool
+	}{
+		{"https explicit 443 vs bare", "api.zetic.ai", "https://api.zetic.ai:443/v1/me", true},
+		{"https bare vs configured 443", "api.zetic.ai:443", "https://api.zetic.ai/v1/me", true},
+		{"https non-default port", "api.zetic.ai", "https://api.zetic.ai:8443/v1/me", false},
+		{"http explicit 80 vs bare", "localhost", "http://localhost:80/v1/me", true},
+		{"http bare vs configured 80", "localhost:80", "http://localhost/v1/me", true},
+		{"http non-default port", "localhost", "http://localhost:8080/v1/me", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := authRequest(t, tt.cfgHost, tt.rawURL)
+			if tt.want {
+				assert.Equal(t, "Bearer ztp_secret", got)
+			} else {
+				assert.Empty(t, got, "token must stay host-bound across ports")
+			}
+		})
+	}
+}
+
 func TestRetryBackoffDoubles(t *testing.T) {
 	reg := &httpmock.Registry{}
 	for range 4 {

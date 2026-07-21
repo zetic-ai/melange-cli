@@ -117,7 +117,7 @@ Exit codes: 0 success, 1 HTTP or transport error, 2 usage error,
 func runAPI(f *cmdutil.Factory, cmd *cobra.Command, opts *options, pathArg string) error {
 	ios := f.IOStreams
 
-	if strings.Contains(pathArg, "://") {
+	if hasURLScheme(pathArg) {
 		return cmdutil.FlagError{Err: fmt.Errorf(
 			"invalid path %q: melange api only calls the configured host — pass a relative path like /v1/me (run `melange auth status` to see the host; set MELANGE_HOST to target another)", pathArg)}
 	}
@@ -277,6 +277,23 @@ func writeHead(w io.Writer, resp *http.Response) error {
 	}
 	_, err := fmt.Fprintln(w)
 	return err
+}
+
+// hasURLScheme reports whether s starts with a URL scheme followed by "://"
+// (RFC 3986: ALPHA *(ALPHA / DIGIT / "+" / "-" / ".")), i.e. is an absolute
+// URL. A "://" later in the string — say, in a URL-valued query parameter
+// like "/v1/hooks?callback=https://x" — does not count.
+func hasURLScheme(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z':
+		case i > 0 && ('0' <= c && c <= '9' || c == '+' || c == '-' || c == '.'):
+		default:
+			return i > 0 && strings.HasPrefix(s[i:], "://")
+		}
+	}
+	return false
 }
 
 // readInput loads the raw request body from a file, or from stdin for "-".

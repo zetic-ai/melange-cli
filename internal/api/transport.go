@@ -42,13 +42,56 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if t.userAgent != "" {
 		req.Header.Set("User-Agent", t.userAgent)
 	}
-	if t.token != "" && strings.EqualFold(req.URL.Host, t.host) {
+	if t.token != "" && hostsMatch(t.host, req.URL.Host, req.URL.Scheme) {
 		if req.URL.Scheme == "http" && !isLoopback(req.URL.Hostname()) {
 			return nil, errPlaintextHTTP
 		}
 		req.Header.Set("Authorization", "Bearer "+t.token)
 	}
 	return t.base.RoundTrip(req)
+}
+
+// hostsMatch reports whether the request host is the configured host. The
+// comparison is ASCII case-insensitive only — Unicode simple folding (as in
+// strings.EqualFold) would let homoglyphs such as U+212A KELVIN SIGN, which
+// folds to 'k', masquerade as an ASCII host — and treats an absent port as
+// the scheme's default (https:443, http:80), so "api.example.com" and
+// "api.example.com:443" name the same https origin.
+func hostsMatch(configured, requested, scheme string) bool {
+	port := defaultPort(scheme)
+	return asciiLower(stripPort(configured, port)) == asciiLower(stripPort(requested, port))
+}
+
+// defaultPort returns the scheme's default port, or "" if unknown.
+func defaultPort(scheme string) string {
+	switch scheme {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	}
+	return ""
+}
+
+// stripPort removes an explicit ":port" suffix from host when it matches the
+// scheme's default port.
+func stripPort(host, port string) string {
+	if port == "" {
+		return host
+	}
+	return strings.TrimSuffix(host, ":"+port)
+}
+
+// asciiLower lowercases ASCII letters only. Non-ASCII bytes pass through
+// unchanged, so they compare equal only when byte-identical.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'A' <= c && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
 }
 
 // isLoopback reports whether hostname is a local loopback address.

@@ -302,4 +302,38 @@ func TestClientSameHostRedirectKeepsAuthorization(t *testing.T) {
 		"same-host redirects keep the credentials")
 }
 
+func TestClientRedirectToExplicitDefaultPortKeepsAuthorization(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/old"),
+		httpmock.WithHeader(httpmock.StatusStringResponse(302, ""),
+			"Location", "https://api.zetic.ai:443/v1/new"))
+	reg.Register(httpmock.REST("GET", "/v1/new"), httpmock.StatusStringResponse(200, "ok"))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
+	resp, err := client.Do(context.Background(), "GET", "/v1/old", nil, nil)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	require.Len(t, reg.Requests, 2)
+	assert.Equal(t, "Bearer ztp_secret", reg.Requests[1].Header.Get("Authorization"),
+		"an explicit :443 is the same https host; the token must survive the redirect")
+}
+
+func TestClientRedirectToNonDefaultPortStripsAuthorization(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/old"),
+		httpmock.WithHeader(httpmock.StatusStringResponse(302, ""),
+			"Location", "https://api.zetic.ai:8443/v1/new"))
+	reg.Register(httpmock.REST("GET", "/v1/new"), httpmock.StatusStringResponse(200, "ok"))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
+	resp, err := client.Do(context.Background(), "GET", "/v1/old", nil, nil)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	require.Len(t, reg.Requests, 2)
+	assert.Empty(t, reg.Requests[1].Header.Get("Authorization"),
+		"a non-default port is a different origin; the token must not follow")
+}
+
 var _ http.RoundTripper = (*httpmock.Registry)(nil)

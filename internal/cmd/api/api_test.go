@@ -119,6 +119,25 @@ func TestAPIAbsoluteURLRejected(t *testing.T) {
 	assert.Empty(t, e.reg.Requests, "no request may be sent to an absolute URL")
 }
 
+func TestAPIUppercaseSchemeRejected(t *testing.T) {
+	e := setup(t)
+	err := run(t, e, "api", "HTTPS://evil.example.com/v1/me")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Empty(t, e.reg.Requests, "scheme matching must be case-insensitive")
+}
+
+func TestAPIPathWithURLValuedQueryParamAccepted(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", "/v1/hooks"), httpmock.StatusStringResponse(200, "{}"))
+
+	require.NoError(t, run(t, e, "api", "/v1/hooks?callback=https://x"),
+		"a URL-valued query parameter is not an absolute URL and must be accepted")
+	require.Len(t, e.reg.Requests, 1)
+	assert.Equal(t, "/v1/hooks", e.reg.Requests[0].URL.Path)
+	assert.Equal(t, "callback=https://x", e.reg.Requests[0].URL.RawQuery)
+}
+
 // ---------------------------------------------------------------------------
 // body construction
 // ---------------------------------------------------------------------------
