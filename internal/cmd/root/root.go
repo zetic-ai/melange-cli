@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	apicmd "github.com/zetic-ai/melange-cli/internal/cmd/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/auth"
+	"github.com/zetic-ai/melange-cli/internal/cmd/model"
 	"github.com/zetic-ai/melange-cli/internal/cmd/repo"
 	"github.com/zetic-ai/melange-cli/internal/cmd/version"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
@@ -74,6 +75,7 @@ Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupte
 	cmd.AddCommand(version.NewCmdVersion(f))
 	cmd.AddCommand(auth.NewCmdAuth(f))
 	cmd.AddCommand(repo.NewCmdRepo(f))
+	cmd.AddCommand(model.NewCmdModel(f))
 	cmd.AddCommand(apicmd.NewCmdAPI(f))
 
 	return cmd
