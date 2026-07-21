@@ -110,7 +110,10 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 					if err := json.Unmarshal(resp.Body, &page); err != nil {
 						return fmt.Errorf("decoding repository page: %w", err)
 					}
-					envelopeKeys = nil // keep the LAST page only, not a merge of all pages
+					// Reset to keep the LAST page only, not a merge of all
+					// pages (a fresh map, so a pathological "null" page —
+					// which json leaves untouched — cannot leave it nil).
+					envelopeKeys = map[string]json.RawMessage{}
 					if err := json.Unmarshal(resp.Body, &envelopeKeys); err != nil {
 						return fmt.Errorf("decoding repository page: %w", err)
 					}
