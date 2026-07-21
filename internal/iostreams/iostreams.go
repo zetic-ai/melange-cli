@@ -24,6 +24,7 @@ type IOStreams struct {
 	stdoutTTY *bool
 	stderrTTY *bool
 	noColor   bool // set by --no-color flag
+	termWidth *int // override for tests
 }
 
 // IsStdinTTY reports whether In is a terminal.
@@ -99,8 +100,14 @@ func (s *IOStreams) ColorEnabled() bool {
 	return true
 }
 
+// SetTerminalWidth overrides the detected terminal width (used by tests).
+func (s *IOStreams) SetTerminalWidth(w int) { s.termWidth = &w }
+
 // TerminalWidth returns the width of the terminal, or 80 when not a TTY.
 func (s *IOStreams) TerminalWidth() int {
+	if s.termWidth != nil {
+		return *s.termWidth
+	}
 	if f, ok := s.Out.(*os.File); ok {
 		if w, _, err := term.GetSize(int(f.Fd())); err == nil && w > 0 {
 			return w
