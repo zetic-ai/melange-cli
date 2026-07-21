@@ -54,13 +54,16 @@ Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupte
 		_ = err
 	}
 
-	// Wire flag values into factory after flag parse.
-	cobra.OnInitialize(func() {
+	// Wire flag values into the factory after flag parse. PersistentPreRunE is
+	// per-command state (unlike cobra.OnInitialize, which appends to a package
+	// global and would stack stale callbacks across NewCmdRoot calls in tests).
+	cmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
 		if noColor {
 			f.IOStreams.SetNoColor(true)
 		}
 		f.NoInput = noInput
-	})
+		return nil
+	}
 
 	// Register subcommands.
 	cmd.AddCommand(version.NewCmdVersion(f))

@@ -140,7 +140,7 @@ func TestResolveToken(t *testing.T) {
 		}
 		got := cfg.ResolveToken("api.zetic.ai")
 		assert.Equal(t, "cfg-key", got.Value)
-		assert.Equal(t, "config (hosts.api.zetic.ai.api_key)", got.Source)
+		assert.Equal(t, "config", got.Source)
 	})
 
 	t.Run("empty when nothing set", func(t *testing.T) {

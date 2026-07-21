@@ -1,26 +1,41 @@
-run:
-  timeout: 5m
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    - govet
-    - staticcheck
     - errcheck
+    - govet
     - ineffassign
-    - unused
     - misspell
+    - staticcheck
+    - unused
+  settings:
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test files have relaxed errcheck (e.g., buffer writes never fail)
+      - linters:
+          - errcheck
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
     - gofmt
-
-linters-settings:
-  gofmt:
-    simplify: true
-  misspell:
-    locale: US
-
-issues:
-  exclude-rules:
-    # Test files have relaxed errcheck (e.g., buffer writes never fail)
-    - path: _test\.go
-      linters:
-        - errcheck
+  settings:
+    gofmt:
+      simplify: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

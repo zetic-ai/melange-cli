@@ -76,10 +76,7 @@ func (c *Config) ResolveToken(host string) Resolved {
 	}
 	if c != nil && c.Hosts != nil {
 		if entry, ok := c.Hosts[host]; ok && entry.APIKey != "" {
-			return Resolved{
-				Value:  entry.APIKey,
-				Source: fmt.Sprintf("config (hosts.%s.api_key)", host),
-			}
+			return Resolved{Value: entry.APIKey, Source: "config"}
 		}
 	}
 	return Resolved{}
@@ -91,7 +88,7 @@ func (c *Config) ResolveToken(host string) Resolved {
 //   - Windows:     %AppData%\melange
 func ConfigDir() string {
 	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("AppData"); appData != "" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
 			return filepath.Join(appData, "melange")
 		}
 	}
