@@ -25,5 +25,11 @@ func (c *ColorScheme) wrap(code, s string) string {
 // Yellow colors s yellow (used e.g. for "private" visibility).
 func (c *ColorScheme) Yellow(s string) string { return c.wrap("33", s) }
 
+// Green colors s green (used e.g. for the "ready" model state).
+func (c *ColorScheme) Green(s string) string { return c.wrap("32", s) }
+
+// Red colors s red (used e.g. for the "failed" model state).
+func (c *ColorScheme) Red(s string) string { return c.wrap("31", s) }
+
 // Dim renders s faint (used for table headers).
 func (c *ColorScheme) Dim(s string) string { return c.wrap("2", s) }
