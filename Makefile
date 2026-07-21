@@ -16,7 +16,7 @@ LDFLAGS := -s -w \
 # tool directive, so `make gen` is reproducible.
 DOWN_CONVERT := npx --yes @apiture/openapi-down-convert@0.14.2
 
-.PHONY: build test lint fmt gen gen-check
+.PHONY: build test lint fmt gen gen-check docs docs-check
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) ./cmd/melange
@@ -37,3 +37,10 @@ gen:
 gen-check:
 	$(MAKE) gen
 	git diff --exit-code -- openapi internal/api/gen
+
+docs:
+	go run ./tools/gendocs docs/reference
+
+docs-check:
+	$(MAKE) docs
+	git diff --exit-code -- docs/reference
