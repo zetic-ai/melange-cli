@@ -15,14 +15,14 @@ import (
 // Compile-time assertions that the expected operations exist with the
 // expected shapes on both the raw Client and ClientWithResponses.
 var (
-	_ func(context.Context, ...RequestEditorFn) (*GetMeResponse, error)                                                 = (*ClientWithResponses)(nil).GetMeWithResponse
-	_ func(context.Context, *ListReposParams, ...RequestEditorFn) (*ListReposResponse, error)                           = (*ClientWithResponses)(nil).ListReposWithResponse
-	_ func(context.Context, CreateRepoJSONRequestBody, ...RequestEditorFn) (*CreateRepoResponse, error)                 = (*ClientWithResponses)(nil).CreateRepoWithResponse
-	_ func(context.Context, string, string, ...RequestEditorFn) (*GetRepoResponse, error)                               = (*ClientWithResponses)(nil).GetRepoWithResponse
-	_ func(context.Context, string, string, UpdateRepoJSONRequestBody, ...RequestEditorFn) (*UpdateRepoResponse, error) = (*ClientWithResponses)(nil).UpdateRepoWithResponse
-	_ func(context.Context, string, string, ...RequestEditorFn) (*DeleteRepoResponse, error)                            = (*ClientWithResponses)(nil).DeleteRepoWithResponse
-	_ ClientInterface                                                                                                   = (*Client)(nil)
-	_ ClientWithResponsesInterface                                                                                      = (*ClientWithResponses)(nil)
+	_ func(context.Context, ...RequestEditorFn) (*GetMeResult, error)                                                 = (*ClientWithResponses)(nil).GetMeWithResponse
+	_ func(context.Context, *ListReposParams, ...RequestEditorFn) (*ListReposResult, error)                           = (*ClientWithResponses)(nil).ListReposWithResponse
+	_ func(context.Context, CreateRepoJSONRequestBody, ...RequestEditorFn) (*CreateRepoResult, error)                 = (*ClientWithResponses)(nil).CreateRepoWithResponse
+	_ func(context.Context, string, string, ...RequestEditorFn) (*GetRepoResult, error)                               = (*ClientWithResponses)(nil).GetRepoWithResponse
+	_ func(context.Context, string, string, UpdateRepoJSONRequestBody, ...RequestEditorFn) (*UpdateRepoResult, error) = (*ClientWithResponses)(nil).UpdateRepoWithResponse
+	_ func(context.Context, string, string, ...RequestEditorFn) (*DeleteRepoResult, error)                            = (*ClientWithResponses)(nil).DeleteRepoWithResponse
+	_ ClientInterface                                                                                                 = (*Client)(nil)
+	_ ClientWithResponsesInterface                                                                                    = (*ClientWithResponses)(nil)
 )
 
 func TestNewClientConstructs(t *testing.T) {

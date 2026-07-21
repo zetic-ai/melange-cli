@@ -17,6 +17,21 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for CreateModelUploadRequestManifestVersion.
+const (
+	N2 CreateModelUploadRequestManifestVersion = 2
+)
+
+// Valid indicates whether the value is a known member of the CreateModelUploadRequestManifestVersion enum.
+func (e CreateModelUploadRequestManifestVersion) Valid() bool {
+	switch e {
+	case N2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateProjectRequestModelType.
 const (
 	CreateProjectRequestModelTypeGeneral CreateProjectRequestModelType = "general"
@@ -29,6 +44,69 @@ func (e CreateProjectRequestModelType) Valid() bool {
 	case CreateProjectRequestModelTypeGeneral:
 		return true
 	case CreateProjectRequestModelTypeLlm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ManifestFileRole.
+const (
+	ExternalData ManifestFileRole = "external_data"
+	Input        ManifestFileRole = "input"
+	Model        ManifestFileRole = "model"
+)
+
+// Valid indicates whether the value is a known member of the ManifestFileRole enum.
+func (e ManifestFileRole) Valid() bool {
+	switch e {
+	case ExternalData:
+		return true
+	case Input:
+		return true
+	case Model:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ModelStatusResponseStage.
+const (
+	Benchmark ModelStatusResponseStage = "benchmark"
+	Convert   ModelStatusResponseStage = "convert"
+)
+
+// Valid indicates whether the value is a known member of the ModelStatusResponseStage enum.
+func (e ModelStatusResponseStage) Valid() bool {
+	switch e {
+	case Benchmark:
+		return true
+	case Convert:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ModelStatusResponseState.
+const (
+	Converting ModelStatusResponseState = "converting"
+	Failed     ModelStatusResponseState = "failed"
+	Optimizing ModelStatusResponseState = "optimizing"
+	Ready      ModelStatusResponseState = "ready"
+)
+
+// Valid indicates whether the value is a known member of the ModelStatusResponseState enum.
+func (e ModelStatusResponseState) Valid() bool {
+	switch e {
+	case Converting:
+		return true
+	case Failed:
+		return true
+	case Optimizing:
+		return true
+	case Ready:
 		return true
 	default:
 		return false
@@ -69,10 +147,41 @@ type ActiveUpload struct {
 	StartedAt     string   `json:"started_at"`
 }
 
+// CancelModelUploadResponse defines model for CancelModelUploadResponse.
+type CancelModelUploadResponse struct {
+	Id    string `json:"id"`
+	State string `json:"state"`
+}
+
+// CompleteModelUploadResponse Session state after a complete call (ADR-5 status vocabulary).
+//
+// `state` is the session state machine value; verification/promotion
+// failures surface as `state == "FAILED"` + `failure_code` on a 200 —
+// the POST itself succeeded, the SESSION failed. `terminal` means the
+// session will not transition further (CONVERTING is terminal for the
+// session: conversion progress continues on the model status endpoint).
+type CompleteModelUploadResponse struct {
+	FailureCode *string   `json:"failure_code,omitempty"`
+	Id          string    `json:"id"`
+	Model       *ModelRef `json:"model,omitempty"`
+	State       string    `json:"state"`
+	Terminal    bool      `json:"terminal"`
+}
+
 // CompleteUploadRequest defines model for CompleteUploadRequest.
 type CompleteUploadRequest struct {
 	Source *string `json:"source,omitempty"`
 }
+
+// CreateModelUploadRequest defines model for CreateModelUploadRequest.
+type CreateModelUploadRequest struct {
+	Files           []ManifestFile                          `json:"files"`
+	ManifestVersion CreateModelUploadRequestManifestVersion `json:"manifest_version"`
+	Options         *ManifestOptions                        `json:"options,omitempty"`
+}
+
+// CreateModelUploadRequestManifestVersion defines model for CreateModelUploadRequest.ManifestVersion.
+type CreateModelUploadRequestManifestVersion int
 
 // CreateProjectRequest defines model for CreateProjectRequest.
 type CreateProjectRequest struct {
@@ -107,6 +216,14 @@ type FileArrival struct {
 	UploadedSize *int   `json:"uploaded_size,omitempty"`
 }
 
+// IssuedSessionFile defines model for IssuedSessionFile.
+type IssuedSessionFile struct {
+	CanonicalPath string  `json:"canonical_path"`
+	ClientFileId  string  `json:"client_file_id"`
+	Resumable     *bool   `json:"resumable,omitempty"`
+	UploadUrl     *string `json:"upload_url,omitempty"`
+}
+
 // IssuedUpload defines model for IssuedUpload.
 type IssuedUpload struct {
 	Path      string `json:"path"`
@@ -116,6 +233,38 @@ type IssuedUpload struct {
 // ListActiveUploadsResponse defines model for ListActiveUploadsResponse.
 type ListActiveUploadsResponse struct {
 	Uploads []ActiveUpload `json:"uploads"`
+}
+
+// ListModelUploadsResponse defines model for ListModelUploadsResponse.
+type ListModelUploadsResponse struct {
+	Count   int                  `json:"count"`
+	Results []ModelUploadSummary `json:"results"`
+}
+
+// ManifestBucket defines model for ManifestBucket.
+type ManifestBucket struct {
+	Dims  []interface{} `json:"dims"`
+	Index int           `json:"index"`
+}
+
+// ManifestFile defines model for ManifestFile.
+type ManifestFile struct {
+	BucketIndex  *int             `json:"bucket_index,omitempty"`
+	ClientFileId string           `json:"client_file_id"`
+	Crc32c       string           `json:"crc32c"`
+	Filename     string           `json:"filename"`
+	InputIndex   *int             `json:"input_index,omitempty"`
+	Role         ManifestFileRole `json:"role"`
+	Sha256       *string          `json:"sha256,omitempty"`
+	Size         int              `json:"size"`
+}
+
+// ManifestFileRole defines model for ManifestFile.Role.
+type ManifestFileRole string
+
+// ManifestOptions defines model for ManifestOptions.
+type ManifestOptions struct {
+	Buckets *[]ManifestBucket `json:"buckets,omitempty"`
 }
 
 // MeAccount defines model for MeAccount.
@@ -145,6 +294,70 @@ type MeUser struct {
 	Nickname string `json:"nickname"`
 }
 
+// ModelRef Reference to the CommonModel a completed session registered.
+type ModelRef struct {
+	Key     string `json:"key"`
+	Version int    `json:"version"`
+}
+
+// ModelStatusResponse Public conversion status of a model (the CLI `--wait` poll target).
+//
+// `state` is a STABLE public enum (lowercase snake) mapped from the
+// internal model status; `failure_code` is always a sanitized stable code,
+// never raw pipeline exception text.
+type ModelStatusResponse struct {
+	CreatedAt     time.Time                 `json:"created_at"`
+	DownloadReady bool                      `json:"download_ready"`
+	FailureCode   *string                   `json:"failure_code,omitempty"`
+	Stage         *ModelStatusResponseStage `json:"stage,omitempty"`
+	State         ModelStatusResponseState  `json:"state"`
+	Terminal      bool                      `json:"terminal"`
+	UpdatedAt     time.Time                 `json:"updated_at"`
+}
+
+// ModelStatusResponseStage defines model for ModelStatusResponse.Stage.
+type ModelStatusResponseStage string
+
+// ModelStatusResponseState defines model for ModelStatusResponse.State.
+type ModelStatusResponseState string
+
+// ModelUploadDetailResponse defines model for ModelUploadDetailResponse.
+type ModelUploadDetailResponse struct {
+	ExpiresAt   time.Time               `json:"expires_at"`
+	FailureCode *string                 `json:"failure_code,omitempty"`
+	Files       []ModelUploadFileStatus `json:"files"`
+	Id          string                  `json:"id"`
+	State       string                  `json:"state"`
+	Tag         string                  `json:"tag"`
+}
+
+// ModelUploadFileStatus defines model for ModelUploadFileStatus.
+type ModelUploadFileStatus struct {
+	CanonicalPath string `json:"canonical_path"`
+	ClientFileId  string `json:"client_file_id"`
+	Uploaded      bool   `json:"uploaded"`
+	UploadedSize  *int   `json:"uploaded_size,omitempty"`
+	Verified      bool   `json:"verified"`
+}
+
+// ModelUploadResponse defines model for ModelUploadResponse.
+type ModelUploadResponse struct {
+	ExpiresAt time.Time           `json:"expires_at"`
+	Files     []IssuedSessionFile `json:"files"`
+	Id        string              `json:"id"`
+	State     string              `json:"state"`
+	Tag       string              `json:"tag"`
+}
+
+// ModelUploadSummary defines model for ModelUploadSummary.
+type ModelUploadSummary struct {
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	FileCount int       `json:"file_count"`
+	Id        string    `json:"id"`
+	State     string    `json:"state"`
+}
+
 // PagedRepoResponse defines model for PagedRepoResponse.
 type PagedRepoResponse struct {
 	Count   int            `json:"count"`
@@ -158,6 +371,17 @@ type ProjectResponse struct {
 	IsPrivate   bool    `json:"is_private"`
 	ModelType   string  `json:"model_type"`
 	Name        string  `json:"name"`
+}
+
+// ReissueUploadFilesRequest defines model for ReissueUploadFilesRequest.
+type ReissueUploadFilesRequest struct {
+	ClientFileIds []string `json:"client_file_ids"`
+}
+
+// ReissueUploadFilesResponse defines model for ReissueUploadFilesResponse.
+type ReissueUploadFilesResponse struct {
+	ExpiresAt time.Time           `json:"expires_at"`
+	Files     []IssuedSessionFile `json:"files"`
 }
 
 // ReissueUploadUrlsRequest defines model for ReissueUploadUrlsRequest.
@@ -246,6 +470,12 @@ type CreateRepoJSONRequestBody = CreateProjectRequest
 
 // UpdateRepoJSONRequestBody defines body for UpdateRepo for application/json ContentType.
 type UpdateRepoJSONRequestBody = UpdateRepoRequest
+
+// CreateModelUploadJSONRequestBody defines body for CreateModelUpload for application/json ContentType.
+type CreateModelUploadJSONRequestBody = CreateModelUploadRequest
+
+// ReissueUploadFilesJSONRequestBody defines body for ReissueUploadFiles for application/json ContentType.
+type ReissueUploadFilesJSONRequestBody = ReissueUploadFilesRequest
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -475,6 +705,102 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/repos/{account_name}/{repo_name} (the `UpdateRepo` operationId).
 	UpdateRepo(ctx context.Context, accountName string, repoName string, body UpdateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateModelUploadWithBody Create Model Upload
+	//
+	// Open an upload session from a v2 manifest.
+	//
+	// Returns 201 with server-assigned canonical paths and resumable upload
+	// URLs; an `Idempotency-Key` replay of the same manifest returns the
+	// original session with 200.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+	CreateModelUploadWithBody(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateModelUpload Create Model Upload
+	//
+	// Open an upload session from a v2 manifest.
+	//
+	// Returns 201 with server-assigned canonical paths and resumable upload
+	// URLs; an `Idempotency-Key` replay of the same manifest returns the
+	// original session with 200.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+	CreateModelUpload(ctx context.Context, accountName string, repoName string, body CreateModelUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListModelUploads List Model Uploads
+	//
+	// Active + recent (last 10) upload sessions for the repo. Fixed small
+	// window, so no pagination on purpose.
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads (the `ListModelUploads` operationId).
+	ListModelUploads(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelModelUpload Cancel Model Upload
+	//
+	// Cancel an active session (idempotent); staging cleanup is best-effort.
+	//
+	// Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
+	CancelModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetModelUpload Get Model Upload
+	//
+	// Session detail with per-file staging arrival (one storage list call).
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `GetModelUpload` operationId).
+	GetModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CompleteModelUpload Complete Model Upload
+	//
+	// Complete an upload session: verify -> promote -> register -> dispatch.
+	//
+	// Contract: a 200 means the COMPLETE REQUEST was processed — not that the
+	// session succeeded. Verification/promotion failures are session state:
+	// the response carries `state="FAILED"` plus a machine `failure_code`
+	// (`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,
+	// `staging_mutated:<id>`). Request-level errors are reserved for sessions
+	// that cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).
+	//
+	// Idempotent: repeating the call (same `Idempotency-Key` or not) while the
+	// session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
+	// state without re-verifying and without double-dispatching; a replay on
+	// DISPATCH_PENDING retries a failed conversion trigger.
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
+	CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReissueUploadFilesWithBody Reissue Upload Files
+	//
+	// Fresh resumable upload URLs for declared files of an UPLOADING session.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+	ReissueUploadFilesWithBody(ctx context.Context, accountName string, repoName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReissueUploadFiles Reissue Upload Files
+	//
+	// Fresh resumable upload URLs for declared files of an UPLOADING session.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+	ReissueUploadFiles(ctx context.Context, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetModelStatus Get Model Status
+	//
+	// Public conversion status of a model (the CLI `--wait` poll target).
+	//
+	// `download_ready` follows `ModelStatus.available()` — the same condition
+	// internal download paths gate on: a model is downloadable once converted
+	// (OPTIMIZING), even while benchmarking is still running.
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/status (the `GetModelStatus` operationId).
+	GetModelStatus(ctx context.Context, accountName string, repoName string, modelKey string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // GetMe Get Me
@@ -822,6 +1148,192 @@ func (c *Client) UpdateRepoWithBody(ctx context.Context, accountName string, rep
 // Corresponds with PATCH /v1/repos/{account_name}/{repo_name} (the `UpdateRepo` operationId).
 func (c *Client) UpdateRepo(ctx context.Context, accountName string, repoName string, body UpdateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateRepoRequest(c.Server, accountName, repoName, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateModelUploadWithBody Create Model Upload
+//
+// Open an upload session from a v2 manifest.
+//
+// Returns 201 with server-assigned canonical paths and resumable upload
+// URLs; an `Idempotency-Key` replay of the same manifest returns the
+// original session with 200.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+func (c *Client) CreateModelUploadWithBody(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateModelUploadRequestWithBody(c.Server, accountName, repoName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateModelUpload Create Model Upload
+//
+// Open an upload session from a v2 manifest.
+//
+// Returns 201 with server-assigned canonical paths and resumable upload
+// URLs; an `Idempotency-Key` replay of the same manifest returns the
+// original session with 200.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+func (c *Client) CreateModelUpload(ctx context.Context, accountName string, repoName string, body CreateModelUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateModelUploadRequest(c.Server, accountName, repoName, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListModelUploads List Model Uploads
+//
+// Active + recent (last 10) upload sessions for the repo. Fixed small
+// window, so no pagination on purpose.
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads (the `ListModelUploads` operationId).
+func (c *Client) ListModelUploads(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListModelUploadsRequest(c.Server, accountName, repoName)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CancelModelUpload Cancel Model Upload
+//
+// Cancel an active session (idempotent); staging cleanup is best-effort.
+//
+// Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
+func (c *Client) CancelModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelModelUploadRequest(c.Server, accountName, repoName, uploadId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetModelUpload Get Model Upload
+//
+// Session detail with per-file staging arrival (one storage list call).
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `GetModelUpload` operationId).
+func (c *Client) GetModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetModelUploadRequest(c.Server, accountName, repoName, uploadId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CompleteModelUpload Complete Model Upload
+//
+// Complete an upload session: verify -> promote -> register -> dispatch.
+//
+// Contract: a 200 means the COMPLETE REQUEST was processed — not that the
+// session succeeded. Verification/promotion failures are session state:
+// the response carries `state="FAILED"` plus a machine `failure_code`
+// (`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,
+// `staging_mutated:<id>`). Request-level errors are reserved for sessions
+// that cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).
+//
+// Idempotent: repeating the call (same `Idempotency-Key` or not) while the
+// session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
+// state without re-verifying and without double-dispatching; a replay on
+// DISPATCH_PENDING retries a failed conversion trigger.
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
+func (c *Client) CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCompleteModelUploadRequest(c.Server, accountName, repoName, uploadId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReissueUploadFilesWithBody Reissue Upload Files
+//
+// Fresh resumable upload URLs for declared files of an UPLOADING session.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+func (c *Client) ReissueUploadFilesWithBody(ctx context.Context, accountName string, repoName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReissueUploadFilesRequestWithBody(c.Server, accountName, repoName, uploadId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReissueUploadFiles Reissue Upload Files
+//
+// Fresh resumable upload URLs for declared files of an UPLOADING session.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+func (c *Client) ReissueUploadFiles(ctx context.Context, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReissueUploadFilesRequest(c.Server, accountName, repoName, uploadId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetModelStatus Get Model Status
+//
+// Public conversion status of a model (the CLI `--wait` poll target).
+//
+// `download_ready` follows `ModelStatus.available()` — the same condition
+// internal download paths gate on: a model is downloadable once converted
+// (OPTIMIZING), even while benchmarking is still running.
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/status (the `GetModelStatus` operationId).
+func (c *Client) GetModelStatus(ctx context.Context, accountName string, repoName string, modelKey string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetModelStatusRequest(c.Server, accountName, repoName, modelKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1458,6 +1970,354 @@ func NewUpdateRepoRequestWithBody(server string, accountName string, repoName st
 	return req, nil
 }
 
+// NewCreateModelUploadRequest calls the generic CreateModelUpload builder with application/json body
+func NewCreateModelUploadRequest(server string, accountName string, repoName string, body CreateModelUploadJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateModelUploadRequestWithBody(server, accountName, repoName, "application/json", bodyReader)
+}
+
+// NewCreateModelUploadRequestWithBody constructs an http.Request for the CreateModelUpload method, with any body, and a specified content type
+func NewCreateModelUploadRequestWithBody(server string, accountName string, repoName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListModelUploadsRequest constructs an http.Request for the ListModelUploads method
+func NewListModelUploadsRequest(server string, accountName string, repoName string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCancelModelUploadRequest constructs an http.Request for the CancelModelUpload method
+func NewCancelModelUploadRequest(server string, accountName string, repoName string, uploadId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "upload_id", uploadId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetModelUploadRequest constructs an http.Request for the GetModelUpload method
+func NewGetModelUploadRequest(server string, accountName string, repoName string, uploadId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "upload_id", uploadId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCompleteModelUploadRequest constructs an http.Request for the CompleteModelUpload method
+func NewCompleteModelUploadRequest(server string, accountName string, repoName string, uploadId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "upload_id", uploadId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s/complete", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReissueUploadFilesRequest calls the generic ReissueUploadFiles builder with application/json body
+func NewReissueUploadFilesRequest(server string, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReissueUploadFilesRequestWithBody(server, accountName, repoName, uploadId, "application/json", bodyReader)
+}
+
+// NewReissueUploadFilesRequestWithBody constructs an http.Request for the ReissueUploadFiles method, with any body, and a specified content type
+func NewReissueUploadFilesRequestWithBody(server string, accountName string, repoName string, uploadId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "upload_id", uploadId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s/files", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetModelStatusRequest constructs an http.Request for the GetModelStatus method
+func NewGetModelStatusRequest(server string, accountName string, repoName string, modelKey string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "model_key", modelKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/%s/status", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -1507,28 +2367,28 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
-	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error)
+	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResult, error)
 
 	// ZeticPublicProjectsCreateProjectWithBodyWithResponse Create Project
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects (the `ZeticPublicProjectsCreateProject` operationId).
-	ZeticPublicProjectsCreateProjectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResponse, error)
+	ZeticPublicProjectsCreateProjectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResult, error)
 
 	// ZeticPublicProjectsCreateProjectWithResponse Create Project
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects (the `ZeticPublicProjectsCreateProject` operationId).
-	ZeticPublicProjectsCreateProjectWithResponse(ctx context.Context, body ZeticPublicProjectsCreateProjectJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResponse, error)
+	ZeticPublicProjectsCreateProjectWithResponse(ctx context.Context, body ZeticPublicProjectsCreateProjectJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResult, error)
 
 	// ZeticPublicProjectsDeleteProjectWithResponse Delete Project
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/projects/{project_name} (the `ZeticPublicProjectsDeleteProject` operationId).
-	ZeticPublicProjectsDeleteProjectWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsDeleteProjectResponse, error)
+	ZeticPublicProjectsDeleteProjectWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsDeleteProjectResult, error)
 
 	// ZeticPublicUploadsListActiveUploadsWithResponse List Active Uploads
 	//
@@ -1540,7 +2400,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/projects/{project_name}/uploads (the `ZeticPublicUploadsListActiveUploads` operationId).
-	ZeticPublicUploadsListActiveUploadsWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsListActiveUploadsResponse, error)
+	ZeticPublicUploadsListActiveUploadsWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsListActiveUploadsResult, error)
 
 	// ZeticPublicUploadsCreateUploadWithBodyWithResponse Create Upload
 	//
@@ -1549,7 +2409,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects/{project_name}/uploads (the `ZeticPublicUploadsCreateUpload` operationId).
-	ZeticPublicUploadsCreateUploadWithBodyWithResponse(ctx context.Context, projectName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResponse, error)
+	ZeticPublicUploadsCreateUploadWithBodyWithResponse(ctx context.Context, projectName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResult, error)
 
 	// ZeticPublicUploadsCreateUploadWithResponse Create Upload
 	//
@@ -1558,7 +2418,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects/{project_name}/uploads (the `ZeticPublicUploadsCreateUpload` operationId).
-	ZeticPublicUploadsCreateUploadWithResponse(ctx context.Context, projectName string, body ZeticPublicUploadsCreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResponse, error)
+	ZeticPublicUploadsCreateUploadWithResponse(ctx context.Context, projectName string, body ZeticPublicUploadsCreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResult, error)
 
 	// ZeticPublicUploadsCancelUploadWithResponse Cancel Upload
 	//
@@ -1567,7 +2427,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/projects/{project_name}/uploads/{upload_id} (the `ZeticPublicUploadsCancelUpload` operationId).
-	ZeticPublicUploadsCancelUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCancelUploadResponse, error)
+	ZeticPublicUploadsCancelUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCancelUploadResult, error)
 
 	// ZeticPublicUploadsGetUploadWithResponse Get Upload
 	//
@@ -1580,7 +2440,7 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/projects/{project_name}/uploads/{upload_id} (the `ZeticPublicUploadsGetUpload` operationId).
-	ZeticPublicUploadsGetUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsGetUploadResponse, error)
+	ZeticPublicUploadsGetUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsGetUploadResult, error)
 
 	// ZeticPublicUploadsCompleteUploadWithBodyWithResponse Complete Upload
 	//
@@ -1589,7 +2449,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/complete (the `ZeticPublicUploadsCompleteUpload` operationId).
-	ZeticPublicUploadsCompleteUploadWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResponse, error)
+	ZeticPublicUploadsCompleteUploadWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResult, error)
 
 	// ZeticPublicUploadsCompleteUploadWithResponse Complete Upload
 	//
@@ -1598,7 +2458,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/complete (the `ZeticPublicUploadsCompleteUpload` operationId).
-	ZeticPublicUploadsCompleteUploadWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsCompleteUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResponse, error)
+	ZeticPublicUploadsCompleteUploadWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsCompleteUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResult, error)
 
 	// ZeticPublicUploadsReissueUploadUrlsWithBodyWithResponse Reissue Upload Urls
 	//
@@ -1610,7 +2470,7 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/files (the `ZeticPublicUploadsReissueUploadUrls` operationId).
-	ZeticPublicUploadsReissueUploadUrlsWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResponse, error)
+	ZeticPublicUploadsReissueUploadUrlsWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResult, error)
 
 	// ZeticPublicUploadsReissueUploadUrlsWithResponse Reissue Upload Urls
 	//
@@ -1622,59 +2482,165 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/files (the `ZeticPublicUploadsReissueUploadUrls` operationId).
-	ZeticPublicUploadsReissueUploadUrlsWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsReissueUploadUrlsJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResponse, error)
+	ZeticPublicUploadsReissueUploadUrlsWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsReissueUploadUrlsJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResult, error)
 
 	// ListReposWithResponse List Repos
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/repos (the `ListRepos` operationId).
-	ListReposWithResponse(ctx context.Context, params *ListReposParams, reqEditors ...RequestEditorFn) (*ListReposResponse, error)
+	ListReposWithResponse(ctx context.Context, params *ListReposParams, reqEditors ...RequestEditorFn) (*ListReposResult, error)
 
 	// CreateRepoWithBodyWithResponse Create Repo
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/repos (the `CreateRepo` operationId).
-	CreateRepoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateRepoResponse, error)
+	CreateRepoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateRepoResult, error)
 
 	// CreateRepoWithResponse Create Repo
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/repos (the `CreateRepo` operationId).
-	CreateRepoWithResponse(ctx context.Context, body CreateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateRepoResponse, error)
+	CreateRepoWithResponse(ctx context.Context, body CreateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateRepoResult, error)
 
 	// DeleteRepoWithResponse Delete Repo
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/repos/{account_name}/{repo_name} (the `DeleteRepo` operationId).
-	DeleteRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*DeleteRepoResponse, error)
+	DeleteRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*DeleteRepoResult, error)
 
 	// GetRepoWithResponse Get Repo
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/repos/{account_name}/{repo_name} (the `GetRepo` operationId).
-	GetRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*GetRepoResponse, error)
+	GetRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*GetRepoResult, error)
 
 	// UpdateRepoWithBodyWithResponse Update Repo
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/repos/{account_name}/{repo_name} (the `UpdateRepo` operationId).
-	UpdateRepoWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateRepoResponse, error)
+	UpdateRepoWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateRepoResult, error)
 
 	// UpdateRepoWithResponse Update Repo
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/repos/{account_name}/{repo_name} (the `UpdateRepo` operationId).
-	UpdateRepoWithResponse(ctx context.Context, accountName string, repoName string, body UpdateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateRepoResponse, error)
+	UpdateRepoWithResponse(ctx context.Context, accountName string, repoName string, body UpdateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateRepoResult, error)
+
+	// CreateModelUploadWithBodyWithResponse Create Model Upload
+	//
+	// Open an upload session from a v2 manifest.
+	//
+	// Returns 201 with server-assigned canonical paths and resumable upload
+	// URLs; an `Idempotency-Key` replay of the same manifest returns the
+	// original session with 200.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+	CreateModelUploadWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateModelUploadResult, error)
+
+	// CreateModelUploadWithResponse Create Model Upload
+	//
+	// Open an upload session from a v2 manifest.
+	//
+	// Returns 201 with server-assigned canonical paths and resumable upload
+	// URLs; an `Idempotency-Key` replay of the same manifest returns the
+	// original session with 200.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+	CreateModelUploadWithResponse(ctx context.Context, accountName string, repoName string, body CreateModelUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateModelUploadResult, error)
+
+	// ListModelUploadsWithResponse List Model Uploads
+	//
+	// Active + recent (last 10) upload sessions for the repo. Fixed small
+	// window, so no pagination on purpose.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads (the `ListModelUploads` operationId).
+	ListModelUploadsWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*ListModelUploadsResult, error)
+
+	// CancelModelUploadWithResponse Cancel Model Upload
+	//
+	// Cancel an active session (idempotent); staging cleanup is best-effort.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
+	CancelModelUploadWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*CancelModelUploadResult, error)
+
+	// GetModelUploadWithResponse Get Model Upload
+	//
+	// Session detail with per-file staging arrival (one storage list call).
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `GetModelUpload` operationId).
+	GetModelUploadWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*GetModelUploadResult, error)
+
+	// CompleteModelUploadWithResponse Complete Model Upload
+	//
+	// Complete an upload session: verify -> promote -> register -> dispatch.
+	//
+	// Contract: a 200 means the COMPLETE REQUEST was processed — not that the
+	// session succeeded. Verification/promotion failures are session state:
+	// the response carries `state="FAILED"` plus a machine `failure_code`
+	// (`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,
+	// `staging_mutated:<id>`). Request-level errors are reserved for sessions
+	// that cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).
+	//
+	// Idempotent: repeating the call (same `Idempotency-Key` or not) while the
+	// session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
+	// state without re-verifying and without double-dispatching; a replay on
+	// DISPATCH_PENDING retries a failed conversion trigger.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
+	CompleteModelUploadWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*CompleteModelUploadResult, error)
+
+	// ReissueUploadFilesWithBodyWithResponse Reissue Upload Files
+	//
+	// Fresh resumable upload URLs for declared files of an UPLOADING session.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+	ReissueUploadFilesWithBodyWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReissueUploadFilesResult, error)
+
+	// ReissueUploadFilesWithResponse Reissue Upload Files
+	//
+	// Fresh resumable upload URLs for declared files of an UPLOADING session.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+	ReissueUploadFilesWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody, reqEditors ...RequestEditorFn) (*ReissueUploadFilesResult, error)
+
+	// GetModelStatusWithResponse Get Model Status
+	//
+	// Public conversion status of a model (the CLI `--wait` poll target).
+	//
+	// `download_ready` follows `ModelStatus.available()` — the same condition
+	// internal download paths gate on: a model is downloadable once converted
+	// (OPTIMIZING), even while benchmarking is still running.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/status (the `GetModelStatus` operationId).
+	GetModelStatusWithResponse(ctx context.Context, accountName string, repoName string, modelKey string, reqEditors ...RequestEditorFn) (*GetModelStatusResult, error)
 }
 
-type GetMeResponse struct {
+type GetMeResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -1682,17 +2648,17 @@ type GetMeResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetMeResponse) GetJSON200() *MeResponse {
+func (r GetMeResult) GetJSON200() *MeResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r GetMeResponse) GetBody() []byte {
+func (r GetMeResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r GetMeResponse) Status() string {
+func (r GetMeResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1700,7 +2666,7 @@ func (r GetMeResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetMeResponse) StatusCode() int {
+func (r GetMeResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1708,14 +2674,14 @@ func (r GetMeResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetMeResponse) ContentType() string {
+func (r GetMeResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicProjectsCreateProjectResponse struct {
+type ZeticPublicProjectsCreateProjectResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -1723,17 +2689,17 @@ type ZeticPublicProjectsCreateProjectResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ZeticPublicProjectsCreateProjectResponse) GetJSON200() *ProjectResponse {
+func (r ZeticPublicProjectsCreateProjectResult) GetJSON200() *ProjectResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicProjectsCreateProjectResponse) GetBody() []byte {
+func (r ZeticPublicProjectsCreateProjectResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicProjectsCreateProjectResponse) Status() string {
+func (r ZeticPublicProjectsCreateProjectResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1741,7 +2707,7 @@ func (r ZeticPublicProjectsCreateProjectResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicProjectsCreateProjectResponse) StatusCode() int {
+func (r ZeticPublicProjectsCreateProjectResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1749,14 +2715,14 @@ func (r ZeticPublicProjectsCreateProjectResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicProjectsCreateProjectResponse) ContentType() string {
+func (r ZeticPublicProjectsCreateProjectResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicProjectsDeleteProjectResponse struct {
+type ZeticPublicProjectsDeleteProjectResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -1764,17 +2730,17 @@ type ZeticPublicProjectsDeleteProjectResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ZeticPublicProjectsDeleteProjectResponse) GetJSON200() *string {
+func (r ZeticPublicProjectsDeleteProjectResult) GetJSON200() *string {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicProjectsDeleteProjectResponse) GetBody() []byte {
+func (r ZeticPublicProjectsDeleteProjectResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicProjectsDeleteProjectResponse) Status() string {
+func (r ZeticPublicProjectsDeleteProjectResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1782,7 +2748,7 @@ func (r ZeticPublicProjectsDeleteProjectResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicProjectsDeleteProjectResponse) StatusCode() int {
+func (r ZeticPublicProjectsDeleteProjectResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1790,14 +2756,14 @@ func (r ZeticPublicProjectsDeleteProjectResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicProjectsDeleteProjectResponse) ContentType() string {
+func (r ZeticPublicProjectsDeleteProjectResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicUploadsListActiveUploadsResponse struct {
+type ZeticPublicUploadsListActiveUploadsResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -1805,17 +2771,17 @@ type ZeticPublicUploadsListActiveUploadsResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ZeticPublicUploadsListActiveUploadsResponse) GetJSON200() *ListActiveUploadsResponse {
+func (r ZeticPublicUploadsListActiveUploadsResult) GetJSON200() *ListActiveUploadsResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicUploadsListActiveUploadsResponse) GetBody() []byte {
+func (r ZeticPublicUploadsListActiveUploadsResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicUploadsListActiveUploadsResponse) Status() string {
+func (r ZeticPublicUploadsListActiveUploadsResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1823,7 +2789,7 @@ func (r ZeticPublicUploadsListActiveUploadsResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicUploadsListActiveUploadsResponse) StatusCode() int {
+func (r ZeticPublicUploadsListActiveUploadsResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1831,14 +2797,14 @@ func (r ZeticPublicUploadsListActiveUploadsResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicUploadsListActiveUploadsResponse) ContentType() string {
+func (r ZeticPublicUploadsListActiveUploadsResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicUploadsCreateUploadResponse struct {
+type ZeticPublicUploadsCreateUploadResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -1846,17 +2812,17 @@ type ZeticPublicUploadsCreateUploadResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ZeticPublicUploadsCreateUploadResponse) GetJSON200() *CreateUploadResponse {
+func (r ZeticPublicUploadsCreateUploadResult) GetJSON200() *CreateUploadResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicUploadsCreateUploadResponse) GetBody() []byte {
+func (r ZeticPublicUploadsCreateUploadResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicUploadsCreateUploadResponse) Status() string {
+func (r ZeticPublicUploadsCreateUploadResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1864,7 +2830,7 @@ func (r ZeticPublicUploadsCreateUploadResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicUploadsCreateUploadResponse) StatusCode() int {
+func (r ZeticPublicUploadsCreateUploadResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1872,25 +2838,25 @@ func (r ZeticPublicUploadsCreateUploadResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicUploadsCreateUploadResponse) ContentType() string {
+func (r ZeticPublicUploadsCreateUploadResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicUploadsCancelUploadResponse struct {
+type ZeticPublicUploadsCancelUploadResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicUploadsCancelUploadResponse) GetBody() []byte {
+func (r ZeticPublicUploadsCancelUploadResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicUploadsCancelUploadResponse) Status() string {
+func (r ZeticPublicUploadsCancelUploadResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1898,7 +2864,7 @@ func (r ZeticPublicUploadsCancelUploadResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicUploadsCancelUploadResponse) StatusCode() int {
+func (r ZeticPublicUploadsCancelUploadResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1906,14 +2872,14 @@ func (r ZeticPublicUploadsCancelUploadResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicUploadsCancelUploadResponse) ContentType() string {
+func (r ZeticPublicUploadsCancelUploadResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicUploadsGetUploadResponse struct {
+type ZeticPublicUploadsGetUploadResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -1921,17 +2887,17 @@ type ZeticPublicUploadsGetUploadResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ZeticPublicUploadsGetUploadResponse) GetJSON200() *UploadStatusResponse {
+func (r ZeticPublicUploadsGetUploadResult) GetJSON200() *UploadStatusResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicUploadsGetUploadResponse) GetBody() []byte {
+func (r ZeticPublicUploadsGetUploadResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicUploadsGetUploadResponse) Status() string {
+func (r ZeticPublicUploadsGetUploadResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1939,7 +2905,7 @@ func (r ZeticPublicUploadsGetUploadResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicUploadsGetUploadResponse) StatusCode() int {
+func (r ZeticPublicUploadsGetUploadResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1947,14 +2913,14 @@ func (r ZeticPublicUploadsGetUploadResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicUploadsGetUploadResponse) ContentType() string {
+func (r ZeticPublicUploadsGetUploadResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicUploadsCompleteUploadResponse struct {
+type ZeticPublicUploadsCompleteUploadResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -1962,17 +2928,17 @@ type ZeticPublicUploadsCompleteUploadResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ZeticPublicUploadsCompleteUploadResponse) GetJSON200() *VersionResponse {
+func (r ZeticPublicUploadsCompleteUploadResult) GetJSON200() *VersionResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicUploadsCompleteUploadResponse) GetBody() []byte {
+func (r ZeticPublicUploadsCompleteUploadResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicUploadsCompleteUploadResponse) Status() string {
+func (r ZeticPublicUploadsCompleteUploadResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1980,7 +2946,7 @@ func (r ZeticPublicUploadsCompleteUploadResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicUploadsCompleteUploadResponse) StatusCode() int {
+func (r ZeticPublicUploadsCompleteUploadResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1988,14 +2954,14 @@ func (r ZeticPublicUploadsCompleteUploadResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicUploadsCompleteUploadResponse) ContentType() string {
+func (r ZeticPublicUploadsCompleteUploadResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ZeticPublicUploadsReissueUploadUrlsResponse struct {
+type ZeticPublicUploadsReissueUploadUrlsResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -2003,17 +2969,17 @@ type ZeticPublicUploadsReissueUploadUrlsResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ZeticPublicUploadsReissueUploadUrlsResponse) GetJSON200() *ReissueUploadUrlsResponse {
+func (r ZeticPublicUploadsReissueUploadUrlsResult) GetJSON200() *ReissueUploadUrlsResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ZeticPublicUploadsReissueUploadUrlsResponse) GetBody() []byte {
+func (r ZeticPublicUploadsReissueUploadUrlsResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ZeticPublicUploadsReissueUploadUrlsResponse) Status() string {
+func (r ZeticPublicUploadsReissueUploadUrlsResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2021,7 +2987,7 @@ func (r ZeticPublicUploadsReissueUploadUrlsResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ZeticPublicUploadsReissueUploadUrlsResponse) StatusCode() int {
+func (r ZeticPublicUploadsReissueUploadUrlsResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2029,14 +2995,14 @@ func (r ZeticPublicUploadsReissueUploadUrlsResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ZeticPublicUploadsReissueUploadUrlsResponse) ContentType() string {
+func (r ZeticPublicUploadsReissueUploadUrlsResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type ListReposResponse struct {
+type ListReposResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -2044,17 +3010,17 @@ type ListReposResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListReposResponse) GetJSON200() *PagedRepoResponse {
+func (r ListReposResult) GetJSON200() *PagedRepoResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r ListReposResponse) GetBody() []byte {
+func (r ListReposResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ListReposResponse) Status() string {
+func (r ListReposResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2062,7 +3028,7 @@ func (r ListReposResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ListReposResponse) StatusCode() int {
+func (r ListReposResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2070,14 +3036,14 @@ func (r ListReposResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListReposResponse) ContentType() string {
+func (r ListReposResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type CreateRepoResponse struct {
+type CreateRepoResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
@@ -2085,17 +3051,17 @@ type CreateRepoResponse struct {
 }
 
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateRepoResponse) GetJSON201() *RepoResponse {
+func (r CreateRepoResult) GetJSON201() *RepoResponse {
 	return r.JSON201
 }
 
 // GetBody returns the raw response body bytes
-func (r CreateRepoResponse) GetBody() []byte {
+func (r CreateRepoResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r CreateRepoResponse) Status() string {
+func (r CreateRepoResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2103,7 +3069,7 @@ func (r CreateRepoResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r CreateRepoResponse) StatusCode() int {
+func (r CreateRepoResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2111,25 +3077,25 @@ func (r CreateRepoResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreateRepoResponse) ContentType() string {
+func (r CreateRepoResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type DeleteRepoResponse struct {
+type DeleteRepoResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 }
 
 // GetBody returns the raw response body bytes
-func (r DeleteRepoResponse) GetBody() []byte {
+func (r DeleteRepoResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r DeleteRepoResponse) Status() string {
+func (r DeleteRepoResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2137,7 +3103,7 @@ func (r DeleteRepoResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DeleteRepoResponse) StatusCode() int {
+func (r DeleteRepoResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2145,55 +3111,14 @@ func (r DeleteRepoResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DeleteRepoResponse) ContentType() string {
+func (r DeleteRepoResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type GetRepoResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *RepoResponse
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetRepoResponse) GetJSON200() *RepoResponse {
-	return r.JSON200
-}
-
-// GetBody returns the raw response body bytes
-func (r GetRepoResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r GetRepoResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetRepoResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetRepoResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type UpdateRepoResponse struct {
+type GetRepoResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
@@ -2201,17 +3126,17 @@ type UpdateRepoResponse struct {
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r UpdateRepoResponse) GetJSON200() *RepoResponse {
+func (r GetRepoResult) GetJSON200() *RepoResponse {
 	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
-func (r UpdateRepoResponse) GetBody() []byte {
+func (r GetRepoResult) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r UpdateRepoResponse) Status() string {
+func (r GetRepoResult) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2219,7 +3144,7 @@ func (r UpdateRepoResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r UpdateRepoResponse) StatusCode() int {
+func (r GetRepoResult) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2227,7 +3152,342 @@ func (r UpdateRepoResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r UpdateRepoResponse) ContentType() string {
+func (r GetRepoResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateRepoResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RepoResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateRepoResult) GetJSON200() *RepoResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateRepoResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateRepoResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateRepoResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateRepoResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateModelUploadResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ModelUploadResponse
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ModelUploadResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CreateModelUploadResult) GetJSON200() *ModelUploadResponse {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateModelUploadResult) GetJSON201() *ModelUploadResponse {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateModelUploadResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateModelUploadResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateModelUploadResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateModelUploadResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListModelUploadsResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ListModelUploadsResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListModelUploadsResult) GetJSON200() *ListModelUploadsResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ListModelUploadsResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListModelUploadsResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListModelUploadsResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListModelUploadsResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CancelModelUploadResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CancelModelUploadResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CancelModelUploadResult) GetJSON200() *CancelModelUploadResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r CancelModelUploadResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelModelUploadResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelModelUploadResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CancelModelUploadResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetModelUploadResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ModelUploadDetailResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetModelUploadResult) GetJSON200() *ModelUploadDetailResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetModelUploadResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetModelUploadResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetModelUploadResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetModelUploadResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CompleteModelUploadResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CompleteModelUploadResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CompleteModelUploadResult) GetJSON200() *CompleteModelUploadResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r CompleteModelUploadResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CompleteModelUploadResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CompleteModelUploadResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CompleteModelUploadResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReissueUploadFilesResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ReissueUploadFilesResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReissueUploadFilesResult) GetJSON200() *ReissueUploadFilesResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReissueUploadFilesResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReissueUploadFilesResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReissueUploadFilesResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReissueUploadFilesResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetModelStatusResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ModelStatusResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetModelStatusResult) GetJSON200() *ModelStatusResponse {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetModelStatusResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetModelStatusResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetModelStatusResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetModelStatusResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -2239,12 +3499,12 @@ func (r UpdateRepoResponse) ContentType() string {
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/me (the `GetMe` operationId).
-func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResponse, error) {
+func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResult, error) {
 	rsp, err := c.GetMe(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetMeResponse(rsp)
+	return ParseGetMeResult(rsp)
 }
 
 // ZeticPublicProjectsCreateProjectWithBodyWithResponse Create Project
@@ -2252,12 +3512,12 @@ func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors 
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects (the `ZeticPublicProjectsCreateProject` operationId).
-func (c *ClientWithResponses) ZeticPublicProjectsCreateProjectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResponse, error) {
+func (c *ClientWithResponses) ZeticPublicProjectsCreateProjectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResult, error) {
 	rsp, err := c.ZeticPublicProjectsCreateProjectWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicProjectsCreateProjectResponse(rsp)
+	return ParseZeticPublicProjectsCreateProjectResult(rsp)
 }
 
 // ZeticPublicProjectsCreateProjectWithResponse Create Project
@@ -2265,12 +3525,12 @@ func (c *ClientWithResponses) ZeticPublicProjectsCreateProjectWithBodyWithRespon
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects (the `ZeticPublicProjectsCreateProject` operationId).
-func (c *ClientWithResponses) ZeticPublicProjectsCreateProjectWithResponse(ctx context.Context, body ZeticPublicProjectsCreateProjectJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResponse, error) {
+func (c *ClientWithResponses) ZeticPublicProjectsCreateProjectWithResponse(ctx context.Context, body ZeticPublicProjectsCreateProjectJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsCreateProjectResult, error) {
 	rsp, err := c.ZeticPublicProjectsCreateProject(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicProjectsCreateProjectResponse(rsp)
+	return ParseZeticPublicProjectsCreateProjectResult(rsp)
 }
 
 // ZeticPublicProjectsDeleteProjectWithResponse Delete Project
@@ -2278,12 +3538,12 @@ func (c *ClientWithResponses) ZeticPublicProjectsCreateProjectWithResponse(ctx c
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /v1/projects/{project_name} (the `ZeticPublicProjectsDeleteProject` operationId).
-func (c *ClientWithResponses) ZeticPublicProjectsDeleteProjectWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsDeleteProjectResponse, error) {
+func (c *ClientWithResponses) ZeticPublicProjectsDeleteProjectWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicProjectsDeleteProjectResult, error) {
 	rsp, err := c.ZeticPublicProjectsDeleteProject(ctx, projectName, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicProjectsDeleteProjectResponse(rsp)
+	return ParseZeticPublicProjectsDeleteProjectResult(rsp)
 }
 
 // ZeticPublicUploadsListActiveUploadsWithResponse List Active Uploads
@@ -2296,12 +3556,12 @@ func (c *ClientWithResponses) ZeticPublicProjectsDeleteProjectWithResponse(ctx c
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/projects/{project_name}/uploads (the `ZeticPublicUploadsListActiveUploads` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsListActiveUploadsWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsListActiveUploadsResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsListActiveUploadsWithResponse(ctx context.Context, projectName string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsListActiveUploadsResult, error) {
 	rsp, err := c.ZeticPublicUploadsListActiveUploads(ctx, projectName, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsListActiveUploadsResponse(rsp)
+	return ParseZeticPublicUploadsListActiveUploadsResult(rsp)
 }
 
 // ZeticPublicUploadsCreateUploadWithBodyWithResponse Create Upload
@@ -2311,12 +3571,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsListActiveUploadsWithResponse(ct
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects/{project_name}/uploads (the `ZeticPublicUploadsCreateUpload` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsCreateUploadWithBodyWithResponse(ctx context.Context, projectName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsCreateUploadWithBodyWithResponse(ctx context.Context, projectName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResult, error) {
 	rsp, err := c.ZeticPublicUploadsCreateUploadWithBody(ctx, projectName, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsCreateUploadResponse(rsp)
+	return ParseZeticPublicUploadsCreateUploadResult(rsp)
 }
 
 // ZeticPublicUploadsCreateUploadWithResponse Create Upload
@@ -2326,12 +3586,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsCreateUploadWithBodyWithResponse
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects/{project_name}/uploads (the `ZeticPublicUploadsCreateUpload` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsCreateUploadWithResponse(ctx context.Context, projectName string, body ZeticPublicUploadsCreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsCreateUploadWithResponse(ctx context.Context, projectName string, body ZeticPublicUploadsCreateUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCreateUploadResult, error) {
 	rsp, err := c.ZeticPublicUploadsCreateUpload(ctx, projectName, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsCreateUploadResponse(rsp)
+	return ParseZeticPublicUploadsCreateUploadResult(rsp)
 }
 
 // ZeticPublicUploadsCancelUploadWithResponse Cancel Upload
@@ -2341,12 +3601,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsCreateUploadWithResponse(ctx con
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /v1/projects/{project_name}/uploads/{upload_id} (the `ZeticPublicUploadsCancelUpload` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsCancelUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCancelUploadResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsCancelUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCancelUploadResult, error) {
 	rsp, err := c.ZeticPublicUploadsCancelUpload(ctx, projectName, uploadId, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsCancelUploadResponse(rsp)
+	return ParseZeticPublicUploadsCancelUploadResult(rsp)
 }
 
 // ZeticPublicUploadsGetUploadWithResponse Get Upload
@@ -2360,12 +3620,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsCancelUploadWithResponse(ctx con
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/projects/{project_name}/uploads/{upload_id} (the `ZeticPublicUploadsGetUpload` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsGetUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsGetUploadResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsGetUploadWithResponse(ctx context.Context, projectName string, uploadId string, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsGetUploadResult, error) {
 	rsp, err := c.ZeticPublicUploadsGetUpload(ctx, projectName, uploadId, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsGetUploadResponse(rsp)
+	return ParseZeticPublicUploadsGetUploadResult(rsp)
 }
 
 // ZeticPublicUploadsCompleteUploadWithBodyWithResponse Complete Upload
@@ -2375,12 +3635,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsGetUploadWithResponse(ctx contex
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/complete (the `ZeticPublicUploadsCompleteUpload` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResult, error) {
 	rsp, err := c.ZeticPublicUploadsCompleteUploadWithBody(ctx, projectName, uploadId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsCompleteUploadResponse(rsp)
+	return ParseZeticPublicUploadsCompleteUploadResult(rsp)
 }
 
 // ZeticPublicUploadsCompleteUploadWithResponse Complete Upload
@@ -2390,12 +3650,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithBodyWithRespon
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/complete (the `ZeticPublicUploadsCompleteUpload` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsCompleteUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsCompleteUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsCompleteUploadResult, error) {
 	rsp, err := c.ZeticPublicUploadsCompleteUpload(ctx, projectName, uploadId, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsCompleteUploadResponse(rsp)
+	return ParseZeticPublicUploadsCompleteUploadResult(rsp)
 }
 
 // ZeticPublicUploadsReissueUploadUrlsWithBodyWithResponse Reissue Upload Urls
@@ -2408,12 +3668,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithResponse(ctx c
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/files (the `ZeticPublicUploadsReissueUploadUrls` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsReissueUploadUrlsWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsReissueUploadUrlsWithBodyWithResponse(ctx context.Context, projectName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResult, error) {
 	rsp, err := c.ZeticPublicUploadsReissueUploadUrlsWithBody(ctx, projectName, uploadId, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsReissueUploadUrlsResponse(rsp)
+	return ParseZeticPublicUploadsReissueUploadUrlsResult(rsp)
 }
 
 // ZeticPublicUploadsReissueUploadUrlsWithResponse Reissue Upload Urls
@@ -2426,12 +3686,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsReissueUploadUrlsWithBodyWithRes
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/projects/{project_name}/uploads/{upload_id}/files (the `ZeticPublicUploadsReissueUploadUrls` operationId).
-func (c *ClientWithResponses) ZeticPublicUploadsReissueUploadUrlsWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsReissueUploadUrlsJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResponse, error) {
+func (c *ClientWithResponses) ZeticPublicUploadsReissueUploadUrlsWithResponse(ctx context.Context, projectName string, uploadId string, body ZeticPublicUploadsReissueUploadUrlsJSONRequestBody, reqEditors ...RequestEditorFn) (*ZeticPublicUploadsReissueUploadUrlsResult, error) {
 	rsp, err := c.ZeticPublicUploadsReissueUploadUrls(ctx, projectName, uploadId, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseZeticPublicUploadsReissueUploadUrlsResponse(rsp)
+	return ParseZeticPublicUploadsReissueUploadUrlsResult(rsp)
 }
 
 // ListReposWithResponse List Repos
@@ -2439,12 +3699,12 @@ func (c *ClientWithResponses) ZeticPublicUploadsReissueUploadUrlsWithResponse(ct
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/repos (the `ListRepos` operationId).
-func (c *ClientWithResponses) ListReposWithResponse(ctx context.Context, params *ListReposParams, reqEditors ...RequestEditorFn) (*ListReposResponse, error) {
+func (c *ClientWithResponses) ListReposWithResponse(ctx context.Context, params *ListReposParams, reqEditors ...RequestEditorFn) (*ListReposResult, error) {
 	rsp, err := c.ListRepos(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseListReposResponse(rsp)
+	return ParseListReposResult(rsp)
 }
 
 // CreateRepoWithBodyWithResponse Create Repo
@@ -2452,12 +3712,12 @@ func (c *ClientWithResponses) ListReposWithResponse(ctx context.Context, params 
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/repos (the `CreateRepo` operationId).
-func (c *ClientWithResponses) CreateRepoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateRepoResponse, error) {
+func (c *ClientWithResponses) CreateRepoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateRepoResult, error) {
 	rsp, err := c.CreateRepoWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseCreateRepoResponse(rsp)
+	return ParseCreateRepoResult(rsp)
 }
 
 // CreateRepoWithResponse Create Repo
@@ -2465,12 +3725,12 @@ func (c *ClientWithResponses) CreateRepoWithBodyWithResponse(ctx context.Context
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/repos (the `CreateRepo` operationId).
-func (c *ClientWithResponses) CreateRepoWithResponse(ctx context.Context, body CreateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateRepoResponse, error) {
+func (c *ClientWithResponses) CreateRepoWithResponse(ctx context.Context, body CreateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateRepoResult, error) {
 	rsp, err := c.CreateRepo(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseCreateRepoResponse(rsp)
+	return ParseCreateRepoResult(rsp)
 }
 
 // DeleteRepoWithResponse Delete Repo
@@ -2478,12 +3738,12 @@ func (c *ClientWithResponses) CreateRepoWithResponse(ctx context.Context, body C
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /v1/repos/{account_name}/{repo_name} (the `DeleteRepo` operationId).
-func (c *ClientWithResponses) DeleteRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*DeleteRepoResponse, error) {
+func (c *ClientWithResponses) DeleteRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*DeleteRepoResult, error) {
 	rsp, err := c.DeleteRepo(ctx, accountName, repoName, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDeleteRepoResponse(rsp)
+	return ParseDeleteRepoResult(rsp)
 }
 
 // GetRepoWithResponse Get Repo
@@ -2491,12 +3751,12 @@ func (c *ClientWithResponses) DeleteRepoWithResponse(ctx context.Context, accoun
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/repos/{account_name}/{repo_name} (the `GetRepo` operationId).
-func (c *ClientWithResponses) GetRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*GetRepoResponse, error) {
+func (c *ClientWithResponses) GetRepoWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*GetRepoResult, error) {
 	rsp, err := c.GetRepo(ctx, accountName, repoName, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetRepoResponse(rsp)
+	return ParseGetRepoResult(rsp)
 }
 
 // UpdateRepoWithBodyWithResponse Update Repo
@@ -2504,12 +3764,12 @@ func (c *ClientWithResponses) GetRepoWithResponse(ctx context.Context, accountNa
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /v1/repos/{account_name}/{repo_name} (the `UpdateRepo` operationId).
-func (c *ClientWithResponses) UpdateRepoWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateRepoResponse, error) {
+func (c *ClientWithResponses) UpdateRepoWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateRepoResult, error) {
 	rsp, err := c.UpdateRepoWithBody(ctx, accountName, repoName, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseUpdateRepoResponse(rsp)
+	return ParseUpdateRepoResult(rsp)
 }
 
 // UpdateRepoWithResponse Update Repo
@@ -2517,23 +3777,183 @@ func (c *ClientWithResponses) UpdateRepoWithBodyWithResponse(ctx context.Context
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /v1/repos/{account_name}/{repo_name} (the `UpdateRepo` operationId).
-func (c *ClientWithResponses) UpdateRepoWithResponse(ctx context.Context, accountName string, repoName string, body UpdateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateRepoResponse, error) {
+func (c *ClientWithResponses) UpdateRepoWithResponse(ctx context.Context, accountName string, repoName string, body UpdateRepoJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateRepoResult, error) {
 	rsp, err := c.UpdateRepo(ctx, accountName, repoName, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseUpdateRepoResponse(rsp)
+	return ParseUpdateRepoResult(rsp)
 }
 
-// ParseGetMeResponse parses an HTTP response from a GetMeWithResponse call
-func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
+// CreateModelUploadWithBodyWithResponse Create Model Upload
+//
+// Open an upload session from a v2 manifest.
+//
+// Returns 201 with server-assigned canonical paths and resumable upload
+// URLs; an `Idempotency-Key` replay of the same manifest returns the
+// original session with 200.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+func (c *ClientWithResponses) CreateModelUploadWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateModelUploadResult, error) {
+	rsp, err := c.CreateModelUploadWithBody(ctx, accountName, repoName, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateModelUploadResult(rsp)
+}
+
+// CreateModelUploadWithResponse Create Model Upload
+//
+// Open an upload session from a v2 manifest.
+//
+// Returns 201 with server-assigned canonical paths and resumable upload
+// URLs; an `Idempotency-Key` replay of the same manifest returns the
+// original session with 200.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
+func (c *ClientWithResponses) CreateModelUploadWithResponse(ctx context.Context, accountName string, repoName string, body CreateModelUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateModelUploadResult, error) {
+	rsp, err := c.CreateModelUpload(ctx, accountName, repoName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateModelUploadResult(rsp)
+}
+
+// ListModelUploadsWithResponse List Model Uploads
+//
+// Active + recent (last 10) upload sessions for the repo. Fixed small
+// window, so no pagination on purpose.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads (the `ListModelUploads` operationId).
+func (c *ClientWithResponses) ListModelUploadsWithResponse(ctx context.Context, accountName string, repoName string, reqEditors ...RequestEditorFn) (*ListModelUploadsResult, error) {
+	rsp, err := c.ListModelUploads(ctx, accountName, repoName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListModelUploadsResult(rsp)
+}
+
+// CancelModelUploadWithResponse Cancel Model Upload
+//
+// Cancel an active session (idempotent); staging cleanup is best-effort.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
+func (c *ClientWithResponses) CancelModelUploadWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*CancelModelUploadResult, error) {
+	rsp, err := c.CancelModelUpload(ctx, accountName, repoName, uploadId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelModelUploadResult(rsp)
+}
+
+// GetModelUploadWithResponse Get Model Upload
+//
+// Session detail with per-file staging arrival (one storage list call).
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `GetModelUpload` operationId).
+func (c *ClientWithResponses) GetModelUploadWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*GetModelUploadResult, error) {
+	rsp, err := c.GetModelUpload(ctx, accountName, repoName, uploadId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetModelUploadResult(rsp)
+}
+
+// CompleteModelUploadWithResponse Complete Model Upload
+//
+// Complete an upload session: verify -> promote -> register -> dispatch.
+//
+// Contract: a 200 means the COMPLETE REQUEST was processed — not that the
+// session succeeded. Verification/promotion failures are session state:
+// the response carries `state="FAILED"` plus a machine `failure_code`
+// (`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,
+// `staging_mutated:<id>`). Request-level errors are reserved for sessions
+// that cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).
+//
+// Idempotent: repeating the call (same `Idempotency-Key` or not) while the
+// session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
+// state without re-verifying and without double-dispatching; a replay on
+// DISPATCH_PENDING retries a failed conversion trigger.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
+func (c *ClientWithResponses) CompleteModelUploadWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*CompleteModelUploadResult, error) {
+	rsp, err := c.CompleteModelUpload(ctx, accountName, repoName, uploadId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCompleteModelUploadResult(rsp)
+}
+
+// ReissueUploadFilesWithBodyWithResponse Reissue Upload Files
+//
+// Fresh resumable upload URLs for declared files of an UPLOADING session.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+func (c *ClientWithResponses) ReissueUploadFilesWithBodyWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReissueUploadFilesResult, error) {
+	rsp, err := c.ReissueUploadFilesWithBody(ctx, accountName, repoName, uploadId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReissueUploadFilesResult(rsp)
+}
+
+// ReissueUploadFilesWithResponse Reissue Upload Files
+//
+// Fresh resumable upload URLs for declared files of an UPLOADING session.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
+func (c *ClientWithResponses) ReissueUploadFilesWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody, reqEditors ...RequestEditorFn) (*ReissueUploadFilesResult, error) {
+	rsp, err := c.ReissueUploadFiles(ctx, accountName, repoName, uploadId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReissueUploadFilesResult(rsp)
+}
+
+// GetModelStatusWithResponse Get Model Status
+//
+// Public conversion status of a model (the CLI `--wait` poll target).
+//
+// `download_ready` follows `ModelStatus.available()` — the same condition
+// internal download paths gate on: a model is downloadable once converted
+// (OPTIMIZING), even while benchmarking is still running.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/status (the `GetModelStatus` operationId).
+func (c *ClientWithResponses) GetModelStatusWithResponse(ctx context.Context, accountName string, repoName string, modelKey string, reqEditors ...RequestEditorFn) (*GetModelStatusResult, error) {
+	rsp, err := c.GetModelStatus(ctx, accountName, repoName, modelKey, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetModelStatusResult(rsp)
+}
+
+// ParseGetMeResult parses an HTTP response from a GetMeWithResponse call
+func ParseGetMeResult(rsp *http.Response) (*GetMeResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetMeResponse{
+	response := &GetMeResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2551,15 +3971,15 @@ func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
 	return response, nil
 }
 
-// ParseZeticPublicProjectsCreateProjectResponse parses an HTTP response from a ZeticPublicProjectsCreateProjectWithResponse call
-func ParseZeticPublicProjectsCreateProjectResponse(rsp *http.Response) (*ZeticPublicProjectsCreateProjectResponse, error) {
+// ParseZeticPublicProjectsCreateProjectResult parses an HTTP response from a ZeticPublicProjectsCreateProjectWithResponse call
+func ParseZeticPublicProjectsCreateProjectResult(rsp *http.Response) (*ZeticPublicProjectsCreateProjectResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicProjectsCreateProjectResponse{
+	response := &ZeticPublicProjectsCreateProjectResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2577,15 +3997,15 @@ func ParseZeticPublicProjectsCreateProjectResponse(rsp *http.Response) (*ZeticPu
 	return response, nil
 }
 
-// ParseZeticPublicProjectsDeleteProjectResponse parses an HTTP response from a ZeticPublicProjectsDeleteProjectWithResponse call
-func ParseZeticPublicProjectsDeleteProjectResponse(rsp *http.Response) (*ZeticPublicProjectsDeleteProjectResponse, error) {
+// ParseZeticPublicProjectsDeleteProjectResult parses an HTTP response from a ZeticPublicProjectsDeleteProjectWithResponse call
+func ParseZeticPublicProjectsDeleteProjectResult(rsp *http.Response) (*ZeticPublicProjectsDeleteProjectResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicProjectsDeleteProjectResponse{
+	response := &ZeticPublicProjectsDeleteProjectResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2603,15 +4023,15 @@ func ParseZeticPublicProjectsDeleteProjectResponse(rsp *http.Response) (*ZeticPu
 	return response, nil
 }
 
-// ParseZeticPublicUploadsListActiveUploadsResponse parses an HTTP response from a ZeticPublicUploadsListActiveUploadsWithResponse call
-func ParseZeticPublicUploadsListActiveUploadsResponse(rsp *http.Response) (*ZeticPublicUploadsListActiveUploadsResponse, error) {
+// ParseZeticPublicUploadsListActiveUploadsResult parses an HTTP response from a ZeticPublicUploadsListActiveUploadsWithResponse call
+func ParseZeticPublicUploadsListActiveUploadsResult(rsp *http.Response) (*ZeticPublicUploadsListActiveUploadsResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicUploadsListActiveUploadsResponse{
+	response := &ZeticPublicUploadsListActiveUploadsResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2629,15 +4049,15 @@ func ParseZeticPublicUploadsListActiveUploadsResponse(rsp *http.Response) (*Zeti
 	return response, nil
 }
 
-// ParseZeticPublicUploadsCreateUploadResponse parses an HTTP response from a ZeticPublicUploadsCreateUploadWithResponse call
-func ParseZeticPublicUploadsCreateUploadResponse(rsp *http.Response) (*ZeticPublicUploadsCreateUploadResponse, error) {
+// ParseZeticPublicUploadsCreateUploadResult parses an HTTP response from a ZeticPublicUploadsCreateUploadWithResponse call
+func ParseZeticPublicUploadsCreateUploadResult(rsp *http.Response) (*ZeticPublicUploadsCreateUploadResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicUploadsCreateUploadResponse{
+	response := &ZeticPublicUploadsCreateUploadResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2655,15 +4075,15 @@ func ParseZeticPublicUploadsCreateUploadResponse(rsp *http.Response) (*ZeticPubl
 	return response, nil
 }
 
-// ParseZeticPublicUploadsCancelUploadResponse parses an HTTP response from a ZeticPublicUploadsCancelUploadWithResponse call
-func ParseZeticPublicUploadsCancelUploadResponse(rsp *http.Response) (*ZeticPublicUploadsCancelUploadResponse, error) {
+// ParseZeticPublicUploadsCancelUploadResult parses an HTTP response from a ZeticPublicUploadsCancelUploadWithResponse call
+func ParseZeticPublicUploadsCancelUploadResult(rsp *http.Response) (*ZeticPublicUploadsCancelUploadResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicUploadsCancelUploadResponse{
+	response := &ZeticPublicUploadsCancelUploadResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2671,15 +4091,15 @@ func ParseZeticPublicUploadsCancelUploadResponse(rsp *http.Response) (*ZeticPubl
 	return response, nil
 }
 
-// ParseZeticPublicUploadsGetUploadResponse parses an HTTP response from a ZeticPublicUploadsGetUploadWithResponse call
-func ParseZeticPublicUploadsGetUploadResponse(rsp *http.Response) (*ZeticPublicUploadsGetUploadResponse, error) {
+// ParseZeticPublicUploadsGetUploadResult parses an HTTP response from a ZeticPublicUploadsGetUploadWithResponse call
+func ParseZeticPublicUploadsGetUploadResult(rsp *http.Response) (*ZeticPublicUploadsGetUploadResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicUploadsGetUploadResponse{
+	response := &ZeticPublicUploadsGetUploadResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2697,15 +4117,15 @@ func ParseZeticPublicUploadsGetUploadResponse(rsp *http.Response) (*ZeticPublicU
 	return response, nil
 }
 
-// ParseZeticPublicUploadsCompleteUploadResponse parses an HTTP response from a ZeticPublicUploadsCompleteUploadWithResponse call
-func ParseZeticPublicUploadsCompleteUploadResponse(rsp *http.Response) (*ZeticPublicUploadsCompleteUploadResponse, error) {
+// ParseZeticPublicUploadsCompleteUploadResult parses an HTTP response from a ZeticPublicUploadsCompleteUploadWithResponse call
+func ParseZeticPublicUploadsCompleteUploadResult(rsp *http.Response) (*ZeticPublicUploadsCompleteUploadResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicUploadsCompleteUploadResponse{
+	response := &ZeticPublicUploadsCompleteUploadResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2723,15 +4143,15 @@ func ParseZeticPublicUploadsCompleteUploadResponse(rsp *http.Response) (*ZeticPu
 	return response, nil
 }
 
-// ParseZeticPublicUploadsReissueUploadUrlsResponse parses an HTTP response from a ZeticPublicUploadsReissueUploadUrlsWithResponse call
-func ParseZeticPublicUploadsReissueUploadUrlsResponse(rsp *http.Response) (*ZeticPublicUploadsReissueUploadUrlsResponse, error) {
+// ParseZeticPublicUploadsReissueUploadUrlsResult parses an HTTP response from a ZeticPublicUploadsReissueUploadUrlsWithResponse call
+func ParseZeticPublicUploadsReissueUploadUrlsResult(rsp *http.Response) (*ZeticPublicUploadsReissueUploadUrlsResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ZeticPublicUploadsReissueUploadUrlsResponse{
+	response := &ZeticPublicUploadsReissueUploadUrlsResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2749,15 +4169,15 @@ func ParseZeticPublicUploadsReissueUploadUrlsResponse(rsp *http.Response) (*Zeti
 	return response, nil
 }
 
-// ParseListReposResponse parses an HTTP response from a ListReposWithResponse call
-func ParseListReposResponse(rsp *http.Response) (*ListReposResponse, error) {
+// ParseListReposResult parses an HTTP response from a ListReposWithResponse call
+func ParseListReposResult(rsp *http.Response) (*ListReposResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ListReposResponse{
+	response := &ListReposResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2775,15 +4195,15 @@ func ParseListReposResponse(rsp *http.Response) (*ListReposResponse, error) {
 	return response, nil
 }
 
-// ParseCreateRepoResponse parses an HTTP response from a CreateRepoWithResponse call
-func ParseCreateRepoResponse(rsp *http.Response) (*CreateRepoResponse, error) {
+// ParseCreateRepoResult parses an HTTP response from a CreateRepoWithResponse call
+func ParseCreateRepoResult(rsp *http.Response) (*CreateRepoResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &CreateRepoResponse{
+	response := &CreateRepoResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2801,15 +4221,15 @@ func ParseCreateRepoResponse(rsp *http.Response) (*CreateRepoResponse, error) {
 	return response, nil
 }
 
-// ParseDeleteRepoResponse parses an HTTP response from a DeleteRepoWithResponse call
-func ParseDeleteRepoResponse(rsp *http.Response) (*DeleteRepoResponse, error) {
+// ParseDeleteRepoResult parses an HTTP response from a DeleteRepoWithResponse call
+func ParseDeleteRepoResult(rsp *http.Response) (*DeleteRepoResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DeleteRepoResponse{
+	response := &DeleteRepoResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2817,15 +4237,15 @@ func ParseDeleteRepoResponse(rsp *http.Response) (*DeleteRepoResponse, error) {
 	return response, nil
 }
 
-// ParseGetRepoResponse parses an HTTP response from a GetRepoWithResponse call
-func ParseGetRepoResponse(rsp *http.Response) (*GetRepoResponse, error) {
+// ParseGetRepoResult parses an HTTP response from a GetRepoWithResponse call
+func ParseGetRepoResult(rsp *http.Response) (*GetRepoResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetRepoResponse{
+	response := &GetRepoResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2843,15 +4263,15 @@ func ParseGetRepoResponse(rsp *http.Response) (*GetRepoResponse, error) {
 	return response, nil
 }
 
-// ParseUpdateRepoResponse parses an HTTP response from a UpdateRepoWithResponse call
-func ParseUpdateRepoResponse(rsp *http.Response) (*UpdateRepoResponse, error) {
+// ParseUpdateRepoResult parses an HTTP response from a UpdateRepoWithResponse call
+func ParseUpdateRepoResult(rsp *http.Response) (*UpdateRepoResult, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &UpdateRepoResponse{
+	response := &UpdateRepoResult{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -2859,6 +4279,195 @@ func ParseUpdateRepoResponse(rsp *http.Response) (*UpdateRepoResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest RepoResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateModelUploadResult parses an HTTP response from a CreateModelUploadWithResponse call
+func ParseCreateModelUploadResult(rsp *http.Response) (*CreateModelUploadResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateModelUploadResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ModelUploadResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ModelUploadResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListModelUploadsResult parses an HTTP response from a ListModelUploadsWithResponse call
+func ParseListModelUploadsResult(rsp *http.Response) (*ListModelUploadsResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListModelUploadsResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ListModelUploadsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCancelModelUploadResult parses an HTTP response from a CancelModelUploadWithResponse call
+func ParseCancelModelUploadResult(rsp *http.Response) (*CancelModelUploadResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelModelUploadResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CancelModelUploadResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetModelUploadResult parses an HTTP response from a GetModelUploadWithResponse call
+func ParseGetModelUploadResult(rsp *http.Response) (*GetModelUploadResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetModelUploadResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ModelUploadDetailResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCompleteModelUploadResult parses an HTTP response from a CompleteModelUploadWithResponse call
+func ParseCompleteModelUploadResult(rsp *http.Response) (*CompleteModelUploadResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CompleteModelUploadResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CompleteModelUploadResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReissueUploadFilesResult parses an HTTP response from a ReissueUploadFilesWithResponse call
+func ParseReissueUploadFilesResult(rsp *http.Response) (*ReissueUploadFilesResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReissueUploadFilesResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReissueUploadFilesResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetModelStatusResult parses an HTTP response from a GetModelStatusWithResponse call
+func ParseGetModelStatusResult(rsp *http.Response) (*GetModelStatusResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetModelStatusResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ModelStatusResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

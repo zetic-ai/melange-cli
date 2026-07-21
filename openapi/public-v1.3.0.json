@@ -27,6 +27,69 @@
         "title": "ActiveUpload",
         "type": "object"
       },
+      "CancelModelUploadResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state"
+        ],
+        "title": "CancelModelUploadResponse",
+        "type": "object"
+      },
+      "CompleteModelUploadResponse": {
+        "description": "Session state after a complete call (ADR-5 status vocabulary).\n\n`state` is the session state machine value; verification/promotion\nfailures surface as `state == \"FAILED\"` + `failure_code` on a 200 —\nthe POST itself succeeded, the SESSION failed. `terminal` means the\nsession will not transition further (CONVERTING is terminal for the\nsession: conversion progress continues on the model status endpoint).",
+        "properties": {
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "terminal"
+        ],
+        "title": "CompleteModelUploadResponse",
+        "type": "object"
+      },
       "CompleteUploadRequest": {
         "properties": {
           "source": {
@@ -42,6 +105,42 @@
           }
         },
         "title": "CompleteUploadRequest",
+        "type": "object"
+      },
+      "CreateModelUploadRequest": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ManifestFile"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Files",
+            "type": "array"
+          },
+          "manifest_version": {
+            "title": "Manifest Version",
+            "type": "integer",
+            "enum": [
+              2
+            ]
+          },
+          "options": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManifestOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "manifest_version",
+          "files"
+        ],
+        "title": "CreateModelUploadRequest",
         "type": "object"
       },
       "CreateProjectRequest": {
@@ -209,6 +308,40 @@
         "title": "Input",
         "type": "object"
       },
+      "IssuedSessionFile": {
+        "properties": {
+          "canonical_path": {
+            "title": "Canonical Path",
+            "type": "string"
+          },
+          "client_file_id": {
+            "title": "Client File Id",
+            "type": "string"
+          },
+          "resumable": {
+            "default": true,
+            "title": "Resumable",
+            "type": "boolean"
+          },
+          "upload_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Url"
+          }
+        },
+        "required": [
+          "client_file_id",
+          "canonical_path"
+        ],
+        "title": "IssuedSessionFile",
+        "type": "object"
+      },
       "IssuedUpload": {
         "properties": {
           "path": {
@@ -241,6 +374,149 @@
           "uploads"
         ],
         "title": "ListActiveUploadsResponse",
+        "type": "object"
+      },
+      "ListModelUploadsResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ModelUploadSummary"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "ListModelUploadsResponse",
+        "type": "object"
+      },
+      "ManifestBucket": {
+        "properties": {
+          "dims": {
+            "items": {},
+            "title": "Dims",
+            "type": "array"
+          },
+          "index": {
+            "minimum": 0,
+            "title": "Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "dims"
+        ],
+        "title": "ManifestBucket",
+        "type": "object"
+      },
+      "ManifestFile": {
+        "properties": {
+          "bucket_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket Index"
+          },
+          "client_file_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client File Id",
+            "type": "string"
+          },
+          "crc32c": {
+            "maxLength": 12,
+            "minLength": 1,
+            "title": "Crc32C",
+            "type": "string"
+          },
+          "filename": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "input_index": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Index"
+          },
+          "role": {
+            "enum": [
+              "model",
+              "input",
+              "external_data"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size": {
+            "exclusiveMinimum": 0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "client_file_id",
+          "role",
+          "filename",
+          "size",
+          "crc32c"
+        ],
+        "title": "ManifestFile",
+        "type": "object"
+      },
+      "ManifestOptions": {
+        "properties": {
+          "buckets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManifestBucket"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buckets"
+          }
+        },
+        "title": "ManifestOptions",
         "type": "object"
       },
       "MeAccount": {
@@ -342,6 +618,252 @@
         "title": "MeUser",
         "type": "object"
       },
+      "ModelRef": {
+        "description": "Reference to the CommonModel a completed session registered.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version"
+        ],
+        "title": "ModelRef",
+        "type": "object"
+      },
+      "ModelStatusResponse": {
+        "description": "Public conversion status of a model (the CLI `--wait` poll target).\n\n`state` is a STABLE public enum (lowercase snake) mapped from the\ninternal model status; `failure_code` is always a sanitized stable code,\nnever raw pipeline exception text.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "download_ready": {
+            "title": "Download Ready",
+            "type": "boolean"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "convert",
+                  "benchmark"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "state": {
+            "enum": [
+              "converting",
+              "optimizing",
+              "ready",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "terminal",
+          "download_ready",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ModelStatusResponse",
+        "type": "object"
+      },
+      "ModelUploadDetailResponse": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ModelUploadFileStatus"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "tag",
+          "expires_at",
+          "files"
+        ],
+        "title": "ModelUploadDetailResponse",
+        "type": "object"
+      },
+      "ModelUploadFileStatus": {
+        "properties": {
+          "canonical_path": {
+            "title": "Canonical Path",
+            "type": "string"
+          },
+          "client_file_id": {
+            "title": "Client File Id",
+            "type": "string"
+          },
+          "uploaded": {
+            "title": "Uploaded",
+            "type": "boolean"
+          },
+          "uploaded_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded Size"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "client_file_id",
+          "canonical_path",
+          "uploaded",
+          "verified"
+        ],
+        "title": "ModelUploadFileStatus",
+        "type": "object"
+      },
+      "ModelUploadResponse": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/IssuedSessionFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "tag",
+          "expires_at",
+          "files"
+        ],
+        "title": "ModelUploadResponse",
+        "type": "object"
+      },
+      "ModelUploadSummary": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "file_count": {
+            "title": "File Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "created_at",
+          "expires_at",
+          "file_count"
+        ],
+        "title": "ModelUploadSummary",
+        "type": "object"
+      },
       "PagedRepoResponse": {
         "properties": {
           "count": {
@@ -400,6 +922,48 @@
           "is_private"
         ],
         "title": "ProjectResponse",
+        "type": "object"
+      },
+      "ReissueUploadFilesRequest": {
+        "properties": {
+          "client_file_ids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Client File Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_file_ids"
+        ],
+        "title": "ReissueUploadFilesRequest",
+        "type": "object"
+      },
+      "ReissueUploadFilesResponse": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/IssuedSessionFile"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "files",
+          "expires_at"
+        ],
+        "title": "ReissueUploadFilesResponse",
         "type": "object"
       },
       "ReissueUploadUrlsRequest": {
@@ -710,7 +1274,7 @@
     "description": "External developer API for Zetic. Authenticate with `Authorization: Bearer <token>`.",
     "title": "Zetic Public API",
     "version": "1.0.0",
-    "x-backend-commit": "6e5a93c948541b805cbb6e9259d760a188aaacab"
+    "x-backend-commit": "c6e506ea364b7201eae3d765917c30402b0a8c52"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -1336,6 +1900,408 @@
           "repos"
         ]
       }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models": {
+      "post": {
+        "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.",
+        "operationId": "create_model_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateModelUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelUploadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelUploadResponse"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Create Model Upload",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/uploads": {
+      "get": {
+        "description": "Active + recent (last 10) upload sessions for the repo. Fixed small\nwindow, so no pagination on purpose.",
+        "operationId": "list_model_uploads",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListModelUploadsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "List Model Uploads",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}": {
+      "delete": {
+        "description": "Cancel an active session (idempotent); staging cleanup is best-effort.",
+        "operationId": "cancel_model_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelModelUploadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Cancel Model Upload",
+        "tags": [
+          "models"
+        ]
+      },
+      "get": {
+        "description": "Session detail with per-file staging arrival (one storage list call).",
+        "operationId": "get_model_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelUploadDetailResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Model Upload",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete": {
+      "post": {
+        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed — not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.",
+        "operationId": "complete_model_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteModelUploadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Complete Model Upload",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files": {
+      "post": {
+        "description": "Fresh resumable upload URLs for declared files of an UPLOADING session.",
+        "operationId": "reissue_upload_files",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReissueUploadFilesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReissueUploadFilesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Reissue Upload Files",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/status": {
+      "get": {
+        "description": "Public conversion status of a model (the CLI `--wait` poll target).\n\n`download_ready` follows `ModelStatus.available()` — the same condition\ninternal download paths gate on: a model is downloadable once converted\n(OPTIMIZING), even while benchmarking is still running.",
+        "operationId": "get_model_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelStatusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Model Status",
+        "tags": [
+          "models"
+        ]
+      }
     }
   },
   "servers": [
@@ -1351,6 +2317,10 @@
     {
       "description": "Model repositories: create, list, inspect, update and delete.",
       "name": "repos"
+    },
+    {
+      "description": "Model versions and artifacts within a repository.",
+      "name": "models"
     },
     {
       "description": "Resumable upload sessions for model artifacts.",

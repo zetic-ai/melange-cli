@@ -74,7 +74,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 			}
 			ctx := cmd.Context()
 
-			fetch := func(limit int, offset *int) (*gen.ListReposResponse, error) {
+			fetch := func(limit int, offset *int) (*gen.ListReposResult, error) {
 				params := &gen.ListReposParams{Limit: &limit, Offset: offset}
 				if search != "" {
 					params.Search = &search

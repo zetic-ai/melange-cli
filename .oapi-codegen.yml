@@ -2,7 +2,11 @@
 # Input: openapi/public-v1.3.0.json (down-converted from the vendored
 # openapi/public-v1.json backend export — see openapi/SPEC_SOURCE).
 package: gen
-generate:
-  - types
-  - client
 output: internal/api/gen/client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  # Backend component schemas are operation-shaped (ListModelUploadsResponse);
+  # suffix the generated per-operation wrappers so they can't collide.
+  response-type-suffix: Result
