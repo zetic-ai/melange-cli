@@ -2,9 +2,9 @@
 // only generated file in this package; this file is safe from `make gen`).
 //
 // The references below are compile-time assertions that the vendored spec
-// still produces the operations the CLI will be wired to in C2. If a
-// backend spec regeneration renames or drops one, this file stops
-// compiling — which is the point.
+// still produces the operations the CLI is wired to. If a backend spec
+// regeneration renames or drops one, this file stops compiling — which is
+// the point.
 package gen
 
 import (

@@ -1,9 +1,7 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -70,38 +68,4 @@ func (c *Client) Do(ctx context.Context, method, path string, body io.Reader, he
 		req.Header.Set(k, v)
 	}
 	return c.http.Do(req)
-}
-
-// JSON sends a JSON request and decodes a JSON response. in and out may each
-// be nil. Non-2xx responses are returned as *Error.
-func (c *Client) JSON(ctx context.Context, method, path string, in any, out any) error {
-	var body io.Reader
-	headers := map[string]string{"Accept": "application/json"}
-	if in != nil {
-		data, err := json.Marshal(in)
-		if err != nil {
-			return fmt.Errorf("encoding request body: %w", err)
-		}
-		body = bytes.NewReader(data)
-		headers["Content-Type"] = "application/json"
-	}
-
-	resp, err := c.Do(ctx, method, path, body, headers)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBodyBytes))
-		_ = resp.Body.Close()
-	}()
-
-	if err := HandleResponse(resp); err != nil {
-		return err
-	}
-	if out != nil {
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			return fmt.Errorf("decoding response body: %w", err)
-		}
-	}
-	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,38 +100,6 @@ func TestClientHostWithoutSchemeDefaultsToHTTPS(t *testing.T) {
 	assert.Equal(t, "https", reg.Requests[0].URL.Scheme)
 }
 
-func TestClientJSONDecodesResponse(t *testing.T) {
-	reg := &httpmock.Registry{}
-	reg.Register(httpmock.REST("POST", "/v1/things"), httpmock.JSONResponse(200, map[string]string{"id": "t_1"}))
-
-	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
-	var out struct {
-		ID string `json:"id"`
-	}
-	err := client.JSON(context.Background(), "POST", "/v1/things", map[string]string{"name": "x"}, &out)
-	require.NoError(t, err)
-	assert.Equal(t, "t_1", out.ID)
-
-	require.Len(t, reg.Requests, 1)
-	assert.Equal(t, "application/json", reg.Requests[0].Header.Get("Content-Type"))
-}
-
-func TestClientJSONReturnsAPIError(t *testing.T) {
-	reg := &httpmock.Registry{}
-	body := `{"type":"error","error":{"type":"authentication_error","message":"invalid token"},"request_id":"req_9"}`
-	reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(401, body))
-
-	client := newTestClient(t, "https://api.zetic.ai", "ztp_bad", reg, nil)
-	err := client.JSON(context.Background(), "GET", "/v1/me", nil, nil)
-	require.Error(t, err)
-
-	var apiErr *api.Error
-	require.ErrorAs(t, err, &apiErr)
-	assert.Equal(t, 401, apiErr.StatusCode)
-	assert.Equal(t, "authentication_error", apiErr.Type)
-	assert.Equal(t, "req_9", apiErr.RequestID)
-}
-
 // TestGetMe exercises the generated-client path: the wire call goes through
 // gen.ClientWithResponses but reuses the wrapper's transport chain, so the
 // Bearer token and User-Agent still apply.
@@ -159,7 +128,7 @@ func TestGetMe(t *testing.T) {
 	assert.Equal(t, "ci-token", me.Token.Name)
 	assert.Equal(t, []string{"repo:read", "model:write"}, me.Token.Scopes)
 	require.NotNil(t, me.Token.ExpiresAt)
-	assert.Equal(t, "2027-01-01T00:00:00Z", *me.Token.ExpiresAt)
+	assert.Equal(t, time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), *me.Token.ExpiresAt)
 
 	require.Len(t, reg.Requests, 1)
 	got := reg.Requests[0]
