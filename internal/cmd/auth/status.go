@@ -27,7 +27,7 @@ token was rejected.`,
 
   # Agent pattern: verify a token non-interactively
   MELANGE_API_KEY=ztp_... melange auth status --json`,
-		Args: cobra.NoArgs,
+		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			host, err := resolveHost(f)
 			if err != nil {

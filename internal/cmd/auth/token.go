@@ -21,7 +21,7 @@ Exit codes: 0 token printed, 4 no token found.`,
 
   # Export it for a child process
   export MELANGE_API_KEY="$(melange auth token)"`,
-		Args: cobra.NoArgs,
+		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			host, err := resolveHost(f)
 			if err != nil {

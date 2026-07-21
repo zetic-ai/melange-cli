@@ -14,7 +14,7 @@ func NewCmdVersion(f *cmdutil.Factory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the melange CLI version",
-		Args:  cobra.NoArgs,
+		Args:  cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(f.IOStreams.Out, "melange version %s\n", build.Info())
 			return nil

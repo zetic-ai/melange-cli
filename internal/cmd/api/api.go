@@ -94,7 +94,7 @@ Exit codes: 0 success, 1 HTTP or transport error, 2 usage error,
 
   # GET with query parameters, showing status line and headers
   melange api -X GET /v1/repos -f search=whisper --include`,
-		Args: cobra.ExactArgs(1),
+		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAPI(f, cmd, &opts, args[0])
 		},

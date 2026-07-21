@@ -47,7 +47,7 @@ error, 4 not authenticated.`,
 
   # Agent pattern: just the state
   melange model status m_ab12cd -R zetic/whisper-tiny --jq .state`,
-		Args: cobra.ExactArgs(1),
+		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			account, name, err := splitRepoFlag(repo)
 			if err != nil {

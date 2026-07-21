@@ -25,14 +25,14 @@ Authenticate by setting MELANGE_API_KEY or by running melange auth login.
 Data is written to stdout; progress and diagnostics go to stderr.
 Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupted.`,
 
-		Example: `  # List repositories
-  melange repo list
+		Example: `  # List repositories as JSON
+  melange repo list --json
 
-  # Upload a model and wait for processing
-  melange model upload ./model.mlpackage --wait
+  # Upload a model and wait for conversion
+  melange model upload -R acme/whisper model.onnx --input x.npy --wait
 
-  # Show usage statistics as JSON
-  melange usage --json`,
+  # Call any API endpoint and extract a value
+  melange api /v1/me --jq .account.name`,
 
 		SilenceUsage:  true,
 		SilenceErrors: true,

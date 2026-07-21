@@ -49,7 +49,7 @@ Exit codes: 0 created, 1 API error (including a 409 name conflict and
 
   # Agent pattern: create and capture the full name
   melange repo create whisper-tiny --json --jq .full_name`,
-		Args: cobra.ExactArgs(1),
+		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if strings.Contains(name, "/") {

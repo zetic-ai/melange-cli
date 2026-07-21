@@ -58,7 +58,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 
   # Agent pattern: just the repository names
   melange repo list --jq '.results[].full_name'`,
-		Args: cobra.NoArgs,
+		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paginate = paginate || all
 			if paginate && cmd.Flags().Changed("limit") {

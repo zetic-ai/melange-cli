@@ -26,7 +26,7 @@ Exit codes: 0 success, 1 storage error.`,
 
   # Log out of a specific host
   melange auth logout --host https://api.staging.zetic.ai`,
-		Args: cobra.NoArgs,
+		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			host, err := resolveHost(f)
 			if err != nil {

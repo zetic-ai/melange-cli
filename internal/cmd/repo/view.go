@@ -42,7 +42,7 @@ error, 4 not authenticated.`,
 
   # Agent pattern: check whether a repository is private
   melange repo view zetic/whisper-tiny --jq .is_private`,
-		Args: cobra.ExactArgs(1),
+		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			account, name, err := splitRepoArg(args[0])
 			if err != nil {

@@ -87,7 +87,7 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
   # List and clean up sessions
   melange model upload --sessions -R zetic/whisper-tiny
   melange model upload --cancel up_ab12cd -R zetic/whisper-tiny`,
-		Args: cobra.MaximumNArgs(1),
+		Args: cmdutil.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUploadCommand(cmd.Context(), opts, args)
 		},

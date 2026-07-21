@@ -46,7 +46,7 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 
   # Machine-readable result
   melange auth login --with-token --json < token.txt`,
-		Args: cobra.NoArgs,
+		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			token, err := readToken(f, withToken)
 			if err != nil {
