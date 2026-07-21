@@ -79,6 +79,63 @@ melange model status m_ab12cd -R acme/whisper-tiny --jq .state
   `melange repo list --jq '.results[].full_name'`,
   `melange repo view acme/whisper-tiny --json`.
 
+## Browse models and targets
+
+Once a model exists you can inspect it and its converted targets:
+
+```sh
+melange model list -R acme/whisper-tiny --jq '.results[] | select(.is_default) | .key'
+melange model view m_ab12cd -R acme/whisper-tiny --jq .download_ready
+melange model targets m_ab12cd -R acme/whisper-tiny --json      # converted targets
+melange model set-default m_ab12cd -R acme/whisper-tiny         # pin the repo default
+melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait  # import an LLM (repo type llm)
+melange model download m_ab12cd -R acme/whisper-tiny --target tm_71 --output ./models
+```
+
+`model download` is **billable** and idempotent: it authorizes once, then
+streams the artifact; `--output` defaults to the current directory, is
+validated before the charge, and never overwrites an existing file.
+
+## Read benchmark reports: `melange report view`
+
+`report view MODEL_KEY -R ACCOUNT/REPO` reads a model's benchmark report.
+`--type general|llm|package` selects the report; without it the CLI probes
+general → llm → package and shows the first that exists (exit 1 "no report
+available" when none do).
+
+```sh
+# The dashboard table on a TTY; --mode auto|speed|accuracy picks the cell value
+melange report view m_ab12cd -R acme/whisper-tiny --mode accuracy
+
+# Agents: take the raw records, not the derived table
+melange report view m_ab12cd -R acme/whisper-tiny --json \
+  --jq '[.records[] | select(.ap_type=="npu" and .metric=="latency_ms")]
+        | group_by(.device.marketing_name)[]
+        | {device: .[0].device.marketing_name, best: (map(.value)|min)}'
+```
+
+The TTY table re-derives the dashboard's mode picks from the raw records
+(speed = lowest latency; accuracy = highest SNR, ties to lower latency;
+auto = fastest run whose SNR exceeds 20 dB, else speed). Non-TTY output is
+**one raw record per line** (flat measurement fields) — scripts get the
+measurements, not the derived table. Always use `--json` for the exact
+response.
+
+## Browse the public library and your usage
+
+```sh
+melange library list --task vision --provider Zetic --jq '.results[].full_name'
+melange library view zetic/whisper-tiny --json     # includes the full readme
+melange library providers --jq '.results[] | select(.model_count>=10) | .name'
+
+melange usage --jq .prompts                        # this period's counters
+melange usage quotas --jq .prompts.limit           # limit is null when unlimited
+```
+
+`library list` filters map to query params (`--task` repeats; a model
+matching ANY task is included). `usage quotas` renders each quota as
+`used/limit (pct%)`, or `unlimited` when the limit is null.
+
 ## Resume after interruption
 
 Interrupting an upload (exit 130) preserves the session server-side, and

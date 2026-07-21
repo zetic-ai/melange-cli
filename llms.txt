@@ -99,6 +99,89 @@ melange model status MODEL_KEY -R ACCOUNT/REPO [--wait] [--timeout 30m] [--json]
   exit 0 = ready, 1 = failed or timeout.
   Example: melange model status m_ab12cd -R acme/whisper --jq .state
 
+melange model list -R ACCOUNT/REPO [--limit N] [--paginate|--all] [--json|--jq]
+  List a repository's models, newest first. TTY: table (KEY, VERSION, TYPE,
+  STATE, DEFAULT, CREATED); non-TTY: TSV; --json: the page envelope.
+  Example: melange model list -R acme/whisper --jq '.results[]|select(.is_default)|.key'
+
+melange model view MODEL_KEY -R ACCOUNT/REPO [--json|--jq|--template]
+  Show one model (version, type, state, default, source, terminal/download-ready
+  flags, failure code, timestamps). Exit 1 includes not-found.
+  Example: melange model view m_ab12cd -R acme/whisper --jq .download_ready
+
+melange model targets MODEL_KEY -R ACCOUNT/REPO [--json|--jq]
+  List a model's converted targets. TTY table; non-TTY TSV; --json passthrough.
+  Example: melange model targets m_ab12cd -R acme/whisper --json
+
+melange model set-default MODEL_KEY -R ACCOUNT/REPO [--json]
+  Pin the repository's default model. Example: melange model set-default m_ab12cd -R acme/whisper
+
+melange model import HF_REPO -R ACCOUNT/REPO [--wait] [--timeout 30m] [--json]
+  Import an LLM from a public HuggingFace repo (repo must be model type llm) and
+  convert it. --wait polls to a terminal state (exit 0 ready, 1 failed/timeout,
+  130 interrupted).
+  Example: melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait
+
+melange model download MODEL_KEY -R ACCOUNT/REPO --target TARGET_ID [--output PATH] [--json]
+  BILLABLE, idempotent artifact download: authorize once, then stream. --output
+  defaults to the current directory; validated before the charge and never
+  overwrites an existing file.
+  Example: melange model download m_ab12cd -R acme/whisper --target tm_71 --output ./models
+
+## melange report
+
+Read a model's benchmark report. -R ACCOUNT/REPO is required.
+
+melange report view MODEL_KEY -R ACCOUNT/REPO [--type general|llm|package]
+    [--mode auto|speed|accuracy] [--json|--jq|--template]
+  --type selects the report; without it the CLI probes general -> llm -> package
+  and shows the first that exists (exit 1 "no report available" when none do; an
+  explicit --type surfaces its own 404). TTY: the dashboard-grade table. General
+  is one row per device, a column per (ap_type x precision) present, each cell
+  the mode pick's latency in ms; the mode columns are re-derived from the raw
+  records (speed=lowest latency; accuracy=highest SNR, ties to lower latency;
+  auto=fastest run whose SNR exceeds 20 dB, else speed). --mode fills the cells;
+  a per-precision summary block follows. LLM: rows=devices, columns=quant_types,
+  cells=tps, plus a per-dataset accuracy section. Package: a mode x metric table.
+  Non-TTY: one raw record per line (flat measurement fields) — scripts get the
+  measurements, not the derived table. --json is the response byte-for-byte.
+  Example: melange report view m_ab12cd -R acme/whisper --json \
+    --jq '[.records[]|select(.ap_type=="npu" and .metric=="latency_ms")]|min_by(.value)'
+
+## melange library
+
+Browse the public model library.
+
+melange library list [--task vision|llm|nlp|speech|other ...] [--search S]
+    [--provider P] [--limit N] [--paginate|--all] [--json|--jq]
+  List library models. --task repeats (a model matching ANY task is included);
+  --search is a case-insensitive name substring; --provider is exact. TTY: table
+  (MODEL, PROVIDER, TASK, TYPE, CREATED); non-TTY: TSV; --json: the page envelope.
+  Example: melange library list --task vision --provider Zetic --jq '.results[].full_name'
+
+melange library view ACCOUNT/NAME [--json|--jq|--template]
+  Show one library model with a readme excerpt (first 10 lines on a TTY). TSV
+  omits the readme; --json includes the full text.
+  Example: melange library view zetic/whisper-tiny --jq .readme
+
+melange library providers [--json|--jq]
+  List providers (companies) with model counts. TTY: table (NAME, MODELS);
+  non-TTY: TSV; --json: the envelope.
+  Example: melange library providers --jq '.results[]|select(.model_count>=10)|.name'
+
+## melange usage
+
+Current billing-period usage counters and plan quotas.
+
+melange usage [--json|--jq|--template]
+  Show active_devices, bandwidth, model_uploads, prompts. TTY: human block;
+  non-TTY: TSV key/value. Example: melange usage --jq .prompts
+
+melange usage quotas [--json|--jq|--template]
+  Show each counter against its plan limit as "used/limit (pct%)", or "unlimited"
+  when the limit is null. TTY: human block; non-TTY: TSV key/value.
+  Example: melange usage quotas --jq .prompts.limit
+
 ## melange api
 
 Escape hatch: authenticated request to any /v1 endpoint; raw response body to

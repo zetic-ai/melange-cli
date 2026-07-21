@@ -39,7 +39,10 @@ melange help formatting.
 
 * [melange api](melange_api.md)	 - Make an authenticated Melange API request
 * [melange auth](melange_auth.md)	 - Authenticate melange with the Melange platform
+* [melange library](melange_library.md)	 - Browse the public model library
 * [melange model](melange_model.md)	 - Upload, browse, and download models
 * [melange repo](melange_repo.md)	 - Manage model repositories
+* [melange report](melange_report.md)	 - Read model benchmark reports
+* [melange usage](melange_usage.md)	 - Show current usage counters
 * [melange version](melange_version.md)	 - Print the melange CLI version
 

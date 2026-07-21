@@ -9,6 +9,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/cmd/auth"
 	"github.com/zetic-ai/melange-cli/internal/cmd/model"
 	"github.com/zetic-ai/melange-cli/internal/cmd/repo"
+	"github.com/zetic-ai/melange-cli/internal/cmd/report"
 	"github.com/zetic-ai/melange-cli/internal/cmd/version"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 )
@@ -79,6 +80,7 @@ melange help formatting.`,
 	cmd.AddCommand(auth.NewCmdAuth(f))
 	cmd.AddCommand(repo.NewCmdRepo(f))
 	cmd.AddCommand(model.NewCmdModel(f))
+	cmd.AddCommand(report.NewCmdReport(f))
 	cmd.AddCommand(apicmd.NewCmdAPI(f))
 
 	// Additional help topics (gh-style): hidden, non-runnable commands that
