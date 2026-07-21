@@ -15,6 +15,7 @@ import (
 	"hash/crc32"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,7 @@ authenticated, 130 interrupted.`,
 			}
 			// Validate the writable destination BEFORE anything is charged: a
 			// bad --output must never cost quota.
-			if err := validOutput(opts.output); err != nil {
+			if err := validOutput(opts.output, opts.force); err != nil {
 				return err
 			}
 			return runDownload(cmd.Context(), opts)
@@ -129,8 +130,11 @@ func runDownload(ctx context.Context, opts *downloadOptions) error {
 	}
 
 	// One Idempotency-Key per logical download: the retry transport replays
-	// the SAME key on transient 5xx, so the server never charges twice.
-	resp, err := g.CreateDownloadAuthorizationWithResponse(ctx, opts.account, opts.name, opts.key,
+	// the SAME key on transient 5xx, so the server never charges twice. 429
+	// retries are exempted — a bandwidth-quota 429 is not transient at retry
+	// timescales, so it must surface immediately with the quota message.
+	resp, err := g.CreateDownloadAuthorizationWithResponse(api.WithNoRetryOn429(ctx),
+		opts.account, opts.name, opts.key,
 		opts.target, &gen.CreateDownloadAuthorizationParams{IdempotencyKey: newIdempotencyKeyParam()})
 	if err != nil {
 		return err
@@ -188,9 +192,18 @@ func runDownload(ctx context.Context, opts *downloadOptions) error {
 
 // validOutput rejects --output values that could only fail after the
 // billable authorization: the path must be an existing directory, or a file
-// path whose parent directory exists.
-func validOutput(output string) error {
-	if info, err := os.Stat(output); err == nil && info.IsDir() {
+// path whose parent directory exists and (without --force) no existing file.
+// Dir-mode collisions cannot be checked here — artifact names only exist
+// after the billable POST — so planArtifactPaths re-checks post-charge.
+func validOutput(output string, force bool) error {
+	if info, err := os.Stat(output); err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		if !force {
+			return cmdutil.FlagError{Err: fmt.Errorf(
+				"--output %q already exists; pass --force to overwrite", output)}
+		}
 		return nil
 	}
 	if strings.HasSuffix(output, string(os.PathSeparator)) {
@@ -316,12 +329,12 @@ func downloadArtifact(ctx context.Context, opts *downloadOptions, art gen.Downlo
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, art.Url, nil)
 	if err != nil {
-		return 0, fmt.Errorf("building download request for %s: %w", art.Name, err)
+		// URL parse errors arrive as *url.Error embedding the full URL.
+		return 0, fmt.Errorf("building download request for %s: %w", art.Name, stripSignedURL(err))
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		// Deliberately not wrapping with the URL: signed URLs are credentials.
-		return 0, fmt.Errorf("downloading %s: %w", art.Name, err)
+		return 0, downloadFailure(art.Name, err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
@@ -353,7 +366,7 @@ func downloadArtifact(ctx context.Context, opts *downloadOptions, art gen.Downlo
 	pw := &progressWriter{prog: prog}
 	written, err = io.Copy(io.MultiWriter(tmp, crc, sha, pw), resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("downloading %s: %w", art.Name, err)
+		return 0, downloadFailure(art.Name, err)
 	}
 	if err = verifyArtifactChecksum(opts.f, art, crc, sha); err != nil {
 		return 0, err
@@ -371,6 +384,29 @@ func downloadArtifact(ctx context.Context, opts *downloadOptions, art gen.Downlo
 	}
 	prog.doneAs(written)
 	return written, nil
+}
+
+// downloadFailure maps a transfer error to a safe, actionable error. A
+// canceled context (SIGINT) becomes canceledSilently, which maps to exit 130
+// with no further output. Everything else is wrapped with the artifact name
+// and the *unwrapped* cause: url.Error.Error() embeds the full signed URL,
+// which is a credential and must never reach stderr.
+func downloadFailure(name string, err error) error {
+	if errors.Is(err, context.Canceled) {
+		return canceledSilently{}
+	}
+	return fmt.Errorf("downloading %s: %w", name, stripSignedURL(err))
+}
+
+// stripSignedURL unwraps a *url.Error (whose Error() embeds the full URL,
+// query included) down to its underlying cause. Non-url.Error values pass
+// through unchanged.
+func stripSignedURL(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return urlErr.Err
+	}
+	return err
 }
 
 // verifyArtifactChecksum checks the streamed digests against the artifact's

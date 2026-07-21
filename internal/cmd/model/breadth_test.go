@@ -55,12 +55,19 @@ func setup(t *testing.T) *testEnv {
 
 func run(t *testing.T, e *testEnv, args ...string) error {
 	t.Helper()
+	return runCtx(t, context.Background(), e, args...)
+}
+
+// runCtx runs the root command under a caller-owned context so tests can
+// simulate SIGINT (context cancellation) mid-command.
+func runCtx(t *testing.T, ctx context.Context, e *testEnv, args ...string) error {
+	t.Helper()
 	cmd := root.NewCmdRoot(e.f)
 	cmd.SetIn(e.in)
 	cmd.SetOut(e.out)
 	cmd.SetErr(e.errOut)
 	cmd.SetArgs(args)
-	return cmd.ExecuteContext(context.Background())
+	return cmd.ExecuteContext(ctx)
 }
 
 func jsonStub(status int, body string) httpmock.Responder {

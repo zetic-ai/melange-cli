@@ -122,6 +122,42 @@ func TestRetryPOSTWithIdempotencyKeyRetried(t *testing.T) {
 	assert.Equal(t, `{"n":1}`, string(replayed))
 }
 
+func TestRetryNoRetryOn429SurfacesImmediately(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("POST", "/v1/dl"),
+		httpmock.WithHeader(httpmock.StatusStringResponse(429, "quota exceeded"), "Retry-After", "3"))
+
+	rt, sleeps := newTestRetry(reg)
+	req, _ := http.NewRequestWithContext(WithNoRetryOn429(context.Background()),
+		"POST", "https://api.zetic.ai/v1/dl", nil)
+	req.Header.Set("Idempotency-Key", "idem-1")
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, 429, resp.StatusCode)
+	assert.Len(t, reg.Requests, 1,
+		"a 429 on an exempted request is not transient (e.g. quota) and must not burn retry attempts")
+	assert.Empty(t, *sleeps)
+}
+
+func TestRetryNoRetryOn429StillRetries5xx(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("POST", "/v1/dl"), httpmock.StatusStringResponse(502, "bad gateway"))
+	reg.Register(httpmock.REST("POST", "/v1/dl"), httpmock.StatusStringResponse(200, "ok"))
+
+	rt, _ := newTestRetry(reg)
+	req, _ := http.NewRequestWithContext(WithNoRetryOn429(context.Background()),
+		"POST", "https://api.zetic.ai/v1/dl", nil)
+	req.Header.Set("Idempotency-Key", "idem-1")
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Len(t, reg.Requests, 2, "the exemption is 429-specific; transient 5xx retries stay")
+}
+
 func TestRetryBodyWithoutGetBodyNotRetried(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("POST", "/v1/models"), httpmock.StatusStringResponse(502, ""))

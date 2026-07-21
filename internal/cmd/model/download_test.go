@@ -1,12 +1,15 @@
 package model_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/crc32"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -182,16 +185,14 @@ func TestDownloadIdempotencyKeyStableAcross502Retry(t *testing.T) {
 func TestDownloadQuota429Exits1WithRetryAfter(t *testing.T) {
 	e := setup(t)
 	quota := `{"type":"error","error":{"type":"rate_limit_error","message":"bandwidth quota exceeded"},"request_id":"req_q"}`
-	// The transport retries Idempotency-Keyed requests on 429 (safe: replay
-	// never double-charges), so a persistent quota error takes all 4 attempts.
-	for range 4 {
-		e.reg.Register(httpmock.REST("POST", authPath),
-			httpmock.WithHeader(jsonStub(429, quota), "Retry-After", "1"))
-	}
+	e.reg.Register(httpmock.REST("POST", authPath),
+		httpmock.WithHeader(jsonStub(429, quota), "Retry-After", "1"))
 
 	err := run(t, e, downloadArgs(t.TempDir(), "--yes")...)
 	require.Error(t, err)
 	assert.Equal(t, 1, cmdutil.ExitCode(err))
+	require.Len(t, e.reg.Requests, 1,
+		"a quota 429 is not transient at retry timescales; the billable POST must surface it immediately")
 	assert.Contains(t, err.Error(), "bandwidth quota exceeded", "the server quota message must surface")
 	assert.Contains(t, err.Error(), "Retry after 1s", "Retry-After must surface when present")
 	assert.Contains(t, err.Error(), "nothing was charged")
@@ -265,6 +266,26 @@ func TestDownloadFailedTransferLeavesNoPartialFile(t *testing.T) {
 
 func TestDownloadRefusesOverwriteWithoutForce(t *testing.T) {
 	e := setup(t)
+	dest := filepath.Join(t.TempDir(), "model.bin")
+	require.NoError(t, os.WriteFile(dest, []byte("existing"), 0o644))
+
+	err := run(t, e, downloadArgs(dest, "--yes")...)
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err), "an existing --output file is a usage error")
+	assert.Contains(t, err.Error(), "--force")
+	assert.Empty(t, e.reg.Requests,
+		"a refused overwrite is knowable up front and must never cost quota")
+
+	data, rerr := os.ReadFile(dest)
+	require.NoError(t, rerr)
+	assert.Equal(t, "existing", string(data), "the existing file must be untouched")
+}
+
+func TestDownloadDirModeRefusesOverwriteWithoutForce(t *testing.T) {
+	// Dir-mode collisions are only knowable after the billable POST (artifact
+	// names come from the authorization), so this refusal is post-charge but
+	// must still land before any bytes move.
+	e := setup(t)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "model.bin"), []byte("existing"), 0o644))
 	e.reg.Register(httpmock.REST("POST", authPath), jsonStub(201, authBody("")))
@@ -273,6 +294,7 @@ func TestDownloadRefusesOverwriteWithoutForce(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 1, cmdutil.ExitCode(err))
 	assert.Contains(t, err.Error(), "--force")
+	require.Len(t, e.reg.Requests, 1, "the refusal must land before any artifact GET")
 
 	data, rerr := os.ReadFile(filepath.Join(dir, "model.bin"))
 	require.NoError(t, rerr)
@@ -290,6 +312,47 @@ func TestDownloadForceOverwrites(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(dir, "model.bin"))
 	require.NoError(t, err)
 	assert.Equal(t, artifactVal, string(data))
+}
+
+// ---------------------------------------------------------------------------
+// transport failures must never leak the signed URL
+// ---------------------------------------------------------------------------
+
+func TestDownloadTransportErrorNeverLeaksSignedURL(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", authPath), jsonStub(201, authBody("")))
+	// A DNS/conn/TLS failure surfaces as a *url.Error whose Error() embeds
+	// the full signed URL — the command must strip it before stderr.
+	e.reg.Register(httpmock.REST("GET", "/dl/model.bin"),
+		httpmock.ErrorResponse(errors.New("connect: connection refused")))
+
+	err := run(t, e, downloadArgs(t.TempDir(), "--yes")...)
+	require.Error(t, err)
+	assert.Equal(t, 1, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "model.bin", "the error must name the failing artifact")
+	assert.Contains(t, err.Error(), "connection refused", "the underlying cause must surface")
+	assert.NotContains(t, err.Error(), "SECRETSIG", "transport errors must never leak the signed URL")
+	assert.NotContains(t, err.Error(), "storage.googleapis.com")
+	assert.NotContains(t, e.errOut.String(), "SECRETSIG")
+}
+
+func TestDownloadInterruptExits130WithoutURL(t *testing.T) {
+	e := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e.reg.Register(httpmock.REST("POST", authPath), jsonStub(201, authBody("")))
+	e.reg.Register(httpmock.REST("GET", "/dl/model.bin"),
+		func(req *http.Request) (*http.Response, error) {
+			cancel() // simulate SIGINT mid-download
+			return nil, req.Context().Err()
+		})
+
+	err := runCtx(t, ctx, e, downloadArgs(t.TempDir(), "--yes")...)
+	require.Error(t, err)
+	assert.Equal(t, 130, cmdutil.ExitCode(err), "SIGINT during an artifact download must exit 130")
+	assert.NotContains(t, err.Error(), "SECRETSIG", "the interrupt error must never carry the signed URL")
+	assert.NotContains(t, err.Error(), "storage.googleapis.com")
+	assert.NotContains(t, e.errOut.String(), "SECRETSIG")
 }
 
 func TestDownloadSingleArtifactToNamedFile(t *testing.T) {

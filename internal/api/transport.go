@@ -113,9 +113,29 @@ const (
 	retryAfterCap    = 30 * time.Second
 )
 
+// noRetry429Key marks a request context whose 429 responses must surface
+// immediately instead of being retried.
+type noRetry429Key struct{}
+
+// WithNoRetryOn429 returns a context that exempts the request from the
+// transport's 429 retry policy. Billable calls use this: a quota 429 is not
+// transient at retry timescales, so sitting through the backoff schedule only
+// delays the quota error. Transient 5xx and connection errors are still
+// retried as usual.
+func WithNoRetryOn429(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noRetry429Key{}, true)
+}
+
+// noRetryOn429 reports whether the request context opted out of 429 retries.
+func noRetryOn429(ctx context.Context) bool {
+	v, _ := ctx.Value(noRetry429Key{}).(bool)
+	return v
+}
+
 // retryTransport retries idempotent requests (GET/HEAD, or any request with
 // an Idempotency-Key header) on 429/502/503/504 and connection errors, with
 // jittered exponential backoff. Retry-After is honored (capped) on 429s.
+// Requests marked with WithNoRetryOn429 surface 429s immediately.
 type retryTransport struct {
 	base  http.RoundTripper
 	sleep func(context.Context, time.Duration) error // injectable for tests
@@ -166,6 +186,9 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 			delay = backoff(attempt)
 		case retryableStatus(resp.StatusCode):
+			if resp.StatusCode == http.StatusTooManyRequests && noRetryOn429(req.Context()) {
+				return resp, nil
+			}
 			if ra := parseRetryAfter(resp.Header.Get("Retry-After")); ra > 0 {
 				delay = min(ra, retryAfterCap)
 			} else {
