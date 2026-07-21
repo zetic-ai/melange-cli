@@ -65,7 +65,7 @@ error, 4 not authenticated.`,
 			if err != nil {
 				return err
 			}
-			if err := api.ErrorFrom(resp.StatusCode(), resp.HTTPResponse.Header, resp.Body); err != nil {
+			if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 				return err
 			}
 			if resp.JSON200 == nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
@@ -282,7 +283,7 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 	if err != nil {
 		return err
 	}
-	if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		if resp.StatusCode() == 409 {
 			return activeSessionConflict(ctx, opts, g, aerr)
 		}
@@ -372,7 +373,7 @@ func stateFromSession(session *gen.ModelUploadResponse, specs []upload.FileSpec,
 func activeSessionConflict(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, orig error) error {
 	sessionID := ""
 	if resp, err := g.ListModelUploadsWithResponse(ctx, opts.account, opts.name); err == nil &&
-		genError(resp.StatusCode(), resp.HTTPResponse, resp.Body) == nil && resp.JSON200 != nil {
+		api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) == nil && resp.JSON200 != nil {
 		for _, s := range resp.JSON200.Results {
 			if strings.EqualFold(s.State, sessionStateUploading) {
 				sessionID = s.Id
@@ -519,7 +520,7 @@ func reissueURL(ctx context.Context, opts *uploadOptions, g *gen.ClientWithRespo
 	if err != nil {
 		return err
 	}
-	if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		return fmt.Errorf("reissuing upload URL for %s: %w", sf.CanonicalPath, aerr)
 	}
 	if resp.JSON200 == nil {
@@ -553,7 +554,7 @@ func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWi
 		}
 		return err
 	}
-	if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		return aerr
 	}
 	out := resp.JSON200
@@ -648,7 +649,7 @@ func fetchUploadSession(ctx context.Context, opts *uploadOptions, g *gen.ClientW
 	if err != nil {
 		return nil, err
 	}
-	if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		return nil, aerr
 	}
 	if resp.JSON200 == nil {
@@ -726,7 +727,7 @@ func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.Cli
 		if err != nil {
 			return nil, err
 		}
-		if aerr := genError(rresp.StatusCode(), rresp.HTTPResponse, rresp.Body); aerr != nil {
+		if aerr := api.GenError(rresp.StatusCode(), rresp.HTTPResponse, rresp.Body); aerr != nil {
 			return nil, aerr
 		}
 		if rresp.JSON200 == nil {
@@ -763,7 +764,7 @@ func runCancel(ctx context.Context, opts *uploadOptions) error {
 	if err != nil {
 		return err
 	}
-	if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		return aerr
 	}
 	_ = upload.RemoveState(opts.cancelID)
@@ -785,7 +786,7 @@ func runSessions(ctx context.Context, opts *uploadOptions) error {
 	if err != nil {
 		return err
 	}
-	if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		return aerr
 	}
 	if resp.JSON200 == nil {
@@ -875,7 +876,7 @@ func waitForModel(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResp
 		if err != nil {
 			return false, err
 		}
-		if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+		if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 			return false, aerr
 		}
 		if resp.JSON200 == nil {

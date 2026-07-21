@@ -93,7 +93,7 @@ Exit codes: 0 created, 1 API error (including a 409 name conflict and
 			if err != nil {
 				return err
 			}
-			if err := api.ErrorFrom(resp.StatusCode(), resp.HTTPResponse.Header, resp.Body); err != nil {
+			if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 				var apiErr *api.Error
 				if errors.As(err, &apiErr) && apiErr.StatusCode == 403 {
 					return fmt.Errorf(

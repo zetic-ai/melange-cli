@@ -13,9 +13,9 @@ import (
 // rides the same transport chain (auth -> retry -> debug), so every generated
 // call carries the Bearer token, User-Agent, and retry behavior.
 //
-// Convert non-2xx generated responses with ErrorFrom:
+// Convert non-2xx generated responses with GenError:
 //
-//	if err := api.ErrorFrom(resp.StatusCode(), resp.HTTPResponse.Header, resp.Body); err != nil {
+//	if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 //		return err
 //	}
 func (c *Client) Gen() (*gen.ClientWithResponses, error) {
@@ -33,7 +33,7 @@ func (c *Client) GetMe(ctx context.Context) (*gen.MeResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := ErrorFrom(resp.StatusCode(), respHeader(resp.HTTPResponse), resp.Body); err != nil {
+	if err := GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 		return nil, err
 	}
 	me := resp.JSON200
@@ -48,10 +48,13 @@ func (c *Client) GetMe(ctx context.Context) (*gen.MeResponse, error) {
 	return me, nil
 }
 
-// respHeader tolerates generated responses without an HTTP response attached.
-func respHeader(resp *http.Response) http.Header {
-	if resp == nil {
-		return nil
+// GenError converts a generated-client response into an error: nil for 2xx,
+// otherwise an *Error via ErrorFrom. It is THE way to surface non-2xx results
+// from generated responses; it tolerates a nil HTTPResponse.
+func GenError(status int, httpResp *http.Response, body []byte) error {
+	var header http.Header
+	if httpResp != nil {
+		header = httpResp.Header
 	}
-	return resp.Header
+	return ErrorFrom(status, header, body)
 }

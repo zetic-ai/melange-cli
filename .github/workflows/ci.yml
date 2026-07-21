@@ -23,7 +23,14 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # The race detector runs on exactly one leg (ubuntu): it is the cheapest
+      # leg and one -race pass is enough to catch data races.
+      - name: Test (race)
+        if: matrix.os == 'ubuntu-latest'
+        run: go test -race ./...
+
       - name: Test
+        if: matrix.os != 'ubuntu-latest'
         run: go test ./...
 
   lint:

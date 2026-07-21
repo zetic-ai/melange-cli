@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 )
@@ -79,15 +78,6 @@ func withIdempotencyKey(key string) gen.RequestEditorFn {
 		req.Header.Set("Idempotency-Key", key)
 		return nil
 	}
-}
-
-// genError converts a generated response into an *api.Error (nil for 2xx).
-func genError(statusCode int, httpResp *http.Response, body []byte) error {
-	var header http.Header
-	if httpResp != nil {
-		header = httpResp.Header
-	}
-	return api.ErrorFrom(statusCode, header, body)
 }
 
 // canceledSilently maps to exit 130 (context.Canceled) while suppressing the

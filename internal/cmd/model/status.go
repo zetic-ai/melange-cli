@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/text"
@@ -67,7 +68,7 @@ error, 4 not authenticated.`,
 			if err != nil {
 				return err
 			}
-			if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+			if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 				return aerr
 			}
 			if resp.JSON200 == nil {

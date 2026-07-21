@@ -83,7 +83,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				if err != nil {
 					return nil, err
 				}
-				if err := api.ErrorFrom(resp.StatusCode(), resp.HTTPResponse.Header, resp.Body); err != nil {
+				if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 					return nil, err
 				}
 				if resp.JSON200 == nil {

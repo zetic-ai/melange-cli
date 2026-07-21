@@ -60,7 +60,8 @@ func New(ios *iostreams.IOStreams) *TablePrinter {
 
 // HeaderRow sets the column headers. In TTY mode they render uppercased (and
 // dimmed when color is enabled); in non-TTY mode headers are omitted entirely.
-// It must be called before any AddField.
+// The header row is prepended to the accumulated rows, so it may be called at
+// any point before Render, regardless of AddField/EndRow ordering.
 func (t *TablePrinter) HeaderRow(cols ...string) {
 	if !t.isTTY || len(cols) == 0 {
 		return
