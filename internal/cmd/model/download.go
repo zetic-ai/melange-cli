@@ -96,6 +96,11 @@ authenticated, 130 interrupted.`,
 					"--target TARGET_ID is required; list targets with: melange model targets %s -R %s",
 					opts.key, opts.repo)}
 			}
+			// Validate the writable destination BEFORE anything is charged: a
+			// bad --output must never cost quota.
+			if err := validOutput(opts.output); err != nil {
+				return err
+			}
 			return runDownload(cmd.Context(), opts)
 		},
 	}
@@ -177,6 +182,24 @@ func runDownload(ctx context.Context, opts *downloadOptions) error {
 			return err
 		}
 		return opts.exporter.Write(ios, redacted)
+	}
+	return nil
+}
+
+// validOutput rejects --output values that could only fail after the
+// billable authorization: the path must be an existing directory, or a file
+// path whose parent directory exists.
+func validOutput(output string) error {
+	if info, err := os.Stat(output); err == nil && info.IsDir() {
+		return nil
+	}
+	if strings.HasSuffix(output, string(os.PathSeparator)) {
+		return cmdutil.FlagError{Err: fmt.Errorf(
+			"--output %q is not an existing directory", output)}
+	}
+	if info, err := os.Stat(filepath.Dir(output)); err != nil || !info.IsDir() {
+		return cmdutil.FlagError{Err: fmt.Errorf(
+			"--output %q: parent directory does not exist", output)}
 	}
 	return nil
 }

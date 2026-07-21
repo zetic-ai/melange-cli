@@ -376,6 +376,17 @@ func TestDownloadMissingTargetExits2(t *testing.T) {
 	assert.Empty(t, e.reg.Requests)
 }
 
+func TestDownloadBadOutputFailsBeforeCharge(t *testing.T) {
+	e := setup(t)
+	dest := filepath.Join(t.TempDir(), "missing-parent", "file.bin")
+
+	err := run(t, e, downloadArgs(dest, "--yes")...)
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "parent directory")
+	assert.Empty(t, e.reg.Requests, "a bad --output must never cost quota")
+}
+
 func TestDownloadMissingRepoExits2(t *testing.T) {
 	e := setup(t)
 	err := run(t, e, "model", "download", "m_ab12cd", "--target", "tm_71", "--yes")
