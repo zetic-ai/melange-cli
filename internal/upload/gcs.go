@@ -183,12 +183,15 @@ func (u *Uploader) UploadFile(ctx context.Context, sessionURI, path string, tota
 	}
 
 	offset := from
+	highWater := from // max committed offset ever observed
 	failures := 0
 	// recover handles a failed chunk attempt by asking the server what it
-	// actually committed. Forward progress since the last known offset
+	// actually committed. Forward progress past the high-water mark
 	// restores full retry credit: a slow but moving link never exhausts
 	// MaxRetries, and StallTimeout stays a stall detector — only attempts
-	// that commit no new bytes consume the budget.
+	// that commit no new bytes consume the budget. The committed offset is
+	// monotonic in the protocol, so a server oscillating it (violation)
+	// never re-earns credit and never rewinds us below the high-water mark.
 	recover := func(cause error) error {
 		committed, done, qerr := u.QueryOffset(ctx, sessionURI, total)
 		if qerr != nil {
@@ -197,13 +200,14 @@ func (u *Uploader) UploadFile(ctx context.Context, sessionURI, path string, tota
 		if done {
 			committed = total
 		}
-		if committed > offset {
+		if committed > highWater {
 			failures = 0
+			highWater = committed
 			offset = committed
 			commit(offset)
 			return nil
 		}
-		offset = committed // the server is authoritative, even backwards
+		offset = max(committed, highWater) // never rewind below the high-water mark
 		failures++
 		if failures > u.maxRetries() {
 			return fmt.Errorf("uploading %s: giving up after %d attempts: %w", path, failures, cause)
@@ -238,6 +242,7 @@ func (u *Uploader) UploadFile(ctx context.Context, sessionURI, path string, tota
 			}
 			failures = 0
 			offset = acked
+			highWater = max(highWater, offset)
 			commit(offset)
 		case retryableGCSStatus(status):
 			if rerr := recover(fmt.Errorf("GCS returned HTTP %d", status)); rerr != nil {

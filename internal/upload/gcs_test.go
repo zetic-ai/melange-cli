@@ -52,6 +52,13 @@ type fakeGCS struct {
 	// commits at most this many bytes, then dawdles for hangPut so the
 	// client's stall budget expires before any response arrives.
 	slowCommit int64
+	// oscillateHigh, when > 0, turns the fake into a protocol-violating
+	// server: every data PUT fails with 500 and committed-offset queries
+	// alternate between oscillateHigh and oscillateHigh/2. A committed
+	// offset must be monotonic, so the client must never treat the
+	// re-reported high value as fresh progress.
+	oscillateHigh int64
+	queries       int
 
 	srv *httptest.Server
 }
@@ -94,6 +101,16 @@ func (g *fakeGCS) handle(w http.ResponseWriter, r *http.Request) {
 		// committed-offset query: "bytes */N"
 		if n, _ := fmt.Sscanf(cr, "bytes */%d", &total); n == 1 {
 			g.requests = append(g.requests, req)
+			if g.oscillateHigh > 0 {
+				g.queries++
+				committed := g.oscillateHigh
+				if g.queries%2 == 0 {
+					committed = g.oscillateHigh / 2 // protocol violation: committed went backwards
+				}
+				w.Header().Set("Range", fmt.Sprintf("bytes=0-%d", committed-1))
+				w.WriteHeader(308)
+				return
+			}
 			if g.complete {
 				w.WriteHeader(http.StatusOK)
 				return
@@ -119,6 +136,16 @@ func (g *fakeGCS) handle(w http.ResponseWriter, r *http.Request) {
 		req.BodyLen = int64(len(body))
 		req.RangeStart = from
 		g.requests = append(g.requests, req)
+
+		if g.oscillateHigh > 0 {
+			if len(g.requests) > 60 {
+				g.t.Error("oscillating committed offsets kept the client looping: retry credit was re-earned")
+				w.WriteHeader(http.StatusBadRequest) // non-retryable, breaks the loop
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
 		if g.slowCommit > 0 {
 			// A prefix of the attempt commits before the client gives up on
@@ -480,6 +507,26 @@ func TestUploadFileGenuineStallExhaustsRetryBudget(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "the give-up error carries the inactivity cause")
 	assert.Contains(t, err.Error(), "giving up after")
 	assert.Len(t, g.dataPuts(), 3, "a stall with zero progress consumes the budget: MaxRetries+1 attempts")
+}
+
+func TestUploadFileOscillatingCommitAbortsWithinRetryBudget(t *testing.T) {
+	g := newFakeGCS(t)
+	g.oscillateHigh = chunk
+	u := testUploader()
+	path := tempFile(t, 2*chunk)
+
+	uri, err := u.StartSession(context.Background(), g.signedURL())
+	require.NoError(t, err)
+
+	// The server "commits" one granule, then reports half of it, then the
+	// full granule again. Only offsets above the high-water mark are
+	// progress; the re-reported high value must not restore retry credit,
+	// so the upload aborts within the budget instead of looping forever.
+	err = u.UploadFile(context.Background(), uri, path, 2*chunk, 0, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "giving up after")
+	assert.LessOrEqual(t, len(g.dataPuts()), 10,
+		"an oscillating committed offset must exhaust the retry budget, not re-earn credit")
 }
 
 func TestTransportErrorsAreRedacted(t *testing.T) {
