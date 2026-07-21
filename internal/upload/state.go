@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -14,8 +15,8 @@ import (
 // state from the server.
 var ErrStateCorrupt = errors.New("state file corrupt")
 
-// State is the persisted record of an in-flight upload session, stored at
-// ${XDG_STATE_HOME:-~/.local/state}/melange/uploads/<session-id>.json.
+// State is the persisted record of an in-flight upload session, stored as
+// <StateDir>/<session-id>.json.
 //
 // It contains resumable session URIs, which are bearer credentials: the
 // file is written 0600 in a 0700 directory and its contents must never be
@@ -42,9 +43,23 @@ type StateFile struct {
 	Uploaded      bool   `json:"uploaded"`
 }
 
-// StateDir returns the directory that holds upload state files:
-// ${XDG_STATE_HOME:-~/.local/state}/melange/uploads.
+// StateDir returns the platform-appropriate directory for upload state files
+// (mirroring config.ConfigDir's pattern):
+//
+//   - Linux/macOS: ${XDG_STATE_HOME:-~/.local/state}/melange/uploads
+//   - Windows:     %LocalAppData%\melange\uploads
 func StateDir() (string, error) {
+	return stateDirFor(runtime.GOOS)
+}
+
+// stateDirFor is StateDir with the GOOS injected so the Windows branch is
+// unit-testable without a Windows CI leg.
+func stateDirFor(goos string) (string, error) {
+	if goos == "windows" {
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			return filepath.Join(localAppData, "melange", "uploads"), nil
+		}
+	}
 	base := os.Getenv("XDG_STATE_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
