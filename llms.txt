@@ -1,0 +1,121 @@
+# melange CLI — LLM reference
+
+melange is the CLI for the Zetic.ai Melange platform (on-device AI model
+deployment and benchmarking). Agent contract: data on stdout, progress and
+diagnostics on stderr; stable exit codes; `--json` is byte-exact API output.
+Full docs: docs/reference/melange.md; live topics: `melange help environment`,
+`melange help exit-codes`, `melange help formatting`.
+
+Global flags: --no-color (disable color), --no-input (disable prompts).
+Structured-output flags on data commands: --json, --jq EXPR (implies --json;
+re-marshals with sorted keys), --template TMPL (Go template; tablerow/timeago/
+json functions). Non-TTY human output is headerless tab-separated values.
+List envelope: {"results": [...], "count": N}; --paginate (alias --all)
+merges all pages into one envelope.
+
+## Exit codes
+
+0    success
+1    API, network, or command failure (idempotent requests already retried)
+2    usage error — bad flags/arguments; fix the invocation, do not retry
+4    auth error — not logged in or token rejected; do not retry until fixed
+130  interrupted (Ctrl-C); an interrupted upload keeps its session
+
+## Environment variables
+
+MELANGE_API_KEY       personal access token (ztp_...); overrides all stored creds
+MELANGE_API_KEY_FILE  path to token file; unreadable => error (no fallback)
+MELANGE_HOST          API host (default https://api.zetic.ai)
+MELANGE_DEBUG         1/true/yes/on: log request/response lines to stderr
+NO_COLOR, TERM=dumb   disable color
+Credential precedence: MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring >
+config file. Host precedence: --host > MELANGE_HOST > config > default.
+Config file: ${XDG_CONFIG_HOME:-~/.config}/melange/config.yml
+Upload state: ${XDG_STATE_HOME:-~/.local/state}/melange/uploads
+
+## melange auth
+
+Manage authentication (personal access tokens, prefix ztp_).
+
+melange auth login [--with-token] [--insecure-storage] [--json]
+  Verify a token against the API and store it (OS keyring; config file with
+  --insecure-storage). Non-interactive runs must use --with-token (stdin).
+  Example: melange auth login --with-token < token.txt
+
+melange auth status [--json|--jq|--template]
+  Verify the resolved token; report host, account, token name, scopes, source.
+  Exit 0 authenticated, 1 network/API error, 4 not logged in/rejected.
+  Example: MELANGE_API_KEY=ztp_... melange auth status --json
+
+melange auth token
+  Print the raw resolved token + newline (nothing else on stdout). Exit 4 if none.
+  Example: export MELANGE_API_KEY="$(melange auth token)"
+
+melange auth logout
+  Delete stored token (keyring + config) for the resolved host. Env vars are
+  not touched and still take precedence afterward.
+
+## melange repo
+
+Manage model repositories, addressed as ACCOUNT/NAME (account defaults to the
+account behind your token).
+
+melange repo list [--search QUERY] [--limit N] [--paginate|--all] [--json|--jq]
+  List repositories. TTY: table (REPO, VISIBILITY, TYPE, UPDATED); non-TTY:
+  TSV full_name/visibility/model_type/updated_at. Empty result exits 0.
+  Example: melange repo list --search whisper --jq '.results[].full_name'
+
+melange repo view <[account/]name> [--json|--jq|--template]
+  Show one repository (name, visibility, type, use case, tags, description,
+  timestamps). Exit 1 includes not-found.
+  Example: melange repo view zetic/whisper-tiny --jq .is_private
+
+melange repo create <name> [--private] [--model-type general|llm]
+    [--use-case vision|nlp|llm|speech|other] [--description S] [--tag T ...]
+  Create a repository in your own account (write scope required). Confirmation
+  goes to stderr; --json prints the created resource. 409 name conflict and
+  403 missing scope surface as exit 1.
+  Example: melange repo create whisper-tiny --private --json --jq .full_name
+
+## melange model
+
+Upload models and track conversion. -R ACCOUNT/REPO is REQUIRED on every
+model command; there is no default repository.
+
+melange model upload MODEL_FILE -R ACCOUNT/REPO [--input FILE ...]
+    [--external-data FILE ...] [--input-manifest FILE] [--dry-run] [--wait]
+    [--timeout 30m] [--resume ID | --cancel ID | --sessions] [--json]
+  Resumable upload session: manifest (sizes + CRC32C) -> signed-URL streaming
+  -> server-side verification -> conversion. --input order defines input_index.
+  --dry-run prints the manifest with no network calls. Ctrl-C (exit 130)
+  preserves the session and prints the exact resume command on stderr
+  ("Resume with: melange model upload --resume <id> -R <repo>"); resumed
+  uploads never re-send acknowledged bytes.
+  Example: melange model upload -R acme/whisper model.onnx --input a.bin --wait
+
+melange model status MODEL_KEY -R ACCOUNT/REPO [--wait] [--timeout 30m] [--json]
+  Conversion status: state (converting/optimizing/ready/failed), stage,
+  downloadable, sanitized failure code. Plain read always exits 0; with --wait
+  exit 0 = ready, 1 = failed or timeout.
+  Example: melange model status m_ab12cd -R acme/whisper --jq .state
+
+## melange api
+
+Escape hatch: authenticated request to any /v1 endpoint; raw response body to
+stdout (also on non-2xx, with a one-line summary on stderr).
+
+melange api <path> [-X METHOD] [-f key=value] [-F key=value] [-H 'Name: v']
+    [--input FILE|-] [-q JQ] [-t TEMPLATE] [-i|--include] [--silent]
+  Paths are host-relative ("/v1/me"; query strings allowed); absolute URLs are
+  rejected. Default method GET; fields or --input switch it to POST. With
+  explicit -X GET, fields become query parameters. -f = string field; -F =
+  typed (true/false/null/int; @path file contents; @- stdin); key[sub]=v
+  nests one level; key[]=v appends arrays. Fields imply a JSON body.
+  GET/HEAD and Idempotency-Key requests are retried automatically; pagination
+  and polling are the caller's responsibility.
+  Example: melange api /v1/me --jq .account.name
+
+## melange version / completion
+
+melange version   Print version ("melange version X (commit date)").
+melange completion bash|zsh|fish|powershell   Shell completion scripts.
