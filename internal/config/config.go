@@ -1,6 +1,7 @@
 // Package config handles loading, saving, and resolving configuration values
 // for the melange CLI. Configuration is stored in a YAML file; precedence
-// resolution always wins in this order: flag > env > env-file > config > default.
+// resolution always wins in this order: flag > env > env-file > keyring >
+// config > default.
 package config
 
 import (
@@ -62,6 +63,15 @@ func (c *Config) ResolveHost(flagValue string) Resolved {
 //
 //	env:MELANGE_API_KEY > env:MELANGE_API_KEY_FILE > config(hosts.<host>.api_key) > empty
 func (c *Config) ResolveToken(host string) Resolved {
+	return c.ResolveTokenWith(host, nil)
+}
+
+// ResolveTokenWith is ResolveToken with an injected keyring lookup (nil = no
+// keyring). The lookup is a plain func so this package does not import
+// internal/keyring; commands pass keyring.Lookup. Precedence:
+//
+//	env:MELANGE_API_KEY > env:MELANGE_API_KEY_FILE > keyring > config > empty
+func (c *Config) ResolveTokenWith(host string, lookup func(host string) (string, bool)) Resolved {
 	if v := os.Getenv(EnvAPIKey); v != "" {
 		return Resolved{Value: v, Source: "env:" + EnvAPIKey}
 	}
@@ -74,12 +84,36 @@ func (c *Config) ResolveToken(host string) Resolved {
 			}
 		}
 	}
+	if lookup != nil {
+		if v, ok := lookup(host); ok && v != "" {
+			return Resolved{Value: v, Source: "keyring"}
+		}
+	}
 	if c != nil && c.Hosts != nil {
 		if entry, ok := c.Hosts[host]; ok && entry.APIKey != "" {
 			return Resolved{Value: entry.APIKey, Source: "config"}
 		}
 	}
 	return Resolved{}
+}
+
+// SetHostAPIKey stores an API key for host in the config file and saves it.
+func (c *Config) SetHostAPIKey(host, key string) error {
+	if c.Hosts == nil {
+		c.Hosts = make(map[string]HostEntry)
+	}
+	c.Hosts[host] = HostEntry{APIKey: key}
+	return Save(c)
+}
+
+// DeleteHostAPIKey removes the API key for host from the config file and
+// saves it. Removing an absent host is not an error.
+func (c *Config) DeleteHostAPIKey(host string) error {
+	if _, ok := c.Hosts[host]; !ok {
+		return nil
+	}
+	delete(c.Hosts, host)
+	return Save(c)
 }
 
 // ConfigDir returns the platform-appropriate directory for the config file.
