@@ -5,6 +5,8 @@ package cmdutil
 import (
 	"context"
 	"errors"
+
+	"github.com/zetic-ai/melange-cli/internal/api"
 )
 
 // ErrSilent is a sentinel that signals the command has already printed its
@@ -33,9 +35,9 @@ func (e AuthError) Unwrap() error { return e.Err }
 // melange exit-code contract:
 //
 //	0   nil (success)
-//	1   generic error / ErrSilent
+//	1   generic error / ErrSilent / other API errors
 //	2   FlagError (usage error)
-//	4   AuthError
+//	4   AuthError / API authentication_error
 //	130 context.Canceled (SIGINT)
 func ExitCode(err error) int {
 	if err == nil {
@@ -50,6 +52,10 @@ func ExitCode(err error) int {
 	}
 	var ae AuthError
 	if errors.As(err, &ae) {
+		return 4
+	}
+	var apiErr *api.Error
+	if errors.As(err, &apiErr) && apiErr.Type == "authentication_error" {
 		return 4
 	}
 	return 1
