@@ -57,5 +57,5 @@ melange model status MODEL_KEY [flags]
 
 ### SEE ALSO
 
-* [melange model](melange_model.md)	 - Upload models and track their conversion
+* [melange model](melange_model.md)	 - Upload, browse, and download models
 
