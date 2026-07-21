@@ -8,11 +8,13 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/build"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
+	"github.com/zetic-ai/melange-cli/internal/keyring"
 )
 
 func main() {
@@ -33,6 +35,24 @@ func Run(args []string) int {
 		Config: func() (*config.Config, error) {
 			return config.Load()
 		},
+	}
+
+	// ApiClient resolves host+token (env > keyring > config) and returns an
+	// authenticated client. Only commands that require auth should call it:
+	// it returns AuthError (exit 4) when no token is available.
+	f.ApiClient = func() (*api.Client, error) {
+		cfg, err := f.Config()
+		if err != nil {
+			return nil, err
+		}
+		host := cfg.ResolveHost(f.HostOverride)
+		hostKey := keyring.HostKey(host.Value)
+		token := cfg.ResolveTokenWith(hostKey, keyring.Lookup)
+		if token.Value == "" {
+			return nil, cmdutil.AuthError{Err: fmt.Errorf(
+				"not logged in to %s; run `melange auth login` or set MELANGE_API_KEY", hostKey)}
+		}
+		return cmdutil.NewAPIClient(f, host.Value, token.Value)
 	}
 
 	// Build root command.

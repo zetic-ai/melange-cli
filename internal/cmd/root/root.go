@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/zetic-ai/melange-cli/internal/cmd/auth"
 	"github.com/zetic-ai/melange-cli/internal/cmd/version"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 )
@@ -48,7 +49,8 @@ Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupte
 	var noInput bool
 	pf.BoolVar(&noInput, "no-input", false, "Disable interactive prompts")
 
-	pf.String("host", "", "Override the Melange API host")
+	var host string
+	pf.StringVar(&host, "host", "", "Override the Melange API host")
 	if err := pf.MarkHidden("host"); err != nil {
 		// Not fatal — the flag is still functional.
 		_ = err
@@ -62,11 +64,13 @@ Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupte
 			f.IOStreams.SetNoColor(true)
 		}
 		f.NoInput = noInput
+		f.HostOverride = host
 		return nil
 	}
 
 	// Register subcommands.
 	cmd.AddCommand(version.NewCmdVersion(f))
+	cmd.AddCommand(auth.NewCmdAuth(f))
 
 	return cmd
 }

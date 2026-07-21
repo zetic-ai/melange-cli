@@ -42,7 +42,7 @@ func NewClient(opts Options) (*Client, error) {
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	var rt http.RoundTripper = base
+	rt := base
 	if opts.Debug != nil {
 		rt = &debugTransport{base: rt, out: opts.Debug}
 	}
