@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -68,7 +69,10 @@ func Run(args []string) int {
 		// map them to FlagError (exit 2) so the contract is met.
 		mappedErr := mapCobraError(err)
 		code := cmdutil.ExitCode(mappedErr)
-		if mappedErr != cmdutil.ErrSilent {
+		// errors.Is (not ==): typed errors may wrap ErrSilent to combine
+		// "already printed" with a specific exit code (e.g. exit 4 from
+		// `melange api` after it printed its own HTTP 401 summary).
+		if !errors.Is(mappedErr, cmdutil.ErrSilent) {
 			fmt.Fprintf(ios.ErrOut, "melange: %s\n", mappedErr.Error())
 		}
 		return code
