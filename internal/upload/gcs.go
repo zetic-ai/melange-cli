@@ -184,25 +184,31 @@ func (u *Uploader) UploadFile(ctx context.Context, sessionURI, path string, tota
 
 	offset := from
 	failures := 0
+	// recover handles a failed chunk attempt by asking the server what it
+	// actually committed. Forward progress since the last known offset
+	// restores full retry credit: a slow but moving link never exhausts
+	// MaxRetries, and StallTimeout stays a stall detector — only attempts
+	// that commit no new bytes consume the budget.
 	recover := func(cause error) error {
-		failures++
-		if failures > u.maxRetries() {
-			return fmt.Errorf("uploading %s: giving up after %d attempts: %w", path, failures, cause)
-		}
-		if err := u.sleep(ctx, backoffDelay(failures)); err != nil {
-			return err
-		}
 		committed, done, qerr := u.QueryOffset(ctx, sessionURI, total)
 		if qerr != nil {
 			return qerr
 		}
 		if done {
-			offset = total
-		} else {
-			offset = committed
+			committed = total
 		}
-		commit(offset)
-		return nil
+		if committed > offset {
+			failures = 0
+			offset = committed
+			commit(offset)
+			return nil
+		}
+		offset = committed // the server is authoritative, even backwards
+		failures++
+		if failures > u.maxRetries() {
+			return fmt.Errorf("uploading %s: giving up after %d attempts: %w", path, failures, cause)
+		}
+		return u.sleep(ctx, backoffDelay(failures))
 	}
 
 	for offset < total {
@@ -255,8 +261,9 @@ func (u *Uploader) UploadFile(ctx context.Context, sessionURI, path string, tota
 }
 
 // putChunk sends one Content-Range chunk. It returns the HTTP status and the
-// next offset implied by the response's Range header (-1 when absent).
-// Transport errors come back redacted (no URL, no query).
+// next offset implied by the response's Range header (0 when the header is
+// absent or malformed, per committedFromRange). Transport errors come back
+// redacted (no URL, no query).
 func (u *Uploader) putChunk(ctx context.Context, sessionURI string, f *os.File, offset, end, total int64) (status int, acked int64, err error) {
 	cctx := ctx
 	if u.StallTimeout > 0 {

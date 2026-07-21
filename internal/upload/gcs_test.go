@@ -48,6 +48,10 @@ type fakeGCS struct {
 	ackShort map[int64]int64
 	// hangPut delays every data PUT (stall simulation).
 	hangPut time.Duration
+	// slowCommit simulates a slow but progressing link: each data PUT
+	// commits at most this many bytes, then dawdles for hangPut so the
+	// client's stall budget expires before any response arrives.
+	slowCommit int64
 
 	srv *httptest.Server
 }
@@ -107,10 +111,32 @@ func (g *fakeGCS) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		body, err := io.ReadAll(r.Body)
-		require.NoError(g.t, err)
+		if g.slowCommit == 0 {
+			// In slow-link mode the client aborts mid-request, so a read
+			// error is expected; everywhere else the body must arrive whole.
+			require.NoError(g.t, err)
+		}
 		req.BodyLen = int64(len(body))
 		req.RangeStart = from
 		g.requests = append(g.requests, req)
+
+		if g.slowCommit > 0 {
+			// A prefix of the attempt commits before the client gives up on
+			// the response: real forward progress, observable only through a
+			// committed-offset query.
+			if n := min(g.slowCommit, int64(len(body))); from == g.committed && n > 0 {
+				g.object = append(g.object[:from], body[:n]...)
+				g.committed = from + n
+				if g.committed == total {
+					g.complete = true
+				}
+			}
+			g.mu.Unlock()
+			time.Sleep(g.hangPut)
+			g.mu.Lock()
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
 		if g.hangPut > 0 {
 			// A stalled chunk: the server dawdles past the client's stall
@@ -412,6 +438,48 @@ func TestUploadFileStallTimeoutIsRetryable(t *testing.T) {
 	err = u.UploadFile(context.Background(), uri, path, 100, 0, nil)
 	require.Error(t, err, "stalled chunks retry and eventually give up")
 	require.NotErrorIs(t, err, context.Canceled, "a stall is not a user cancel")
+}
+
+func TestUploadFileSlowLinkProgressRestoresRetryCredit(t *testing.T) {
+	g := newFakeGCS(t)
+	g.hangPut = 150 * time.Millisecond
+	g.slowCommit = chunk // one 256 KiB granule lands per timed-out attempt
+	u := testUploader()
+	u.ChunkSize = 4 * chunk
+	u.StallTimeout = 30 * time.Millisecond
+	u.MaxRetries = 2
+	size := 6 * chunk
+	path := tempFile(t, size)
+
+	uri, err := u.StartSession(context.Background(), g.signedURL())
+	require.NoError(t, err)
+
+	// Every attempt blows the stall budget, but each one commits a granule:
+	// forward progress must restore retry credit, so the whole file lands
+	// even though total attempts far exceed MaxRetries.
+	require.NoError(t, u.UploadFile(context.Background(), uri, path, int64(size), 0, nil),
+		"a slow but progressing link must not exhaust the retry budget")
+	assert.Len(t, g.dataPuts(), 6, "one granule committed per attempt")
+	assert.Equal(t, readFileT(t, path), g.object)
+	assert.True(t, g.complete)
+}
+
+func TestUploadFileGenuineStallExhaustsRetryBudget(t *testing.T) {
+	g := newFakeGCS(t)
+	g.hangPut = 200 * time.Millisecond
+	u := testUploader()
+	u.StallTimeout = 20 * time.Millisecond
+	u.MaxRetries = 2
+	path := tempFile(t, 100)
+
+	uri, err := u.StartSession(context.Background(), g.signedURL())
+	require.NoError(t, err)
+
+	err = u.UploadFile(context.Background(), uri, path, 100, 0, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "the give-up error carries the inactivity cause")
+	assert.Contains(t, err.Error(), "giving up after")
+	assert.Len(t, g.dataPuts(), 3, "a stall with zero progress consumes the budget: MaxRetries+1 attempts")
 }
 
 func TestTransportErrorsAreRedacted(t *testing.T) {
