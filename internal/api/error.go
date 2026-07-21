@@ -1,0 +1,141 @@
+// Package api provides the HTTP client wrapper for the Melange public API:
+// transport chain (auth, retry, debug), error-envelope decoding, and the
+// hand-written calls that will later be replaced by a generated client.
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// maxErrorBodyBytes bounds how much of an error response body is read.
+const maxErrorBodyBytes = 32 * 1024
+
+// FieldError describes a single invalid field in a request.
+type FieldError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// Error is a non-2xx response from the Melange API, decoded from the server
+// error envelope when present.
+type Error struct {
+	StatusCode int
+	Type       string // e.g. authentication_error, rate_limit_error, invalid_request_error
+	Message    string
+	Fields     []FieldError
+	RequestID  string        // top-level request_id, or X-Request-ID header fallback
+	RetryAfter time.Duration // parsed Retry-After header, 0 if absent
+}
+
+// Error implements the error interface.
+func (e *Error) Error() string {
+	s := fmt.Sprintf("melange API: %s (%s, HTTP %d", e.Message, e.Type, e.StatusCode)
+	if e.RequestID != "" {
+		s += ", request " + e.RequestID
+	}
+	return s + ")"
+}
+
+// Retryable reports whether the request may be safely retried.
+func (e *Error) Retryable() bool {
+	switch e.StatusCode {
+	case http.StatusTooManyRequests,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+// errorEnvelope mirrors the server error body:
+//
+//	{"type":"error","error":{"type":"...","message":"...","fields":[...]},"request_id":"..."}
+type errorEnvelope struct {
+	Type  string `json:"type"`
+	Error struct {
+		Type    string       `json:"type"`
+		Message string       `json:"message"`
+		Fields  []FieldError `json:"fields"`
+	} `json:"error"`
+	RequestID string `json:"request_id"`
+}
+
+// HandleResponse returns nil for 2xx responses (leaving the body untouched);
+// otherwise it consumes the body and returns an *Error. Exported so callers
+// using Do directly can reuse the envelope decoding.
+func HandleResponse(resp *http.Response) error {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	apiErr := &Error{
+		StatusCode: resp.StatusCode,
+		RequestID:  resp.Header.Get("X-Request-ID"),
+		RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+	}
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+
+	var env errorEnvelope
+	if err := json.Unmarshal(body, &env); err == nil &&
+		(env.Error.Type != "" || env.Error.Message != "") {
+		apiErr.Type = env.Error.Type
+		apiErr.Message = env.Error.Message
+		apiErr.Fields = env.Error.Fields
+		if env.RequestID != "" {
+			apiErr.RequestID = env.RequestID
+		}
+		return apiErr
+	}
+
+	// Non-envelope body (proxy, load balancer, GCS, ...): derive from status.
+	apiErr.Type = fallbackType(resp.StatusCode)
+	apiErr.Message = fallbackMessage(body, resp.StatusCode)
+	return apiErr
+}
+
+// fallbackType derives an error type from the status code when the body
+// carries no envelope.
+func fallbackType(status int) string {
+	if status == http.StatusUnauthorized {
+		return "authentication_error"
+	}
+	return "http_error"
+}
+
+// fallbackMessage is the first 200 bytes of the body, or the status text when
+// the body is empty.
+func fallbackMessage(body []byte, status int) string {
+	msg := strings.TrimSpace(string(body))
+	if msg == "" {
+		return http.StatusText(status)
+	}
+	if len(msg) > 200 {
+		msg = msg[:200]
+	}
+	return msg
+}
+
+// parseRetryAfter parses a Retry-After header value: either delay-seconds or
+// an HTTP date. Returns 0 when absent or unparsable.
+func parseRetryAfter(value string) time.Duration {
+	if value == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(value); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(value); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
+}
