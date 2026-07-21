@@ -1,0 +1,47 @@
+# Release pipeline: runs GoReleaser on every pushed v* tag.
+#
+# Secrets:
+#   GITHUB_TOKEN      implicit (provided by Actions); `contents: write`
+#                     below lets it create the GitHub release + assets.
+#   TAP_GITHUB_TOKEN  required: a PAT with push access to
+#                     zetic-ai/homebrew-tap for publishing the formula.
+#
+# SBOM generation requires syft on PATH; the download-syft step below
+# installs it before GoReleaser runs.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    name: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so GoReleaser can build the changelog.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install syft (for SBOM generation)
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
