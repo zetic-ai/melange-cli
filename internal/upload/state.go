@@ -2,11 +2,17 @@ package upload
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 )
+
+// ErrStateCorrupt reports a state file that exists but cannot be parsed.
+// Callers may treat it as missing (after warning) and rebuild the session
+// state from the server.
+var ErrStateCorrupt = errors.New("state file corrupt")
 
 // State is the persisted record of an in-flight upload session, stored at
 // ${XDG_STATE_HOME:-~/.local/state}/melange/uploads/<session-id>.json.
@@ -104,7 +110,8 @@ func (s *State) Save() error {
 }
 
 // LoadState reads the state file for sessionID. A missing file surfaces as
-// os.ErrNotExist so callers can fall back to server-side session state.
+// os.ErrNotExist and an unparsable one as ErrStateCorrupt, so callers can
+// fall back to server-side session state in both cases.
 func LoadState(sessionID string) (*State, error) {
 	path, err := statePath(sessionID)
 	if err != nil {
@@ -116,7 +123,8 @@ func LoadState(sessionID string) (*State, error) {
 	}
 	var st State
 	if err := json.Unmarshal(data, &st); err != nil {
-		return nil, fmt.Errorf("parsing upload state %s: %w", path, err)
+		return nil, fmt.Errorf("%w: delete %s or rerun --resume %s to rebuild from the server (%v)",
+			ErrStateCorrupt, path, sessionID, err)
 	}
 	return &st, nil
 }

@@ -71,6 +71,22 @@ func TestLoadStateMissingIsNotExist(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+func TestLoadStateCorruptHasRemediation(t *testing.T) {
+	dir := stateEnv(t)
+	path := filepath.Join(dir, "melange", "uploads", "up_bad.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o600))
+
+	_, err := upload.LoadState("up_bad")
+	require.ErrorIs(t, err, upload.ErrStateCorrupt, "corruption must be distinguishable from a missing file")
+	assert.NotErrorIs(t, err, os.ErrNotExist)
+	msg := err.Error()
+	assert.Contains(t, msg, "state file corrupt")
+	assert.Contains(t, msg, "delete "+path)
+	assert.Contains(t, msg, "--resume up_bad")
+	assert.Contains(t, msg, "rebuild from the server")
+}
+
 func TestStateRejectsPathySessionIDs(t *testing.T) {
 	stateEnv(t)
 	for _, id := range []string{"", "../evil", "a/b", "a\\b", "up id"} {

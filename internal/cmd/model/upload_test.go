@@ -390,6 +390,11 @@ func TestUploadCompleteReportsFailureAsExit1(t *testing.T) {
 	assert.Equal(t, 1, cmdutil.ExitCode(err), "HTTP 200 with state=FAILED is a failed outcome")
 	assert.ErrorIs(t, err, cmdutil.ErrSilent)
 	assert.Contains(t, e.errOut.String(), "crc32c_mismatch:f0")
+
+	// FAILED is terminal: keeping the state file (with session URIs) would
+	// only make a later --resume confusing.
+	_, lerr := upload.LoadState("up_1")
+	require.ErrorIs(t, lerr, os.ErrNotExist, "state file must be removed for a terminal FAILED session")
 }
 
 func TestUploadActiveSessionConflict(t *testing.T) {
@@ -470,6 +475,11 @@ func TestResumeWithStateContinuesFromCommittedOffset(t *testing.T) {
 	}
 	require.NoError(t, st.Save())
 
+	// Resume first confirms the session is still resumable server-side.
+	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads/up_1"),
+		jsonStub(200, `{
+			"id":"up_1","state":"UPLOADING","tag":"zt_x","expires_at":"2026-07-22T10:00:00Z",
+			"files":[{"client_file_id":"f0","canonical_path":"zt_x/model.onnx","uploaded":false,"verified":false}]}`))
 	// Committed-offset query: 500 bytes are already there.
 	e.reg.Register(gcsPut("/sess-f0", "bytes */1000"),
 		httpmock.WithHeader(httpmock.StatusStringResponse(308, ""), "Range", "bytes=0-499"))
@@ -525,6 +535,76 @@ func TestResumeWithoutStateFallsBackToServerArrival(t *testing.T) {
 	require.NotNil(t, reissue)
 	body := requestBody(t, reissue)
 	assert.Equal(t, []any{"f1"}, body["client_file_ids"])
+}
+
+func TestResumeTerminalServerStateErrorsAndRemovesState(t *testing.T) {
+	e := setup(t)
+	_, model, _ := modelDir(t)
+	st := &upload.State{
+		SessionID: "up_1",
+		Repo:      repoArg,
+		Tag:       "zt_x",
+		Files: []*upload.StateFile{{
+			ClientFileID: "f0", LocalPath: model, CanonicalPath: "zt_x/model.onnx",
+			SessionURI: sessF0, Size: 1000,
+		}},
+	}
+	require.NoError(t, st.Save())
+
+	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads/up_1"),
+		jsonStub(200, `{"id":"up_1","state":"CANCELED","tag":"zt_x","expires_at":"2026-07-22T10:00:00Z","files":[]}`))
+
+	err := run(t, e, "upload", "--resume", "up_1", "-R", repoArg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session up_1 is canceled; start a new upload")
+	e.reg.Verify(t) // no GCS traffic, no reissue: only the session GET
+
+	_, lerr := upload.LoadState("up_1")
+	require.ErrorIs(t, lerr, os.ErrNotExist, "terminal sessions must not keep local state")
+	assertNoSecretLeaks(t, e)
+}
+
+func TestResumeExpiredSessionWithoutStateSaysTerminal(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads/up_7"),
+		jsonStub(200, `{"id":"up_7","state":"EXPIRED","tag":"zt_y","expires_at":"2026-07-20T10:00:00Z","files":[]}`))
+
+	err := run(t, e, "upload", "--resume", "up_7", "-R", repoArg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session up_7 is expired; start a new upload")
+	assert.NotContains(t, err.Error(), "MODEL_FILE", "terminal state wins over the missing-files hint")
+	require.Len(t, e.reg.Requests, 1, "no reissue may be attempted for a terminal session")
+}
+
+func TestResumeCorruptStateRebuildsFromServer(t *testing.T) {
+	e := setup(t)
+	_, model, input := modelDir(t)
+
+	dir, err := upload.StateDir()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "up_7.json"), []byte("{corrupt"), 0o600))
+
+	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads/up_7"),
+		jsonStub(200, `{
+			"id":"up_7","state":"UPLOADING","tag":"zt_y","expires_at":"2026-07-22T10:00:00Z",
+			"files":[
+				{"client_file_id":"f0","canonical_path":"zt_y/model.onnx","uploaded":true,"verified":false},
+				{"client_file_id":"f1","canonical_path":"zt_y/inputs/00_audio.bin","uploaded":false,"verified":false}
+			]}`))
+	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models/uploads/up_7/files"),
+		jsonStub(200,
+			`{"expires_at":"2026-07-22T10:00:00Z","files":[`+issuedFile("f1", "zt_y/inputs/00_audio.bin", sigF1)+`]}`))
+	e.reg.Register(gcsStart("/sig-f1"), locationResponse(201, sessF1))
+	e.reg.Register(gcsPut("/sess-f1", "bytes 0-499/500"), httpmock.StatusStringResponse(200, ""))
+	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models/uploads/up_7/complete"),
+		jsonStub(200, completeOK()))
+
+	require.NoError(t, run(t, e, "upload", "--resume", "up_7", "-R", repoArg, model, "--input", input),
+		"a corrupt state file must degrade to the rebuild-from-server path")
+	e.reg.Verify(t)
+	assert.Contains(t, e.errOut.String(), "state file corrupt", "the corruption is surfaced as a warning")
+	assertNoSecretLeaks(t, e)
 }
 
 func TestResumeWithoutStateAndWithoutFilesErrors(t *testing.T) {

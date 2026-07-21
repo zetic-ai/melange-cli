@@ -564,6 +564,9 @@ func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWi
 	if strings.EqualFold(out.State, "FAILED") {
 		fmt.Fprintf(ios.ErrOut, "✗ Upload verification failed: %s (session %s)\n", deref(out.FailureCode), out.Id)
 		fmt.Fprintf(ios.ErrOut, "Fix the reported file and upload again.\n")
+		// FAILED is terminal: the session can never be resumed, so keeping
+		// the state file (and its session URIs) would only mislead --resume.
+		_ = upload.RemoveState(st.SessionID)
 		if opts.exporter != nil {
 			_ = opts.exporter.Write(ios, json.RawMessage(resp.Body))
 		}
@@ -609,23 +612,38 @@ func runResume(ctx context.Context, opts *uploadOptions, args []string) error {
 				"session %s belongs to %s, not %s", opts.resumeID, st.Repo, opts.repo)}
 		}
 	case errors.Is(err, os.ErrNotExist):
-		st, err = rebuildStateFromServer(ctx, opts, g, args)
+		st = nil // rebuild from the server below
+	case errors.Is(err, upload.ErrStateCorrupt):
+		fmt.Fprintf(opts.f.IOStreams.ErrOut, "! %v\n", err)
+		st = nil // treat as missing: rebuild from the server below
+	default:
+		return err
+	}
+
+	// The server's session state is authoritative: a terminal session can
+	// never be resumed, with or without local state.
+	detail, err := fetchUploadSession(ctx, opts, g)
+	if err != nil {
+		return err
+	}
+	if terminalSessionState(detail.State) {
+		_ = upload.RemoveState(opts.resumeID)
+		return fmt.Errorf("session %s is %s; start a new upload", opts.resumeID, strings.ToLower(detail.State))
+	}
+
+	if st == nil {
+		st, err = rebuildStateFromServer(ctx, opts, g, detail, args)
 		if err != nil {
 			return err
 		}
-	default:
-		return err
 	}
 
 	fmt.Fprintf(opts.f.IOStreams.ErrOut, "Resuming upload session %s (%d files)\n", st.SessionID, len(st.Files))
 	return transferAndComplete(ctx, opts, g, st)
 }
 
-// rebuildStateFromServer reconstructs upload state for --resume when the
-// local state file is gone: server arrival status decides which files are
-// already uploaded, local files are matched by their canonical destination,
-// and fresh URLs are reissued for the remainder.
-func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, args []string) (*upload.State, error) {
+// fetchUploadSession GETs one upload session's server-side detail.
+func fetchUploadSession(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses) (*gen.ModelUploadDetailResponse, error) {
 	resp, err := g.GetModelUploadWithResponse(ctx, opts.account, opts.name, opts.resumeID)
 	if err != nil {
 		return nil, err
@@ -633,11 +651,29 @@ func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.Cli
 	if aerr := genError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		return nil, aerr
 	}
-	detail := resp.JSON200
-	if detail == nil {
+	if resp.JSON200 == nil {
 		return nil, fmt.Errorf("unexpected response fetching upload session (HTTP %d)", resp.StatusCode())
 	}
+	return resp.JSON200, nil
+}
 
+// terminalSessionState reports whether a session state (ADR-5 vocabulary,
+// compared case-insensitively) is terminal — such a session can never be
+// resumed.
+func terminalSessionState(state string) bool {
+	for _, terminal := range []string{"FAILED", "CANCELED", "EXPIRED"} {
+		if strings.EqualFold(state, terminal) {
+			return true
+		}
+	}
+	return false
+}
+
+// rebuildStateFromServer reconstructs upload state for --resume when the
+// local state file is gone (or corrupt): server arrival status decides which
+// files are already uploaded, local files are matched by their canonical
+// destination, and fresh URLs are reissued for the remainder.
+func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, detail *gen.ModelUploadDetailResponse, args []string) (*upload.State, error) {
 	if len(args) == 0 && opts.inputManifest == "" {
 		return nil, fmt.Errorf(
 			"no local state found for session %s; pass the original MODEL_FILE/--input/--external-data (or --input-manifest) arguments so local files can be matched to the session", opts.resumeID)
@@ -861,7 +897,7 @@ func waitForModel(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResp
 	if perr := printStatus(f, exporter, last, raw, key, account+"/"+name); perr != nil {
 		return perr
 	}
-	if last.State == gen.Failed {
+	if strings.EqualFold(string(last.State), string(gen.Failed)) {
 		fmt.Fprintf(ios.ErrOut, "✗ Model processing failed: %s\n", deref(last.FailureCode))
 		return cmdutil.ErrSilent
 	}
