@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,6 +86,31 @@ func TestHandleResponseNonJSONBodyTruncatedTo200Bytes(t *testing.T) {
 	var apiErr *api.Error
 	require.ErrorAs(t, err, &apiErr)
 	assert.Len(t, apiErr.Message, 200)
+}
+
+func TestHandleResponseEnvelopeShapeWithoutDiscriminatorFallsBack(t *testing.T) {
+	// Envelope-shaped JSON without top-level type:"error" must not be trusted
+	// as the Melange envelope (e.g. a proxy echoing similar JSON).
+	body := `{"error":{"type":"proxy_error","message":"upstream exploded"}}`
+	err := api.HandleResponse(makeResponse(502, body, nil))
+
+	var apiErr *api.Error
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, "http_error", apiErr.Type)
+	assert.Equal(t, body, apiErr.Message)
+	assert.Empty(t, apiErr.Fields)
+}
+
+func TestHandleResponseTruncationPreservesRuneBoundary(t *testing.T) {
+	// 199 ASCII bytes followed by a 2-byte rune straddling the 200-byte cap:
+	// a byte-wise cut would leave a broken UTF-8 sequence.
+	body := strings.Repeat("x", 199) + "é" + strings.Repeat("y", 50)
+	err := api.HandleResponse(makeResponse(500, body, nil))
+
+	var apiErr *api.Error
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, strings.Repeat("x", 199), apiErr.Message)
+	assert.True(t, utf8.ValidString(apiErr.Message))
 }
 
 func TestHandleResponseEmptyBodyUsesStatusText(t *testing.T) {

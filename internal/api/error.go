@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // maxErrorBodyBytes bounds how much of an error response body is read.
@@ -84,7 +85,7 @@ func HandleResponse(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 
 	var env errorEnvelope
-	if err := json.Unmarshal(body, &env); err == nil &&
+	if err := json.Unmarshal(body, &env); err == nil && env.Type == "error" &&
 		(env.Error.Type != "" || env.Error.Message != "") {
 		apiErr.Type = env.Error.Type
 		apiErr.Message = env.Error.Message
@@ -110,15 +111,20 @@ func fallbackType(status int) string {
 	return "http_error"
 }
 
-// fallbackMessage is the first 200 bytes of the body, or the status text when
-// the body is empty.
+// fallbackMessage is the first 200 bytes of the body (never splitting a
+// multibyte UTF-8 rune), or the status text when the body is empty.
 func fallbackMessage(body []byte, status int) string {
 	msg := strings.TrimSpace(string(body))
 	if msg == "" {
 		return http.StatusText(status)
 	}
 	if len(msg) > 200 {
-		msg = msg[:200]
+		cut := 200
+		// Walk back to a rune boundary so no partial character survives.
+		for cut > 0 && !utf8.RuneStart(msg[cut]) {
+			cut--
+		}
+		msg = msg[:cut]
 	}
 	return msg
 }
