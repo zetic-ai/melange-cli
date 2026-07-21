@@ -27,8 +27,8 @@ func TestExitCode(t *testing.T) {
 			want: 1,
 		},
 		{
-			name: "SilentError → 1",
-			err:  cmdutil.SilentError,
+			name: "ErrSilent → 1",
+			err:  cmdutil.ErrSilent,
 			want: 1,
 		},
 		{
@@ -85,8 +85,8 @@ func TestAuthError(t *testing.T) {
 	assert.Equal(t, inner, ae.Unwrap())
 }
 
-func TestSilentError(t *testing.T) {
-	assert.Error(t, cmdutil.SilentError)
-	// SilentError is a sentinel — it equals itself
-	assert.True(t, errors.Is(cmdutil.SilentError, cmdutil.SilentError))
+func TestErrSilent(t *testing.T) {
+	assert.Error(t, cmdutil.ErrSilent)
+	// ErrSilent is a sentinel — it equals itself
+	assert.True(t, errors.Is(cmdutil.ErrSilent, cmdutil.ErrSilent))
 }

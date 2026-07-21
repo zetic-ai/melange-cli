@@ -7,9 +7,9 @@ import (
 	"errors"
 )
 
-// SilentError is a sentinel that signals the command has already printed its
+// ErrSilent is a sentinel that signals the command has already printed its
 // error and the runner should exit 1 without printing anything further.
-var SilentError = errors.New("silent error")
+var ErrSilent = errors.New("silent error")
 
 // FlagError wraps a flag/argument parse error. The runner maps it to exit 2
 // and prints usage.
@@ -33,7 +33,7 @@ func (e AuthError) Unwrap() error { return e.Err }
 // melange exit-code contract:
 //
 //	0   nil (success)
-//	1   generic error / SilentError
+//	1   generic error / ErrSilent
 //	2   FlagError (usage error)
 //	4   AuthError
 //	130 context.Canceled (SIGINT)

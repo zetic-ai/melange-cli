@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Env variable names — centralised so callers don't hard-code strings.
+// Env variable names — centralized so callers don't hard-code strings.
 const (
 	EnvHost       = "MELANGE_HOST"
 	EnvAPIKey     = "MELANGE_API_KEY"

@@ -36,7 +36,7 @@ Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupte
 
 	// Wrap cobra's flag parse errors into FlagError so exit-code mapping works.
 	cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
-		return cmdutil.FlagError{Err: fmt.Errorf("%w\nRun '%s --help' for usage.", err, c.CommandPath())}
+		return cmdutil.FlagError{Err: fmt.Errorf("%w\nRun '%s --help' for usage", err, c.CommandPath())}
 	})
 
 	// Persistent flags

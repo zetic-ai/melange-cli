@@ -35,13 +35,13 @@ func TestTest(t *testing.T) {
 
 func TestColorEnabled(t *testing.T) {
 	tests := []struct {
-		name           string
-		stdoutTTY      bool
-		noColor        string // NO_COLOR env value ("" means unset)
-		term           string // TERM env value
-		cliForcedColor string // CLICOLOR_FORCE env value
-		noColorOverride bool  // --no-color flag
-		want           bool
+		name            string
+		stdoutTTY       bool
+		noColor         string // NO_COLOR env value ("" means unset)
+		term            string // TERM env value
+		cliForcedColor  string // CLICOLOR_FORCE env value
+		noColorOverride bool   // --no-color flag
+		want            bool
 	}{
 		{
 			name:      "tty, no env overrides → color enabled",

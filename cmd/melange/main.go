@@ -27,7 +27,7 @@ func Run(args []string) int {
 
 	// Build factory.
 	f := &cmdutil.Factory{
-		IOStreams:   ios,
+		IOStreams:  ios,
 		Executable: executable(),
 		Version:    build.Version,
 		Config: func() (*config.Config, error) {
@@ -48,7 +48,7 @@ func Run(args []string) int {
 		// map them to FlagError (exit 2) so the contract is met.
 		mappedErr := mapCobraError(err)
 		code := cmdutil.ExitCode(mappedErr)
-		if mappedErr != cmdutil.SilentError {
+		if mappedErr != cmdutil.ErrSilent {
 			fmt.Fprintf(ios.ErrOut, "melange: %s\n", mappedErr.Error())
 		}
 		return code

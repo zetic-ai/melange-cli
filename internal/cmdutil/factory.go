@@ -8,7 +8,7 @@ import (
 // Factory carries the shared dependencies that every command receives.
 // HTTP client slots are added in M1 — do not add them here.
 type Factory struct {
-	IOStreams   *iostreams.IOStreams
+	IOStreams  *iostreams.IOStreams
 	Config     func() (*config.Config, error)
 	Executable string
 	Version    string
