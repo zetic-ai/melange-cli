@@ -209,6 +209,102 @@
         "title": "CreateProjectRequest",
         "type": "object"
       },
+      "CreateRepoRequest": {
+        "description": "POST /v1/repos body — everything CreateProjectRequest validates plus\ncreation-time configuration, so a single POST yields a fully-configured\nrepo (no follow-up PATCH). The legacy `POST /v1/projects` keeps the base\nschema and ignores these fields.\n\nSemantics mirror UpdateRepoRequest: an explicit `use_case` wins; tags\nwithout `use_case` derive it (the model invariant). `is_private` needs no\nowner check at create time — the creator is the owner.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_private": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Private"
+          },
+          "model_type": {
+            "enum": [
+              "general",
+              "llm"
+            ],
+            "title": "Model Type",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,49}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "readme": {
+            "anyOf": [
+              {
+                "maxLength": 65536,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readme"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 50,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "use_case": {
+            "anyOf": [
+              {
+                "enum": [
+                  "vision",
+                  "nlp",
+                  "llm",
+                  "speech",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Case"
+          }
+        },
+        "required": [
+          "name",
+          "model_type"
+        ],
+        "title": "CreateRepoRequest",
+        "type": "object"
+      },
       "CreateUploadRequest": {
         "properties": {
           "files": {
@@ -1274,7 +1370,7 @@
     "description": "External developer API for Zetic. Authenticate with `Authorization: Bearer <token>`.",
     "title": "Zetic Public API",
     "version": "1.0.0",
-    "x-backend-commit": "c6e506ea364b7201eae3d765917c30402b0a8c52"
+    "x-backend-commit": "e5955cf071ab45fe93f454ea7f729bff731c5421"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -1735,7 +1831,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateProjectRequest"
+                "$ref": "#/components/schemas/CreateRepoRequest"
               }
             }
           },
@@ -2017,7 +2113,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}": {
       "delete": {
-        "description": "Cancel an active session (idempotent); staging cleanup is best-effort.",
+        "description": "Cancel an active session (idempotent); staging cleanup is best-effort.\n\nAccepts every active state, including VERIFYING: if a completion request\ncrashed mid-flight and left the session wedged in VERIFYING, cancel is\nthe self-serve recovery that releases the repository's active-session\nslot.",
         "operationId": "cancel_model_upload",
         "parameters": [
           {
@@ -2127,7 +2223,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete": {
       "post": {
-        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed — not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.",
+        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed — not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.\n\nSession expiry is deliberately not checked here: an expired session the\ncleanup sweep has not processed yet may still complete (the sweep\nre-checks state under a lock, so the race resolves to one winner).\n\nIf the account's conversion quota is exhausted the request returns the\nstandard 429 `rate_limit_error`: the conversion has NOT started and the\nsession stays DISPATCH_PENDING — complete again after resolving the\nquota to retry the dispatch.",
         "operationId": "complete_model_upload",
         "parameters": [
           {

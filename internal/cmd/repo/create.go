@@ -74,7 +74,7 @@ Exit codes: 0 created, 1 API error (including a 409 name conflict and
 
 			body := gen.CreateRepoJSONRequestBody{
 				Name:      name,
-				ModelType: gen.CreateProjectRequestModelType(modelType),
+				ModelType: gen.CreateRepoRequestModelType(modelType),
 			}
 			if description != "" {
 				body.Description = &description

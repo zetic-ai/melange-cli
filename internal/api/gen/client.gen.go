@@ -50,6 +50,51 @@ func (e CreateProjectRequestModelType) Valid() bool {
 	}
 }
 
+// Defines values for CreateRepoRequestModelType.
+const (
+	CreateRepoRequestModelTypeGeneral CreateRepoRequestModelType = "general"
+	CreateRepoRequestModelTypeLlm     CreateRepoRequestModelType = "llm"
+)
+
+// Valid indicates whether the value is a known member of the CreateRepoRequestModelType enum.
+func (e CreateRepoRequestModelType) Valid() bool {
+	switch e {
+	case CreateRepoRequestModelTypeGeneral:
+		return true
+	case CreateRepoRequestModelTypeLlm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateRepoRequestUseCase.
+const (
+	CreateRepoRequestUseCaseLlm    CreateRepoRequestUseCase = "llm"
+	CreateRepoRequestUseCaseNlp    CreateRepoRequestUseCase = "nlp"
+	CreateRepoRequestUseCaseOther  CreateRepoRequestUseCase = "other"
+	CreateRepoRequestUseCaseSpeech CreateRepoRequestUseCase = "speech"
+	CreateRepoRequestUseCaseVision CreateRepoRequestUseCase = "vision"
+)
+
+// Valid indicates whether the value is a known member of the CreateRepoRequestUseCase enum.
+func (e CreateRepoRequestUseCase) Valid() bool {
+	switch e {
+	case CreateRepoRequestUseCaseLlm:
+		return true
+	case CreateRepoRequestUseCaseNlp:
+		return true
+	case CreateRepoRequestUseCaseOther:
+		return true
+	case CreateRepoRequestUseCaseSpeech:
+		return true
+	case CreateRepoRequestUseCaseVision:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ManifestFileRole.
 const (
 	ExternalData ManifestFileRole = "external_data"
@@ -194,6 +239,30 @@ type CreateProjectRequest struct {
 
 // CreateProjectRequestModelType defines model for CreateProjectRequest.ModelType.
 type CreateProjectRequestModelType string
+
+// CreateRepoRequest POST /v1/repos body — everything CreateProjectRequest validates plus
+// creation-time configuration, so a single POST yields a fully-configured
+// repo (no follow-up PATCH). The legacy `POST /v1/projects` keeps the base
+// schema and ignores these fields.
+//
+// Semantics mirror UpdateRepoRequest: an explicit `use_case` wins; tags
+// without `use_case` derive it (the model invariant). `is_private` needs no
+// owner check at create time — the creator is the owner.
+type CreateRepoRequest struct {
+	Description *string                    `json:"description,omitempty"`
+	IsPrivate   *bool                      `json:"is_private,omitempty"`
+	ModelType   CreateRepoRequestModelType `json:"model_type"`
+	Name        string                     `json:"name"`
+	Readme      *string                    `json:"readme,omitempty"`
+	Tags        *[]string                  `json:"tags,omitempty"`
+	UseCase     *CreateRepoRequestUseCase  `json:"use_case,omitempty"`
+}
+
+// CreateRepoRequestModelType defines model for CreateRepoRequest.ModelType.
+type CreateRepoRequestModelType string
+
+// CreateRepoRequestUseCase defines model for CreateRepoRequest.UseCase.
+type CreateRepoRequestUseCase string
 
 // CreateUploadRequest defines model for CreateUploadRequest.
 type CreateUploadRequest struct {
@@ -466,7 +535,7 @@ type ZeticPublicUploadsCompleteUploadJSONRequestBody = CompleteUploadRequest
 type ZeticPublicUploadsReissueUploadUrlsJSONRequestBody = ReissueUploadUrlsRequest
 
 // CreateRepoJSONRequestBody defines body for CreateRepo for application/json ContentType.
-type CreateRepoJSONRequestBody = CreateProjectRequest
+type CreateRepoJSONRequestBody = CreateRepoRequest
 
 // UpdateRepoJSONRequestBody defines body for UpdateRepo for application/json ContentType.
 type UpdateRepoJSONRequestBody = UpdateRepoRequest
@@ -744,6 +813,11 @@ type ClientInterface interface {
 	//
 	// Cancel an active session (idempotent); staging cleanup is best-effort.
 	//
+	// Accepts every active state, including VERIFYING: if a completion request
+	// crashed mid-flight and left the session wedged in VERIFYING, cancel is
+	// the self-serve recovery that releases the repository's active-session
+	// slot.
+	//
 	// Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
 	CancelModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -769,6 +843,15 @@ type ClientInterface interface {
 	// session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
 	// state without re-verifying and without double-dispatching; a replay on
 	// DISPATCH_PENDING retries a failed conversion trigger.
+	//
+	// Session expiry is deliberately not checked here: an expired session the
+	// cleanup sweep has not processed yet may still complete (the sweep
+	// re-checks state under a lock, so the race resolves to one winner).
+	//
+	// If the account's conversion quota is exhausted the request returns the
+	// standard 429 `rate_limit_error`: the conversion has NOT started and the
+	// session stays DISPATCH_PENDING — complete again after resolving the
+	// quota to retry the dispatch.
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
 	CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1226,6 +1309,11 @@ func (c *Client) ListModelUploads(ctx context.Context, accountName string, repoN
 //
 // Cancel an active session (idempotent); staging cleanup is best-effort.
 //
+// Accepts every active state, including VERIFYING: if a completion request
+// crashed mid-flight and left the session wedged in VERIFYING, cancel is
+// the self-serve recovery that releases the repository's active-session
+// slot.
+//
 // Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
 func (c *Client) CancelModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCancelModelUploadRequest(c.Server, accountName, repoName, uploadId)
@@ -1271,6 +1359,15 @@ func (c *Client) GetModelUpload(ctx context.Context, accountName string, repoNam
 // session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
 // state without re-verifying and without double-dispatching; a replay on
 // DISPATCH_PENDING retries a failed conversion trigger.
+//
+// Session expiry is deliberately not checked here: an expired session the
+// cleanup sweep has not processed yet may still complete (the sweep
+// re-checks state under a lock, so the race resolves to one winner).
+//
+// If the account's conversion quota is exhausted the request returns the
+// standard 429 `rate_limit_error`: the conversion has NOT started and the
+// session stays DISPATCH_PENDING — complete again after resolving the
+// quota to retry the dispatch.
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
 func (c *Client) CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2573,6 +2670,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Cancel an active session (idempotent); staging cleanup is best-effort.
 	//
+	// Accepts every active state, including VERIFYING: if a completion request
+	// crashed mid-flight and left the session wedged in VERIFYING, cancel is
+	// the self-serve recovery that releases the repository's active-session
+	// slot.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
@@ -2602,6 +2704,15 @@ type ClientWithResponsesInterface interface {
 	// session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
 	// state without re-verifying and without double-dispatching; a replay on
 	// DISPATCH_PENDING retries a failed conversion trigger.
+	//
+	// Session expiry is deliberately not checked here: an expired session the
+	// cleanup sweep has not processed yet may still complete (the sweep
+	// re-checks state under a lock, so the race resolves to one winner).
+	//
+	// If the account's conversion quota is exhausted the request returns the
+	// standard 429 `rate_limit_error`: the conversion has NOT started and the
+	// session stays DISPATCH_PENDING — complete again after resolving the
+	// quota to retry the dispatch.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -3843,6 +3954,11 @@ func (c *ClientWithResponses) ListModelUploadsWithResponse(ctx context.Context, 
 //
 // Cancel an active session (idempotent); staging cleanup is best-effort.
 //
+// Accepts every active state, including VERIFYING: if a completion request
+// crashed mid-flight and left the session wedged in VERIFYING, cancel is
+// the self-serve recovery that releases the repository's active-session
+// slot.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `CancelModelUpload` operationId).
@@ -3884,6 +4000,15 @@ func (c *ClientWithResponses) GetModelUploadWithResponse(ctx context.Context, ac
 // session is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current
 // state without re-verifying and without double-dispatching; a replay on
 // DISPATCH_PENDING retries a failed conversion trigger.
+//
+// Session expiry is deliberately not checked here: an expired session the
+// cleanup sweep has not processed yet may still complete (the sweep
+// re-checks state under a lock, so the race resolves to one winner).
+//
+// If the account's conversion quota is exhausted the request returns the
+// standard 429 `rate_limit_error`: the conversion has NOT started and the
+// session stays DISPATCH_PENDING — complete again after resolving the
+// quota to retry the dispatch.
 //
 // Returns a wrapper object for the known response body format(s).
 //
