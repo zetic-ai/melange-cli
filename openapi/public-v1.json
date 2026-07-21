@@ -555,6 +555,74 @@
         "title": "CreateUploadResponse",
         "type": "object"
       },
+      "DownloadArtifact": {
+        "description": "One downloadable file of an authorized target.\n\n`url` is a time-limited signed GET URL (valid until `expires_at` of the\nenclosing authorization). `size` is per-file and only known for\nsingle-file targets (the stored `download_size` is the aggregate);\n`checksum` is null when the pipeline recorded none for the file.",
+        "properties": {
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "DownloadArtifact",
+        "type": "object"
+      },
+      "DownloadAuthorizationResponse": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/DownloadArtifact"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "authorization_id": {
+            "title": "Authorization Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_id",
+          "expires_at",
+          "artifacts"
+        ],
+        "title": "DownloadAuthorizationResponse",
+        "type": "object"
+      },
       "ErrorEnvelope": {
         "description": "Standard error envelope returned by every non-2xx response of the public API.",
         "properties": {
@@ -658,6 +726,342 @@
         "title": "FileArrival",
         "type": "object"
       },
+      "GeneralLatencySummary": {
+        "properties": {
+          "all": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fp16": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fp32": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "int8": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "fp32",
+          "fp16",
+          "int8",
+          "all"
+        ],
+        "title": "GeneralLatencySummary",
+        "type": "object"
+      },
+      "GeneralMemorySummary": {
+        "properties": {
+          "all": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMemoryBounds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fp16": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMemoryBounds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fp32": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMemoryBounds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "int8": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMemoryBounds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "fp32",
+          "fp16",
+          "int8",
+          "all"
+        ],
+        "title": "GeneralMemorySummary",
+        "type": "object"
+      },
+      "GeneralReportRecord": {
+        "description": "`run` is the opaque 0-based source-row ordinal within the record's\n(device, target, ap_type) group (derivation rule D9): records sharing\n(device, target, ap_type, run) form one run's metric set.",
+        "properties": {
+          "ap_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cpu",
+                  "gpu",
+                  "npu"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ap Type"
+          },
+          "device": {
+            "$ref": "#/components/schemas/ReportDevice"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "precision": {
+            "enum": [
+              "fp32",
+              "fp16",
+              "int8"
+            ],
+            "title": "Precision",
+            "type": "string"
+          },
+          "run": {
+            "title": "Run",
+            "type": "integer"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "device",
+          "ap_type",
+          "target",
+          "precision",
+          "run",
+          "metric",
+          "value",
+          "unit"
+        ],
+        "title": "GeneralReportRecord",
+        "type": "object"
+      },
+      "GeneralReportResponse": {
+        "properties": {
+          "derivation_version": {
+            "title": "Derivation Version",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ReportModelRef"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/GeneralReportRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/GeneralReportSummary"
+          }
+        },
+        "required": [
+          "derivation_version",
+          "model",
+          "records",
+          "summary"
+        ],
+        "title": "GeneralReportResponse",
+        "type": "object"
+      },
+      "GeneralReportSummary": {
+        "properties": {
+          "latency_ms": {
+            "$ref": "#/components/schemas/GeneralLatencySummary"
+          },
+          "memory_mb": {
+            "$ref": "#/components/schemas/GeneralMemorySummary"
+          },
+          "snr_db": {
+            "$ref": "#/components/schemas/GeneralSnrSummary"
+          }
+        },
+        "required": [
+          "latency_ms",
+          "snr_db",
+          "memory_mb"
+        ],
+        "title": "GeneralReportSummary",
+        "type": "object"
+      },
+      "GeneralSnrSummary": {
+        "properties": {
+          "all": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMinMax"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fp16": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMinMax"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fp32": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMinMax"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "int8": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportMinMax"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "fp32",
+          "fp16",
+          "int8",
+          "all"
+        ],
+        "title": "GeneralSnrSummary",
+        "type": "object"
+      },
+      "ImportModelRequest": {
+        "description": "POST .../models/import body \u2014 a PUBLIC HuggingFace model repo id\n(e.g. \"org/name\"; `hf://` / URL prefixes are accepted and normalized).",
+        "properties": {
+          "hf_repo": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hf Repo",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "description": "Reserved. Revision pinning is not supported yet: a non-null revision is rejected with 422; omit it (or send null) to import the repository's current default-branch head.",
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "hf_repo"
+        ],
+        "title": "ImportModelRequest",
+        "type": "object"
+      },
+      "ImportModelResponse": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "converting",
+              "optimizing",
+              "ready",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "state"
+        ],
+        "title": "ImportModelResponse",
+        "type": "object"
+      },
       "IssuedSessionFile": {
         "properties": {
           "canonical_path": {
@@ -710,6 +1114,221 @@
         "title": "IssuedUpload",
         "type": "object"
       },
+      "LibraryModelDetailResponse": {
+        "description": "The list item plus the repo's readme (public content).",
+        "properties": {
+          "account": {
+            "title": "Account",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "model_type": {
+            "title": "Model Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LibraryProviderRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readme"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "use_case": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Case"
+          }
+        },
+        "required": [
+          "account",
+          "name",
+          "full_name",
+          "tags",
+          "model_type",
+          "created_at"
+        ],
+        "title": "LibraryModelDetailResponse",
+        "type": "object"
+      },
+      "LibraryModelItem": {
+        "description": "One public library model (a public repo, browsed cross-account).",
+        "properties": {
+          "account": {
+            "title": "Account",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "model_type": {
+            "title": "Model Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LibraryProviderRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "use_case": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Case"
+          }
+        },
+        "required": [
+          "account",
+          "name",
+          "full_name",
+          "tags",
+          "model_type",
+          "created_at"
+        ],
+        "title": "LibraryModelItem",
+        "type": "object"
+      },
+      "LibraryProviderItem": {
+        "properties": {
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "model_count": {
+            "title": "Model Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "model_count"
+        ],
+        "title": "LibraryProviderItem",
+        "type": "object"
+      },
+      "LibraryProviderRef": {
+        "description": "The provider (company) that published a library model.",
+        "properties": {
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "LibraryProviderRef",
+        "type": "object"
+      },
       "ListActiveUploadsResponse": {
         "properties": {
           "uploads": {
@@ -724,6 +1343,48 @@
           "uploads"
         ],
         "title": "ListActiveUploadsResponse",
+        "type": "object"
+      },
+      "ListLibraryProvidersResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryProviderItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "ListLibraryProvidersResponse",
+        "type": "object"
+      },
+      "ListModelTargetsResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ModelTargetItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "ListModelTargetsResponse",
         "type": "object"
       },
       "ListModelUploadsResponse": {
@@ -745,6 +1406,351 @@
           "count"
         ],
         "title": "ListModelUploadsResponse",
+        "type": "object"
+      },
+      "LlmAccuracyEntry": {
+        "properties": {
+          "dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset"
+          },
+          "quant_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quant Type"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "target",
+          "quant_type",
+          "dataset",
+          "score"
+        ],
+        "title": "LlmAccuracyEntry",
+        "type": "object"
+      },
+      "LlmQuantAggregates": {
+        "properties": {
+          "best_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Accuracy"
+          },
+          "best_memory_mb": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Memory Mb"
+          },
+          "best_tps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Tps"
+          },
+          "best_ttft_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Ttft Ms"
+          }
+        },
+        "required": [
+          "best_tps",
+          "best_ttft_ms",
+          "best_memory_mb",
+          "best_accuracy"
+        ],
+        "title": "LlmQuantAggregates",
+        "type": "object"
+      },
+      "LlmReportDevice": {
+        "properties": {
+          "ap_vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ap Vendor"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "hardware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hardware"
+          },
+          "marketing_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Name"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
+          },
+          "real_device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Device"
+          },
+          "soc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc"
+          }
+        },
+        "title": "LlmReportDevice",
+        "type": "object"
+      },
+      "LlmReportRecord": {
+        "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `run` is the opaque\n0-based source-row ordinal within the record's (device, target,\nap_type, quant_type) group (derivation rule D9).",
+        "properties": {
+          "ap_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cpu",
+                  "gpu",
+                  "npu"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ap Type"
+          },
+          "dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset"
+          },
+          "device": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmReportDevice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "quant_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quant Type"
+          },
+          "run": {
+            "title": "Run",
+            "type": "integer"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "device",
+          "ap_type",
+          "target",
+          "quant_type",
+          "dataset",
+          "run",
+          "metric",
+          "value",
+          "unit"
+        ],
+        "title": "LlmReportRecord",
+        "type": "object"
+      },
+      "LlmReportResponse": {
+        "properties": {
+          "derivation_version": {
+            "title": "Derivation Version",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ReportModelRef"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/LlmReportRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/LlmReportSummary"
+          }
+        },
+        "required": [
+          "derivation_version",
+          "model",
+          "records",
+          "summary"
+        ],
+        "title": "LlmReportResponse",
+        "type": "object"
+      },
+      "LlmReportSummary": {
+        "properties": {
+          "accuracy": {
+            "items": {
+              "$ref": "#/components/schemas/LlmAccuracyEntry"
+            },
+            "title": "Accuracy",
+            "type": "array"
+          },
+          "quants": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LlmQuantAggregates"
+            },
+            "title": "Quants",
+            "type": "object"
+          }
+        },
+        "required": [
+          "quants",
+          "accuracy"
+        ],
+        "title": "LlmReportSummary",
         "type": "object"
       },
       "ManifestBucket": {
@@ -970,6 +1976,84 @@
         "title": "MeUser",
         "type": "object"
       },
+      "ModelDetailResponse": {
+        "description": "ModelSummary plus the status endpoint's terminal/download fields and\nthe (lowercase) source type \u2014 still NO job args, URIs or HF fields.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "download_ready": {
+            "title": "Download Ready",
+            "type": "boolean"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "converting",
+              "optimizing",
+              "ready",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "type",
+          "state",
+          "is_default",
+          "created_at",
+          "updated_at",
+          "terminal",
+          "download_ready",
+          "source_type"
+        ],
+        "title": "ModelDetailResponse",
+        "type": "object"
+      },
       "ModelRef": {
         "description": "Reference to the CommonModel a completed session registered.",
         "properties": {
@@ -1055,6 +2139,172 @@
           "updated_at"
         ],
         "title": "ModelStatusResponse",
+        "type": "object"
+      },
+      "ModelSummary": {
+        "description": "Public shape of a model. `key` is the model's globally-unique tag.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "converting",
+              "optimizing",
+              "ready",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "type",
+          "state",
+          "is_default",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ModelSummary",
+        "type": "object"
+      },
+      "ModelTargetCompatibility": {
+        "properties": {
+          "ap_types": {
+            "items": {
+              "enum": [
+                "cpu",
+                "gpu",
+                "npu"
+              ],
+              "type": "string"
+            },
+            "title": "Ap Types",
+            "type": "array"
+          },
+          "os": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os"
+          },
+          "soc_manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc Manufacturer"
+          },
+          "soc_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc Model"
+          }
+        },
+        "required": [
+          "ap_types"
+        ],
+        "title": "ModelTargetCompatibility",
+        "type": "object"
+      },
+      "ModelTargetItem": {
+        "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable \u2014 clients must not parse it. `target`\nand `quant_type` are stable lowercase names derived from the internal\nenums; `compatibility` is null when the row carries no device\ncompatibility information (LLM targets and the all-null sentinel).",
+        "properties": {
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelTargetCompatibility"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "download_size": {
+            "title": "Download Size",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "general",
+              "llm"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "quant_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quant Type"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id",
+          "kind",
+          "target",
+          "download_size",
+          "created_at"
+        ],
+        "title": "ModelTargetItem",
         "type": "object"
       },
       "ModelUploadDetailResponse": {
@@ -1216,6 +2466,218 @@
         "title": "ModelUploadSummary",
         "type": "object"
       },
+      "PackageModeAggregates": {
+        "properties": {
+          "memory_inference_peak_mb": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ttft_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "tps",
+          "ttft_ms",
+          "memory_inference_peak_mb"
+        ],
+        "title": "PackageModeAggregates",
+        "type": "object"
+      },
+      "PackageReportRecord": {
+        "properties": {
+          "device": {
+            "$ref": "#/components/schemas/ReportDevice"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "run_configuration": {
+            "$ref": "#/components/schemas/PackageRunConfiguration"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "device",
+          "run_configuration",
+          "metric",
+          "value",
+          "unit"
+        ],
+        "title": "PackageReportRecord",
+        "type": "object"
+      },
+      "PackageReportResponse": {
+        "properties": {
+          "derivation_version": {
+            "title": "Derivation Version",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ReportModelRef"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/PackageReportRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PackageReportSummary"
+          }
+        },
+        "required": [
+          "derivation_version",
+          "model",
+          "records",
+          "summary"
+        ],
+        "title": "PackageReportResponse",
+        "type": "object"
+      },
+      "PackageReportSummary": {
+        "description": "`auto` and `speed` are the same selection in v1 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
+        "properties": {
+          "auto": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageModeAggregates"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageModeAggregates"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "auto",
+          "speed"
+        ],
+        "title": "PackageReportSummary",
+        "type": "object"
+      },
+      "PackageRunConfiguration": {
+        "description": "`configuration` is the SANITIZED producer payload (derivation rule\nP1): only pinned safe scalar config keys and per-module maps survive;\nunknown keys, nested junk and path/secret-looking strings are\ndropped. null when the producer sent none or nothing safe remains.",
+        "properties": {
+          "configuration": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configuration"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package"
+          }
+        },
+        "required": [
+          "package",
+          "id",
+          "configuration"
+        ],
+        "title": "PackageRunConfiguration",
+        "type": "object"
+      },
+      "PagedLibraryModelItem": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryModelItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "PagedLibraryModelItem",
+        "type": "object"
+      },
+      "PagedModelSummary": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ModelSummary"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results",
+          "count"
+        ],
+        "title": "PagedModelSummary",
+        "type": "object"
+      },
       "PagedRepoResponse": {
         "properties": {
           "count": {
@@ -1274,6 +2736,31 @@
           "is_private"
         ],
         "title": "ProjectResponse",
+        "type": "object"
+      },
+      "QuotaItem": {
+        "description": "`used` this month vs the plan `limit`; `limit: null` = unlimited.",
+        "properties": {
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used"
+        ],
+        "title": "QuotaItem",
         "type": "object"
       },
       "ReissueUploadFilesRequest": {
@@ -1431,6 +2918,212 @@
         "title": "RepoResponse",
         "type": "object"
       },
+      "ReportDevice": {
+        "description": "Device identity as recorded by the benchmark run; blanks are null.",
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "hardware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hardware"
+          },
+          "marketing_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marketing Name"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "os_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os Version"
+          },
+          "real_device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Device"
+          },
+          "soc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc"
+          }
+        },
+        "title": "ReportDevice",
+        "type": "object"
+      },
+      "ReportMemoryBounds": {
+        "description": "Bounds over the pooled peak+min memory values per family \u2014 exactly\nhow the dashboard's memory headline pools them.",
+        "properties": {
+          "inference_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inference Max"
+          },
+          "inference_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inference Min"
+          },
+          "load_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Max"
+          },
+          "load_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Min"
+          }
+        },
+        "required": [
+          "load_min",
+          "load_max",
+          "inference_min",
+          "inference_max"
+        ],
+        "title": "ReportMemoryBounds",
+        "type": "object"
+      },
+      "ReportMinMax": {
+        "properties": {
+          "max": {
+            "title": "Max",
+            "type": "number"
+          },
+          "min": {
+            "title": "Min",
+            "type": "number"
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ],
+        "title": "ReportMinMax",
+        "type": "object"
+      },
+      "ReportModelRef": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version"
+        ],
+        "title": "ReportModelRef",
+        "type": "object"
+      },
+      "ReportStats": {
+        "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+        "properties": {
+          "avg": {
+            "title": "Avg",
+            "type": "number"
+          },
+          "max": {
+            "title": "Max",
+            "type": "number"
+          },
+          "median": {
+            "title": "Median",
+            "type": "number"
+          },
+          "min": {
+            "title": "Min",
+            "type": "number"
+          }
+        },
+        "required": [
+          "min",
+          "max",
+          "median",
+          "avg"
+        ],
+        "title": "ReportStats",
+        "type": "object"
+      },
       "RequestedFile": {
         "properties": {
           "content_type": {
@@ -1573,6 +3266,59 @@
         "title": "UploadStatusResponse",
         "type": "object"
       },
+      "UsageQuotasResponse": {
+        "properties": {
+          "active_devices": {
+            "$ref": "#/components/schemas/QuotaItem"
+          },
+          "bandwidth": {
+            "$ref": "#/components/schemas/QuotaItem"
+          },
+          "model_uploads": {
+            "$ref": "#/components/schemas/QuotaItem"
+          },
+          "prompts": {
+            "$ref": "#/components/schemas/QuotaItem"
+          }
+        },
+        "required": [
+          "bandwidth",
+          "model_uploads",
+          "active_devices",
+          "prompts"
+        ],
+        "title": "UsageQuotasResponse",
+        "type": "object"
+      },
+      "UsageResponse": {
+        "description": "Current-month usage totals for the PAT's account.\n\n`bandwidth` is bytes; the other counters are counts. The window is the\ncurrent billing month (an account-level usage reset inside the month\nmoves the window start to the reset time).",
+        "properties": {
+          "active_devices": {
+            "title": "Active Devices",
+            "type": "integer"
+          },
+          "bandwidth": {
+            "title": "Bandwidth",
+            "type": "integer"
+          },
+          "model_uploads": {
+            "title": "Model Uploads",
+            "type": "integer"
+          },
+          "prompts": {
+            "title": "Prompts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bandwidth",
+          "model_uploads",
+          "active_devices",
+          "prompts"
+        ],
+        "title": "UsageResponse",
+        "type": "object"
+      },
       "VersionResponse": {
         "properties": {
           "id": {
@@ -1626,10 +3372,244 @@
     "description": "External developer API for Zetic. Authenticate with `Authorization: Bearer <token>`.",
     "title": "Zetic Public API",
     "version": "1.0.0",
-    "x-backend-commit": "f2e556a61dd239e0b42bd34785b6fef0f6b88f0e"
+    "x-backend-commit": "2805192040528e6fc5007799854b7d4403a14d8e"
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/library/models": {
+      "get": {
+        "description": "Browse the public model library, newest first.\n\nResults are ordered by created_at descending, then id descending.",
+        "operationId": "list_library_models",
+        "parameters": [
+          {
+            "description": "Repeatable use-case filter; items matching ANY given task are included.",
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "vision",
+                      "nlp",
+                      "llm",
+                      "speech",
+                      "other"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeatable use-case filter; items matching ANY given task are included.",
+              "title": "Task"
+            }
+          },
+          {
+            "description": "Case-insensitive substring match on the model name.",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive substring match on the model name.",
+              "title": "Search"
+            }
+          },
+          {
+            "description": "Exact provider (company) name.",
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact provider (company) name.",
+              "title": "Provider"
+            }
+          },
+          {
+            "description": "Page size. Values greater than 100 are clamped to 100.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedLibraryModelItem"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "List Library Models",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/v1/library/models/{account_name}/{repo_name}": {
+      "get": {
+        "description": "A single PUBLIC library model, with its readme.\n\nResolves public repos only: a private repo is a 404 here EVEN FOR ITS\nOWNER (use `/v1/repos/{account_name}/{repo_name}` for that), so this\nroute never confirms a private repo's existence.",
+        "operationId": "get_library_model",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryModelDetailResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Library Model",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/v1/library/providers": {
+      "get": {
+        "description": "Providers (companies) with at least one public library model.\n\nItem shape is the internal companies list thinned to its public parts\n(`name`, `logo_url`) plus `model_count` \u2014 the number of public library\nmodels the provider has published. Ordered by name, as the internal\ndropdown source is.",
+        "operationId": "list_library_providers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListLibraryProvidersResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "List Library Providers",
+        "tags": [
+          "library"
+        ]
+      }
+    },
     "/v1/me": {
       "get": {
         "operationId": "get_me",
@@ -2516,6 +4496,93 @@
       }
     },
     "/v1/repos/{account_name}/{repo_name}/models": {
+      "get": {
+        "description": "Models of a visible repo, newest first.\n\nReuses the internal listing semantics (`CommonModelService.get_list`:\nexcludes soft-deleted rows and half-created rows without a source) with\nthe public contract's explicit stable ordering.\n\nResults are ordered by created_at descending, then id descending.",
+        "operationId": "list_models",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size. Values greater than 100 are clamped to 100.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedModelSummary"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "List Models",
+        "tags": [
+          "models"
+        ]
+      },
       "post": {
         "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.",
         "operationId": "create_model_upload",
@@ -2604,6 +4671,97 @@
           }
         ],
         "summary": "Create Model Upload",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/import": {
+      "post": {
+        "description": "Register an LLM model from a public HuggingFace repo.\n\nReturns 201 with the created model reference; conversion continues\nasynchronously (poll `get_model_status`). An `Idempotency-Key` replay of\nthe same body returns the original model with 200. The repository must\nhave `model_type` \"llm\".",
+        "operationId": "import_model",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportModelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportModelResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Import Model",
         "tags": [
           "models"
         ]
@@ -2984,6 +5142,361 @@
         ]
       }
     },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}": {
+      "get": {
+        "description": "Public detail of a model within a visible repo (containment: a key\nthat exists in another repo is a 404, not a leak).",
+        "operationId": "get_model",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDetailResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Model",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/default": {
+      "put": {
+        "description": "Make this model the repo's default (idempotent: repeating the call\nreturns 200 with the same result). Reuses the internal set-default\nservice \u2014 exactly one model per repo ends up with `is_default`.",
+        "operationId": "set_default_model",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSummary"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Set Default Model",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/reports/general": {
+      "get": {
+        "description": "Raw general benchmark measurements for a model, one record per\n(device, run, metric), with a per-precision summary the dashboard's\nheadline numbers derive from. 404 when the model has no general\nreport. Derivation rules are versioned via `derivation_version`.",
+        "operationId": "get_general_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneralReportResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get General Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/reports/llm": {
+      "get": {
+        "description": "Raw LLM benchmark measurements (per-device generation metrics plus\nserver-side accuracy scores per dataset) with per-quant summary\naggregates. 404 when the model has no LLM report.",
+        "operationId": "get_llm_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmReportResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Llm Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/reports/package": {
+      "get": {
+        "description": "Raw ZTC package benchmark measurements, one record per (device\nenvironment, run configuration, metric), with per-mode summary\naggregates. 404 when the model has no package benchmark results.",
+        "operationId": "get_package_report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageReportResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Package Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
     "/v1/repos/{account_name}/{repo_name}/models/{model_key}/status": {
       "get": {
         "description": "Public conversion status of a model (the CLI `--wait` poll target).\n\n`download_ready` follows `ModelStatus.available()` \u2014 the same condition\ninternal download paths gate on: a model is downloadable once converted\n(OPTIMIZING), even while benchmarking is still running.",
@@ -3054,6 +5567,262 @@
           "models"
         ]
       }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/targets": {
+      "get": {
+        "description": "Converted target artifacts of a model, newest first (created_at\ndescending, then id descending \u2014 same stable ordering as every /v1\nlist). `target_id` is opaque; soft-deleted rows are excluded.\n\nResults are ordered by created_at descending, then id descending.",
+        "operationId": "list_model_targets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListModelTargetsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "List Model Targets",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations": {
+      "post": {
+        "description": "Authorize downloading a converted target's artifacts (BILLABLE).\n\nCharges the target's aggregate `download_size` against the CALLER's\nbandwidth quota \u2014 also for public models owned by others. Over quota is\na 429 with nothing charged and no row created. Returns signed GET URLs\nvalid until `expires_at` (about one hour).\n\nWith an `Idempotency-Key`, replaying returns the original authorization\n(200) with fresh URLs and does NOT charge again; without one, EVERY\ncall charges. The key is scoped to the caller's account; reusing it for\na different target is a 409.",
+        "operationId": "create_download_authorization",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadAuthorizationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadAuthorizationResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Create Download Authorization",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/usage": {
+      "get": {
+        "description": "Current-month usage totals for the token's account (`bandwidth` in\nbytes, the rest counts).",
+        "operationId": "get_usage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Usage",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/quotas": {
+      "get": {
+        "description": "Usage against the account's plan quotas.\n\nEach counter reports `{used, limit}`; `limit: null` means unlimited.",
+        "operationId": "get_usage_quotas",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageQuotasResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Usage Quotas",
+        "tags": [
+          "usage"
+        ]
+      }
     }
   },
   "servers": [
@@ -3077,6 +5846,18 @@
     {
       "description": "Resumable upload sessions for model artifacts.",
       "name": "uploads"
+    },
+    {
+      "description": "Benchmark and conversion reports.",
+      "name": "reports"
+    },
+    {
+      "description": "Public model library browsing.",
+      "name": "library"
+    },
+    {
+      "description": "Usage and quota reporting.",
+      "name": "usage"
     },
     {
       "description": "Legacy project endpoints.",

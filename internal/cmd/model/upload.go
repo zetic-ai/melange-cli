@@ -901,7 +901,7 @@ func waitForModel(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResp
 	if perr := printStatus(f, exporter, last, raw, key, account+"/"+name); perr != nil {
 		return perr
 	}
-	if strings.EqualFold(string(last.State), string(gen.Failed)) {
+	if strings.EqualFold(string(last.State), string(gen.ModelStatusResponseStateFailed)) {
 		fmt.Fprintf(ios.ErrOut, "✗ Model processing failed: %s\n", deref(last.FailureCode))
 		return cmdutil.ErrSilent
 	}
