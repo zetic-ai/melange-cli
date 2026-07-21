@@ -13,10 +13,12 @@ func NewCmdRepo(f *cmdutil.Factory) *cobra.Command {
 		Use:   "repo <command>",
 		Short: "Manage model repositories",
 		Long: `Work with Melange model repositories: list the repositories your token
-can see, inspect a single repository, and create new ones.
+can see, inspect a single repository, create new ones, edit their
+metadata, and delete them.
 
 Repositories are addressed as ACCOUNT/NAME. Where the account is omitted,
-it resolves to the account behind your token (one extra /v1/me call).
+it resolves to the account behind your token (one extra /v1/me call);
+destructive commands always require the full ACCOUNT/NAME.
 
 Data is written to stdout; progress and messages go to stderr. All
 subcommands support --json, --jq, and --template for structured output.`,
@@ -33,6 +35,8 @@ subcommands support --json, --jq, and --template for structured output.`,
 	cmd.AddCommand(newCmdList(f))
 	cmd.AddCommand(newCmdView(f))
 	cmd.AddCommand(newCmdCreate(f))
+	cmd.AddCommand(newCmdEdit(f))
+	cmd.AddCommand(newCmdDelete(f))
 
 	return cmd
 }
