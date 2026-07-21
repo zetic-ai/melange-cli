@@ -89,6 +89,18 @@ func TestJSONFlagsJQSyntaxErrorIsFlagError(t *testing.T) {
 	assert.Equal(t, 2, cmdutil.ExitCode(err), "a bad --jq expression is a usage error")
 }
 
+func TestJSONFlagsJQRuntimeErrorIsPlainExit1(t *testing.T) {
+	exporter, err := runJSONFlags(t, "--jq", `.count + "x"`)
+	require.NoError(t, err, "the expression is syntactically valid, so parsing succeeds")
+	require.NotNil(t, exporter)
+
+	ios, _, _, _ := iostreams.Test()
+	werr := exporter.Write(ios, json.RawMessage(pageBody))
+	require.Error(t, werr)
+	assert.Equal(t, 1, cmdutil.ExitCode(werr),
+		"a jq evaluation failure is a runtime error (exit 1), not a usage error")
+}
+
 func TestJSONFlagsTemplateTablerow(t *testing.T) {
 	exporter, err := runJSONFlags(t, "--template",
 		`{{range .results}}{{tablerow .full_name .count_of_likes}}{{end}}`)

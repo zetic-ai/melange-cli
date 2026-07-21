@@ -476,6 +476,26 @@ func TestRepoCreatePrivateAndUseCaseComposePatch(t *testing.T) {
 	e.reg.Verify(t)
 }
 
+func TestRepoCreatePatchFailureReportsRepoWasCreated(t *testing.T) {
+	e := setup(t)
+	created := whisperRepo()
+	created.IsPrivate = false
+	created.UseCase = nil
+	e.reg.Register(httpmock.REST("POST", "/v1/repos"), jsonStub(201, marshal(t, created)))
+	e.reg.Register(httpmock.REST("PATCH", "/v1/repos/zetic/whisper-tiny"),
+		jsonStub(403, `{"type":"error","error":{"type":"permission_error","message":"token lacks the write scope"},"request_id":"req_5"}`))
+
+	err := run(t, e, "repo", "create", "whisper-tiny", "--private", "--use-case", "speech")
+	require.Error(t, err)
+	assert.Equal(t, 1, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "was created",
+		"the user must learn the repo exists despite the failed update")
+	assert.Contains(t, err.Error(), "zetic/whisper-tiny",
+		"the error must name the repository that was created")
+	require.Len(t, e.reg.Requests, 2, "POST then PATCH")
+	e.reg.Verify(t)
+}
+
 func TestRepoCreateConflictExits1WithServerMessage(t *testing.T) {
 	e := setup(t)
 	e.reg.Register(httpmock.REST("POST", "/v1/repos"),
