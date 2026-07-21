@@ -33,7 +33,10 @@ token was rejected.`,
 			if err != nil {
 				return err
 			}
-			token := host.resolveToken()
+			token, err := host.resolveToken()
+			if err != nil {
+				return err
+			}
 			if token.Value == "" {
 				//nolint:staticcheck // user-facing sentence-style message
 				return cmdutil.AuthError{Err: fmt.Errorf(

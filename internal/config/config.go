@@ -62,7 +62,10 @@ func (c *Config) ResolveHost(flagValue string) Resolved {
 // precedence chain:
 //
 //	env:MELANGE_API_KEY > env:MELANGE_API_KEY_FILE > config(hosts.<host>.api_key) > empty
-func (c *Config) ResolveToken(host string) Resolved {
+//
+// A set-but-unreadable MELANGE_API_KEY_FILE is a hard error: falling through
+// to keyring/config would silently switch credentials.
+func (c *Config) ResolveToken(host string) (Resolved, error) {
 	return c.ResolveTokenWith(host, nil)
 }
 
@@ -71,30 +74,34 @@ func (c *Config) ResolveToken(host string) Resolved {
 // internal/keyring; commands pass keyring.Lookup. Precedence:
 //
 //	env:MELANGE_API_KEY > env:MELANGE_API_KEY_FILE > keyring > config > empty
-func (c *Config) ResolveTokenWith(host string, lookup func(host string) (string, bool)) Resolved {
+func (c *Config) ResolveTokenWith(host string, lookup func(host string) (string, bool)) (Resolved, error) {
 	if v := os.Getenv(EnvAPIKey); v != "" {
-		return Resolved{Value: v, Source: "env:" + EnvAPIKey}
+		return Resolved{Value: v, Source: "env:" + EnvAPIKey}, nil
 	}
 	if path := os.Getenv(EnvAPIKeyFile); path != "" {
 		raw, err := os.ReadFile(path)
-		if err == nil {
-			return Resolved{
-				Value:  strings.TrimSpace(string(raw)),
-				Source: "env:" + EnvAPIKeyFile,
-			}
+		if err != nil {
+			// The operator explicitly pointed at a key file; never fall
+			// through to a different credential source on a read failure.
+			return Resolved{}, fmt.Errorf("reading %s (%s): %w", EnvAPIKeyFile, path, err)
 		}
+		// A readable-but-empty file still short-circuits to "no token".
+		return Resolved{
+			Value:  strings.TrimSpace(string(raw)),
+			Source: "env:" + EnvAPIKeyFile,
+		}, nil
 	}
 	if lookup != nil {
 		if v, ok := lookup(host); ok && v != "" {
-			return Resolved{Value: v, Source: "keyring"}
+			return Resolved{Value: v, Source: "keyring"}, nil
 		}
 	}
 	if c != nil && c.Hosts != nil {
 		if entry, ok := c.Hosts[host]; ok && entry.APIKey != "" {
-			return Resolved{Value: entry.APIKey, Source: "config"}
+			return Resolved{Value: entry.APIKey, Source: "config"}, nil
 		}
 	}
-	return Resolved{}
+	return Resolved{}, nil
 }
 
 // SetHostAPIKey stores an API key for host in the config file and saves it.

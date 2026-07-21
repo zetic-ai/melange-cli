@@ -31,7 +31,8 @@ func resolveHost(f *cmdutil.Factory) (*hostContext, error) {
 }
 
 // resolveToken resolves the token for the host, including the OS keyring.
-func (h *hostContext) resolveToken() config.Resolved {
+// A set-but-unreadable MELANGE_API_KEY_FILE surfaces as a hard error.
+func (h *hostContext) resolveToken() (config.Resolved, error) {
 	return h.cfg.ResolveTokenWith(h.hostKey, keyring.Lookup)
 }
 

@@ -27,7 +27,10 @@ Exit codes: 0 token printed, 4 no token found.`,
 			if err != nil {
 				return err
 			}
-			token := host.resolveToken()
+			token, err := host.resolveToken()
+			if err != nil {
+				return err
+			}
 			if token.Value == "" {
 				return cmdutil.AuthError{Err: fmt.Errorf(
 					"no token found for %s. Run `melange auth login` or set MELANGE_API_KEY",

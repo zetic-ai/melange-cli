@@ -48,7 +48,10 @@ func Run(args []string) int {
 		}
 		host := cfg.ResolveHost(f.HostOverride)
 		hostKey := keyring.HostKey(host.Value)
-		token := cfg.ResolveTokenWith(hostKey, keyring.Lookup)
+		token, err := cfg.ResolveTokenWith(hostKey, keyring.Lookup)
+		if err != nil {
+			return nil, err
+		}
 		if token.Value == "" {
 			return nil, cmdutil.AuthError{Err: fmt.Errorf(
 				"not logged in to %s; run `melange auth login` or set MELANGE_API_KEY", hostKey)}

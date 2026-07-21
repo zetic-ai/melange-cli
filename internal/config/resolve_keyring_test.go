@@ -26,7 +26,8 @@ func TestResolveTokenWith(t *testing.T) {
 		t.Setenv(config.EnvAPIKeyFile, "")
 
 		cfg := &config.Config{}
-		got := cfg.ResolveTokenWith(host, staticLookup(map[string]string{host: "keyring-key"}))
+		got, err := cfg.ResolveTokenWith(host, staticLookup(map[string]string{host: "keyring-key"}))
+		require.NoError(t, err)
 		assert.Equal(t, "env-key", got.Value)
 		assert.Equal(t, "env:MELANGE_API_KEY", got.Source)
 	})
@@ -39,7 +40,8 @@ func TestResolveTokenWith(t *testing.T) {
 		t.Setenv(config.EnvAPIKeyFile, keyFile)
 
 		cfg := &config.Config{}
-		got := cfg.ResolveTokenWith(host, staticLookup(map[string]string{host: "keyring-key"}))
+		got, err := cfg.ResolveTokenWith(host, staticLookup(map[string]string{host: "keyring-key"}))
+		require.NoError(t, err)
 		assert.Equal(t, "file-key", got.Value)
 		assert.Equal(t, "env:MELANGE_API_KEY_FILE", got.Source)
 	})
@@ -51,7 +53,8 @@ func TestResolveTokenWith(t *testing.T) {
 		cfg := &config.Config{
 			Hosts: map[string]config.HostEntry{host: {APIKey: "cfg-key"}},
 		}
-		got := cfg.ResolveTokenWith(host, staticLookup(map[string]string{host: "keyring-key"}))
+		got, err := cfg.ResolveTokenWith(host, staticLookup(map[string]string{host: "keyring-key"}))
+		require.NoError(t, err)
 		assert.Equal(t, "keyring-key", got.Value)
 		assert.Equal(t, "keyring", got.Source)
 	})
@@ -63,7 +66,8 @@ func TestResolveTokenWith(t *testing.T) {
 		cfg := &config.Config{
 			Hosts: map[string]config.HostEntry{host: {APIKey: "cfg-key"}},
 		}
-		got := cfg.ResolveTokenWith(host, staticLookup(nil))
+		got, err := cfg.ResolveTokenWith(host, staticLookup(nil))
+		require.NoError(t, err)
 		assert.Equal(t, "cfg-key", got.Value)
 		assert.Equal(t, "config", got.Source)
 	})
@@ -73,7 +77,8 @@ func TestResolveTokenWith(t *testing.T) {
 		t.Setenv(config.EnvAPIKeyFile, "")
 
 		cfg := &config.Config{}
-		got := cfg.ResolveTokenWith(host, staticLookup(nil))
+		got, err := cfg.ResolveTokenWith(host, staticLookup(nil))
+		require.NoError(t, err)
 		assert.Equal(t, "", got.Value)
 		assert.Equal(t, "", got.Source)
 	})
@@ -85,7 +90,8 @@ func TestResolveTokenWith(t *testing.T) {
 		cfg := &config.Config{
 			Hosts: map[string]config.HostEntry{host: {APIKey: "cfg-key"}},
 		}
-		got := cfg.ResolveTokenWith(host, nil)
+		got, err := cfg.ResolveTokenWith(host, nil)
+		require.NoError(t, err)
 		assert.Equal(t, "cfg-key", got.Value)
 		assert.Equal(t, "config", got.Source)
 	})

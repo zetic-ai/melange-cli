@@ -91,7 +91,8 @@ func TestResolveToken(t *testing.T) {
 				"api.zetic.ai": {APIKey: "cfg-key"},
 			},
 		}
-		got := cfg.ResolveToken("api.zetic.ai")
+		got, err := cfg.ResolveToken("api.zetic.ai")
+		require.NoError(t, err)
 		assert.Equal(t, "env-key", got.Value)
 		assert.Equal(t, "env:MELANGE_API_KEY", got.Source)
 	})
@@ -110,9 +111,47 @@ func TestResolveToken(t *testing.T) {
 				"api.zetic.ai": {APIKey: "cfg-key"},
 			},
 		}
-		got := cfg.ResolveToken("api.zetic.ai")
+		got, err := cfg.ResolveToken("api.zetic.ai")
+		require.NoError(t, err)
 		assert.Equal(t, "file-key", got.Value) // trailing newline trimmed
 		assert.Equal(t, "env:MELANGE_API_KEY_FILE", got.Source)
+	})
+
+	t.Run("env:MELANGE_API_KEY_FILE set but unreadable is a hard error", func(t *testing.T) {
+		t.Setenv(config.EnvAPIKey, "")
+		missing := filepath.Join(t.TempDir(), "does-not-exist.txt")
+		t.Setenv(config.EnvAPIKeyFile, missing)
+
+		cfg := &config.Config{
+			Hosts: map[string]config.HostEntry{
+				"api.zetic.ai": {APIKey: "cfg-key"},
+			},
+		}
+		// Never silently fall through to keyring/config: an operator who set
+		// MELANGE_API_KEY_FILE must not end up on a different credential.
+		got, err := cfg.ResolveToken("api.zetic.ai")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), missing, "error must name the unreadable path")
+		assert.Contains(t, err.Error(), config.EnvAPIKeyFile)
+		assert.Equal(t, "", got.Value)
+	})
+
+	t.Run("env:MELANGE_API_KEY_FILE readable but empty short-circuits without error", func(t *testing.T) {
+		t.Setenv(config.EnvAPIKey, "")
+		dir := t.TempDir()
+		keyFile := filepath.Join(dir, "empty.txt")
+		require.NoError(t, os.WriteFile(keyFile, []byte(""), 0600))
+		t.Setenv(config.EnvAPIKeyFile, keyFile)
+
+		cfg := &config.Config{
+			Hosts: map[string]config.HostEntry{
+				"api.zetic.ai": {APIKey: "cfg-key"},
+			},
+		}
+		got, err := cfg.ResolveToken("api.zetic.ai")
+		require.NoError(t, err)
+		assert.Equal(t, "", got.Value, "empty readable file keeps the not-logged-in short-circuit")
+		assert.Equal(t, "env:"+config.EnvAPIKeyFile, got.Source)
 	})
 
 	t.Run("file key with trailing whitespace is trimmed", func(t *testing.T) {
@@ -124,7 +163,8 @@ func TestResolveToken(t *testing.T) {
 		t.Setenv(config.EnvAPIKeyFile, keyFile)
 
 		cfg := &config.Config{}
-		got := cfg.ResolveToken("api.zetic.ai")
+		got, err := cfg.ResolveToken("api.zetic.ai")
+		require.NoError(t, err)
 		assert.Equal(t, "key-with-spaces", got.Value)
 		assert.Equal(t, "env:MELANGE_API_KEY_FILE", got.Source)
 	})
@@ -138,7 +178,8 @@ func TestResolveToken(t *testing.T) {
 				"api.zetic.ai": {APIKey: "cfg-key"},
 			},
 		}
-		got := cfg.ResolveToken("api.zetic.ai")
+		got, err := cfg.ResolveToken("api.zetic.ai")
+		require.NoError(t, err)
 		assert.Equal(t, "cfg-key", got.Value)
 		assert.Equal(t, "config", got.Source)
 	})
@@ -148,7 +189,8 @@ func TestResolveToken(t *testing.T) {
 		t.Setenv(config.EnvAPIKeyFile, "")
 
 		cfg := &config.Config{}
-		got := cfg.ResolveToken("api.zetic.ai")
+		got, err := cfg.ResolveToken("api.zetic.ai")
+		require.NoError(t, err)
 		assert.Equal(t, "", got.Value)
 		assert.Equal(t, "", got.Source)
 	})
