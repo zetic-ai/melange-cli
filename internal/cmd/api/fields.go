@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -18,19 +19,28 @@ var integerRE = regexp.MustCompile(`^-?[0-9]+$`)
 
 // parseFields folds -f/--raw-field and -F/--field specs into one JSON-ready
 // object, or nil when no fields were given. Raw fields stay strings; typed
-// fields go through coerceValue.
+// fields go through coerceValue. Standard input can back at most one @- value:
+// it is a stream, so a second @- would silently read empty bytes.
 func parseFields(raw, typed []string, stdin io.Reader) (map[string]any, error) {
 	if len(raw)+len(typed) == 0 {
 		return nil, nil
 	}
+	stdinConsumed := false
+	readStdin := func() ([]byte, error) {
+		if stdinConsumed {
+			return nil, errors.New("standard input already consumed by a previous @- value")
+		}
+		stdinConsumed = true
+		return io.ReadAll(stdin)
+	}
 	params := map[string]any{}
 	for _, spec := range raw {
-		if err := addField(params, spec, false, stdin); err != nil {
+		if err := addField(params, spec, false, readStdin); err != nil {
 			return nil, err
 		}
 	}
 	for _, spec := range typed {
-		if err := addField(params, spec, true, stdin); err != nil {
+		if err := addField(params, spec, true, readStdin); err != nil {
 			return nil, err
 		}
 	}
@@ -38,14 +48,14 @@ func parseFields(raw, typed []string, stdin io.Reader) (map[string]any, error) {
 }
 
 // addField parses one key=value spec and merges it into params.
-func addField(params map[string]any, spec string, typed bool, stdin io.Reader) error {
+func addField(params map[string]any, spec string, typed bool, readStdin func() ([]byte, error)) error {
 	key, rawValue, ok := strings.Cut(spec, "=")
 	if !ok {
 		return fmt.Errorf("invalid field %q: expected key=value", spec)
 	}
 	var value any = rawValue
 	if typed {
-		v, err := coerceValue(rawValue, stdin)
+		v, err := coerceValue(rawValue, readStdin)
 		if err != nil {
 			return fmt.Errorf("field %q: %w", spec, err)
 		}
@@ -115,8 +125,8 @@ func fieldKeyError(key string) error {
 
 // coerceValue applies -F's typed conversion: true/false/null and integers
 // become JSON types, @path inserts a file's contents as a string (@- reads
-// standard input), anything else stays a string.
-func coerceValue(v string, stdin io.Reader) (any, error) {
+// standard input via readStdin), anything else stays a string.
+func coerceValue(v string, readStdin func() ([]byte, error)) (any, error) {
 	switch v {
 	case "true":
 		return true, nil
@@ -135,7 +145,7 @@ func coerceValue(v string, stdin io.Reader) (any, error) {
 		var data []byte
 		var err error
 		if name == "-" {
-			data, err = io.ReadAll(stdin)
+			data, err = readStdin()
 		} else {
 			data, err = os.ReadFile(name)
 		}

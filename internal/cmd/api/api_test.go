@@ -197,6 +197,27 @@ func TestAPIFieldFromFile(t *testing.T) {
 	assert.Equal(t, "from a file", body["description"], "@path inserts file contents as a string")
 }
 
+func TestAPIFieldFromStdin(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", "/v1/repos"), httpmock.StatusStringResponse(200, "{}"))
+	e.in.WriteString("from stdin")
+
+	require.NoError(t, run(t, e, "api", "/v1/repos", "-F", "description=@-"))
+	body := requestJSON(t, e.reg.Requests[0])
+	assert.Equal(t, "from stdin", body["description"], "@- inserts stdin as a string")
+}
+
+func TestAPIRepeatedStdinFieldExits2(t *testing.T) {
+	e := setup(t)
+	e.in.WriteString("only once")
+
+	err := run(t, e, "api", "/v1/repos", "-F", "a=@-", "-F", "b=@-")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "standard input already consumed by a previous @- value")
+	assert.Empty(t, e.reg.Requests, "the request must not be sent")
+}
+
 func TestAPIGetFieldsBecomeQueryParams(t *testing.T) {
 	e := setup(t)
 	e.reg.Register(httpmock.REST("GET", "/v1/repos"), httpmock.StatusStringResponse(200, "[]"))
