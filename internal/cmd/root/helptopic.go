@@ -38,7 +38,7 @@ Credential precedence (highest wins):
 
   MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring > config file
 
-Host precedence: MELANGE_HOST > config > default.
+Host precedence: --host flag > MELANGE_HOST > config > default.
 Run "melange auth status" to see which source the active token came from.
 
 Files:
@@ -93,7 +93,8 @@ List commands emit the page envelope {"results": [...], "count": N}
 exactly as the API returned it. --paginate fetches every page and
 merges all results arrays into one envelope; every other envelope key
 (count, and any keys the server may add) is carried through from the
-last page.
+last page. The merged envelope is re-marshaled, so its top-level keys
+are emitted in sorted order (single-page --json output stays byte-exact).
 `,
 	},
 }
