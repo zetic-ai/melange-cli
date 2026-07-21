@@ -1,0 +1,17 @@
+# Binaries
+/melange
+/bin/
+/dist/
+
+# Test artifacts
+*.test
+coverage.out
+coverage.html
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local scratch
+.superpowers/
