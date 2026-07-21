@@ -98,6 +98,48 @@ func TestNewAPIClientDebugEnv(t *testing.T) {
 	assert.NotContains(t, debug, "ztp_supersecret", "token must never appear in debug output")
 }
 
+func TestNewAPIClientDebugEnvTruthy(t *testing.T) {
+	tests := []struct {
+		value string
+		debug bool
+	}{
+		{"1", true},
+		{"true", true},
+		{"TRUE", true},
+		{"Yes", true},
+		{"on", true},
+		{"", false},
+		{"0", false},
+		{"false", false},
+		{"no", false},
+		{"off", false},
+		{"2", false},
+	}
+	for _, tt := range tests {
+		t.Run("MELANGE_DEBUG="+tt.value, func(t *testing.T) {
+			t.Setenv("MELANGE_DEBUG", tt.value)
+
+			reg := &httpmock.Registry{}
+			reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, "{}"))
+
+			ios, _, _, errOut := iostreams.Test()
+			f := &cmdutil.Factory{IOStreams: ios, Version: "1.2.3", HTTPTransport: reg}
+
+			client, err := cmdutil.NewAPIClient(f, "https://api.zetic.ai", "ztp_tok")
+			require.NoError(t, err)
+			resp, err := client.Do(context.Background(), "GET", "/v1/me", nil, nil)
+			require.NoError(t, err)
+			defer resp.Body.Close() //nolint:errcheck
+
+			if tt.debug {
+				assert.Contains(t, errOut.String(), "> GET", "%q must enable debug logging", tt.value)
+			} else {
+				assert.Empty(t, errOut.String(), "%q must not enable debug logging", tt.value)
+			}
+		})
+	}
+}
+
 func TestAuthErrorWrapsAPIError(t *testing.T) {
 	// AuthError still maps to 4 even when wrapping something else.
 	err := cmdutil.AuthError{Err: errors.New("no token")}

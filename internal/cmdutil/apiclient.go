@@ -5,16 +5,27 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api"
 )
 
+// envTruthy reports whether an environment value means "on":
+// 1, true, yes, or on (case-insensitive).
+func envTruthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
 // NewAPIClient builds an api.Client for the given host and token, honoring
-// the factory's base transport override and MELANGE_DEBUG=1 (debug lines go
-// to stderr). token may be empty for unauthenticated clients.
+// the factory's base transport override and a truthy MELANGE_DEBUG (debug
+// lines go to stderr). token may be empty for unauthenticated clients.
 func NewAPIClient(f *Factory, host, token string) (*api.Client, error) {
 	var debug io.Writer
-	if os.Getenv("MELANGE_DEBUG") == "1" {
+	if envTruthy(os.Getenv("MELANGE_DEBUG")) {
 		debug = f.IOStreams.ErrOut
 	}
 	return api.NewClient(api.Options{
