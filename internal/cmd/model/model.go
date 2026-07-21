@@ -49,6 +49,7 @@ written to stdout; progress and messages go to stderr.`,
 	cmd.AddCommand(newCmdTargets(f))
 	cmd.AddCommand(newCmdSetDefault(f))
 	cmd.AddCommand(newCmdImport(f))
+	cmd.AddCommand(newCmdDownload(f))
 
 	return cmd
 }

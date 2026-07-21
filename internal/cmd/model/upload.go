@@ -838,10 +838,20 @@ type progress struct {
 	tty   bool
 	name  string
 	total int64
+	arrow string // direction glyph: ↑ uploads, ↓ downloads
+	verb  string // completion verb: uploaded / downloaded
 }
 
 func newProgress(f *cmdutil.Factory, name string, total int64) *progress {
-	return &progress{f: f, tty: f.IOStreams.IsStderrTTY(), name: name, total: total}
+	return &progress{f: f, tty: f.IOStreams.IsStderrTTY(), name: name, total: total,
+		arrow: "↑", verb: "uploaded"}
+}
+
+// newDownloadProgress is the ↓ variant; total may be 0 when the size is
+// unknown until the stream ends (percentages are then skipped).
+func newDownloadProgress(f *cmdutil.Factory, name string, total int64) *progress {
+	return &progress{f: f, tty: f.IOStreams.IsStderrTTY(), name: name, total: total,
+		arrow: "↓", verb: "downloaded"}
 }
 
 func (p *progress) update(committed int64) {
@@ -849,16 +859,23 @@ func (p *progress) update(committed int64) {
 		return
 	}
 	pct := committed * 100 / p.total
-	fmt.Fprintf(p.f.IOStreams.ErrOut, "\r↑ %s  %d%% (%s/%s)   ",
-		p.name, pct, text.FormatBytes(committed), text.FormatBytes(p.total))
+	fmt.Fprintf(p.f.IOStreams.ErrOut, "\r%s %s  %d%% (%s/%s)   ",
+		p.arrow, p.name, pct, text.FormatBytes(committed), text.FormatBytes(p.total))
 }
 
 func (p *progress) done() {
 	if p.tty {
-		fmt.Fprintf(p.f.IOStreams.ErrOut, "\r✓ %s uploaded (%s)          \n", p.name, text.FormatBytes(p.total))
+		fmt.Fprintf(p.f.IOStreams.ErrOut, "\r✓ %s %s (%s)          \n", p.name, p.verb, text.FormatBytes(p.total))
 		return
 	}
-	fmt.Fprintf(p.f.IOStreams.ErrOut, "✓ %s uploaded (%s)\n", p.name, text.FormatBytes(p.total))
+	fmt.Fprintf(p.f.IOStreams.ErrOut, "✓ %s %s (%s)\n", p.name, p.verb, text.FormatBytes(p.total))
+}
+
+// doneAs reports completion with the actual byte count — used by downloads,
+// where the total may be unknown until the stream ends.
+func (p *progress) doneAs(n int64) {
+	p.total = n
+	p.done()
 }
 
 // waitForModel polls conversion status until a terminal state, then prints
