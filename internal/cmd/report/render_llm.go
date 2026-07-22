@@ -68,7 +68,13 @@ func llmTable(ios *iostreams.IOStreams, resp *gen.LlmReportResponse) error {
 		}
 	}
 
-	quants := quantOrder(resp.Summary.Quants)
+	// Union summary quants with quant types seen in records: a null summary
+	// (nullable-$ref decodes to a zero value) must not drop populated cells.
+	recordQuants := map[string]bool{}
+	for k := range best {
+		recordQuants[k.quant] = true
+	}
+	quants := quantOrder(resp.Summary.Quants, recordQuants)
 	devNames := sortedKeys(devices)
 
 	tp := tableprinter.New(ios)
@@ -90,12 +96,22 @@ func llmTable(ios *iostreams.IOStreams, resp *gen.LlmReportResponse) error {
 	return llmAccuracy(ios, resp.Summary.Accuracy)
 }
 
-// quantOrder returns quant types in the order the summary presents them
-// (map keys sorted for stability, since Go maps are unordered).
-func quantOrder(quants map[string]gen.LlmQuantAggregates) []string {
-	out := make([]string, 0, len(quants))
+// quantOrder returns the union of summary quant types and quant types seen
+// in records, sorted for stability (Go maps are unordered).
+func quantOrder(quants map[string]gen.LlmQuantAggregates, recordQuants map[string]bool) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(quants)+len(recordQuants))
 	for q := range quants {
-		out = append(out, q)
+		if !seen[q] {
+			seen[q] = true
+			out = append(out, q)
+		}
+	}
+	for q := range recordQuants {
+		if !seen[q] {
+			seen[q] = true
+			out = append(out, q)
+		}
 	}
 	sort.Strings(out)
 	return out

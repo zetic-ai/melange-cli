@@ -352,3 +352,20 @@ func lineWith(t *testing.T, out, sub string) string {
 	t.Fatalf("no line containing %q in:\n%s", sub, out)
 	return ""
 }
+
+// A null summary (nullable-$ref decodes to a zero value) must not drop
+// quant columns that exist in the records.
+func TestReportLLMTableNullSummaryDerivesColumnsFromRecords(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	body := `{"derivation_version":1,"model":{"key":"m_x","version":1},` +
+		`"records":[{"device":{"marketing_name":"Pixel","name":"Pixel"},"quant_type":"Q4_0","run":0,"metric":"tps","value":42.5,"unit":"tokens_per_s"}],` +
+		`"summary":null}`
+	e.reg.Register(httpmock.REST("GET", llmPath), jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "--no-color", "report", "view", "m_x", "-R", "zetic/whisper", "--type", "llm"))
+
+	out := e.out.String()
+	assert.Contains(t, out, "Q4_0", "quant column derived from records despite null summary")
+	assert.Contains(t, lineWith(t, out, "Pixel"), "42.5")
+}
