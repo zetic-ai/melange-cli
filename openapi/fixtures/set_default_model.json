@@ -1,0 +1,25 @@
+{
+  "request": {
+    "body": null,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "method": "PUT",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/default"
+  },
+  "response": {
+    "body": {
+      "created_at": "<datetime>",
+      "is_default": true,
+      "key": "<uuid>",
+      "state": "ready",
+      "type": "general",
+      "updated_at": "<datetime>",
+      "version": 1
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

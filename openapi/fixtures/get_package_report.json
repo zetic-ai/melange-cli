@@ -1,0 +1,175 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/reports/package"
+  },
+  "response": {
+    "body": {
+      "derivation_version": 1,
+      "model": {
+        "key": "<uuid>",
+        "version": 1
+      },
+      "records": [
+        {
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "memory_inference_peak_mb",
+          "run_configuration": {
+            "configuration": {
+              "backend": "cpu",
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "mb",
+          "value": 512.0
+        },
+        {
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "tps",
+          "run_configuration": {
+            "configuration": {
+              "backend": "cpu",
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "tokens_per_s",
+          "value": 33.5
+        },
+        {
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "ttft_ms",
+          "run_configuration": {
+            "configuration": {
+              "backend": "cpu",
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "ms",
+          "value": 150.0
+        },
+        {
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "prompt_tokens",
+          "run_configuration": {
+            "configuration": {
+              "backend": "cpu",
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "count",
+          "value": 32.0
+        },
+        {
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "generated_tokens",
+          "run_configuration": {
+            "configuration": {
+              "backend": "cpu",
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "count",
+          "value": 64.0
+        }
+      ],
+      "summary": {
+        "auto": {
+          "memory_inference_peak_mb": {
+            "avg": 512.0,
+            "max": 512.0,
+            "median": 512.0,
+            "min": 512.0
+          },
+          "tps": {
+            "avg": 33.5,
+            "max": 33.5,
+            "median": 33.5,
+            "min": 33.5
+          },
+          "ttft_ms": {
+            "avg": 150.0,
+            "max": 150.0,
+            "median": 150.0,
+            "min": 150.0
+          }
+        },
+        "speed": {
+          "memory_inference_peak_mb": {
+            "avg": 512.0,
+            "max": 512.0,
+            "median": 512.0,
+            "min": 512.0
+          },
+          "tps": {
+            "avg": 33.5,
+            "max": 33.5,
+            "median": 33.5,
+            "min": 33.5
+          },
+          "ttft_ms": {
+            "avg": 150.0,
+            "max": 150.0,
+            "median": 150.0,
+            "min": 150.0
+          }
+        }
+      }
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

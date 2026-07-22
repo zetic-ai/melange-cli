@@ -180,10 +180,11 @@ func dropNulls(v any) any {
 // the concretized input (nulls/absent treated equal). A field the generated
 // type does not model is dropped on re-marshal and surfaces here as a diff.
 //
-// tolerateZeroObjects collapses all-zero-numeric objects to absent on both
-// sides — enabled ONLY for fixtures with the known nullable-ref codegen gap
-// (get_general_report's summary), never generally, so ordinary zero-valued
-// scalars (e.g. usage counters) stay strictly compared.
+// tolerateZeroObjects collapses codegen-nullable zero VALUES to absent on both
+// sides — enabled ONLY for the report fixtures with the known nullable codegen
+// gap (get_general_report / get_llm_report / get_package_report), never
+// generally, so ordinary zero-valued scalars (e.g. usage counters) stay
+// strictly compared.
 func roundTrip(t *testing.T, name string, body json.RawMessage, dst any, tolerateZeroObjects bool) {
 	t.Helper()
 	concrete := concretize(body)
@@ -211,14 +212,20 @@ func roundTrip(t *testing.T, name string, body json.RawMessage, dst any, tolerat
 	if err != nil {
 		t.Fatalf("%s: canonicalizing re-marshaled body: %v", name, err)
 	}
-	// KNOWN CODEGEN GAP (get_general_report only): some nullable ref fields
-	// (the report summary's per-precision ReportStats/ReportMinMax/
-	// ReportMemoryBounds — spec: `anyOf [Schema, null]`) generate as
-	// NON-pointer structs, so a fixture `null` re-marshals as an all-zero
-	// object instead of null. Collapsing all-zero-numeric objects to absent on
-	// BOTH sides tolerates exactly that asymmetry while still failing on a
-	// genuinely dropped non-zero object. Scoped to this fixture so ordinary
-	// zero scalars elsewhere stay strictly compared.
+	// KNOWN CODEGEN GAP (the three report fixtures only): oapi-codegen renders
+	// several nullable schema members (spec: `anyOf [Schema, null]`) as
+	// NON-pointer Go fields, so a fixture `null` re-marshals as that type's
+	// zero value instead of null:
+	//   - nullable ref structs (get_general_report's summary
+	//     ReportStats/ReportMinMax/ReportMemoryBounds; get_package_report's
+	//     PackageModeAggregates) -> an all-zero object;
+	//   - nullable scalar strings/enums (get_llm_report's record dataset and
+	//     ap_type, spec: `string | null`) -> an empty string "".
+	// Collapsing both an all-zero-numeric object AND an empty string to absent
+	// on BOTH sides tolerates exactly that asymmetry while still failing on a
+	// genuinely dropped non-zero/non-empty value. Scoped to the report fixtures
+	// (these carry no legitimately empty/zero leaf) so ordinary zero scalars and
+	// empty strings elsewhere stay strictly compared.
 	if tolerateZeroObjects {
 		want = collapseZeroObjects(want)
 		got = collapseZeroObjects(got)
@@ -229,9 +236,11 @@ func roundTrip(t *testing.T, name string, body json.RawMessage, dst any, tolerat
 	}
 }
 
-// collapseZeroObjects drops object/array nodes whose every leaf is a numeric
-// zero (json.Number "0"/"0.0"), mapping them to nil so they compare equal to an
-// absent key. A node with any non-zero leaf, string, or bool is preserved.
+// collapseZeroObjects maps codegen-nullable zero VALUES to nil so they compare
+// equal to an absent key (see roundTrip for why this is scoped to the report
+// fixtures): a numeric zero (json.Number "0"/"0.0") or an empty string "", and
+// any object/array whose every leaf collapses to nil. A node with any non-zero
+// number, non-empty string, or bool is preserved.
 func collapseZeroObjects(v any) any {
 	switch t := v.(type) {
 	case map[string]any:
@@ -263,6 +272,11 @@ func collapseZeroObjects(v any) any {
 		return out
 	case float64:
 		if t == 0 {
+			return nil
+		}
+		return t
+	case string:
+		if t == "" {
 			return nil
 		}
 		return t
@@ -417,6 +431,23 @@ func repoCoords(p string) (account, repo string) {
 func afterModels(p string) string { return segAfter(p, "models") }
 func uploadID(p string) string    { return segAfter(p, "uploads") }
 
+// targetID pulls the opaque target id out of a
+// "/models/{key}/targets/{target_id}/download-authorizations" path.
+func targetID(p string) string { return segAfter(p, "targets") }
+
+// libraryCoords pulls the {account, repo} pair out of a
+// "/v1/library/models/{account}/{repo}" fixture path (get_library_model). The
+// repos-based repoCoords does not apply to the library namespace.
+func libraryCoords(p string) (account, repo string) {
+	segs := pathSegments(p)
+	for i, s := range segs {
+		if s == "models" && i+2 < len(segs) {
+			return segs[i+1], segs[i+2]
+		}
+	}
+	return "", ""
+}
+
 // contractCase couples a fixture with the response type to round-trip and the
 // generated call to drive for its request. Either half may be nil when the
 // fixture is response-only (error envelopes) or has no client method wired.
@@ -549,10 +580,85 @@ func cases() []contractCase {
 			},
 		},
 		{
+			// Same known nullable-ref codegen gap as get_general_report: the
+			// report Summary generates as a NON-pointer struct, so a null
+			// summary sub-struct re-marshals as an all-zero object. The scoped
+			// tolerance (documented in roundTrip) is extended to exactly the
+			// llm/package reports that hit it, no wider.
+			name:                "get_llm_report",
+			responseBody:        func() any { return &gen.LlmReportResponse{} },
+			tolerateZeroObjects: true,
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				a, r := repoCoords(fx.Request.Path)
+				_, err := c.GetLlmReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
+				return err
+			},
+		},
+		{
+			name:                "get_package_report",
+			responseBody:        func() any { return &gen.PackageReportResponse{} },
+			tolerateZeroObjects: true,
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				a, r := repoCoords(fx.Request.Path)
+				_, err := c.GetPackageReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
+				return err
+			},
+		},
+		{
+			name:         "set_default_model",
+			responseBody: func() any { return &gen.ModelSummary{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				a, r := repoCoords(fx.Request.Path)
+				_, err := c.SetDefaultModelWithResponse(ctx, a, r, afterModels(fx.Request.Path))
+				return err
+			},
+		},
+		{
+			name:         "import_model",
+			responseBody: func() any { return &gen.ImportModelResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				a, r := repoCoords(fx.Request.Path)
+				var body gen.ImportModelJSONRequestBody
+				if err := json.Unmarshal(concretize(fx.Request.Body), &body); err != nil {
+					return err
+				}
+				_, err := c.ImportModelWithResponse(ctx, a, r, &gen.ImportModelParams{}, body)
+				return err
+			},
+		},
+		{
+			name:         "create_download_authorization",
+			responseBody: func() any { return &gen.DownloadAuthorizationResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				a, r := repoCoords(fx.Request.Path)
+				_, err := c.CreateDownloadAuthorizationWithResponse(
+					ctx, a, r, afterModels(fx.Request.Path), targetID(fx.Request.Path),
+					&gen.CreateDownloadAuthorizationParams{})
+				return err
+			},
+		},
+		{
 			name:         "list_library_models",
 			responseBody: func() any { return &gen.PagedLibraryModelItem{} },
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
 				_, err := c.ListLibraryModelsWithResponse(ctx, &gen.ListLibraryModelsParams{})
+				return err
+			},
+		},
+		{
+			name:         "get_library_model",
+			responseBody: func() any { return &gen.LibraryModelDetailResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				a, r := libraryCoords(fx.Request.Path)
+				_, err := c.GetLibraryModelWithResponse(ctx, a, r)
+				return err
+			},
+		},
+		{
+			name:         "list_library_providers",
+			responseBody: func() any { return &gen.ListLibraryProvidersResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				_, err := c.ListLibraryProvidersWithResponse(ctx)
 				return err
 			},
 		},
@@ -580,6 +686,13 @@ func cases() []contractCase {
 		},
 		{
 			name:         "error_422",
+			responseBody: func() any { return &gen.ErrorEnvelope{} },
+		},
+		{
+			// The literal-enum 422 (invalid use_case) — a distinct error shape
+			// from the missing-field error_422; both round-trip the shared
+			// ErrorEnvelope type with a non-null per-field message.
+			name:         "error_422_enum",
 			responseBody: func() any { return &gen.ErrorEnvelope{} },
 		},
 	}

@@ -1,0 +1,26 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "POST",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/targets/<target_id>/download-authorizations"
+  },
+  "response": {
+    "body": {
+      "artifacts": [
+        {
+          "checksum": "sha:aaa",
+          "name": "model.pt",
+          "size": 1000,
+          "url": "<signed-url>"
+        }
+      ],
+      "authorization_id": "<uuid>",
+      "expires_at": "<datetime>"
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 201
+  }
+}

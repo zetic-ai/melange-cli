@@ -1,0 +1,33 @@
+{
+  "request": {
+    "body": {
+      "model_type": "general",
+      "name": "badusecase",
+      "use_case": "bogus"
+    },
+    "headers": {},
+    "method": "POST",
+    "path": "/v1/repos"
+  },
+  "response": {
+    "body": {
+      "error": {
+        "fields": [
+          {
+            "field": "use_case",
+            "message": "Input should be 'vision', 'nlp', 'llm', 'speech' or 'other'"
+          }
+        ],
+        "message": "Invalid request",
+        "type": "invalid_request_error"
+      },
+      "request_id": "<request_id>",
+      "type": "error"
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Request-ID": "<request_id>"
+    },
+    "status": 422
+  }
+}

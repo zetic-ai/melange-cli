@@ -1,0 +1,143 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/reports/llm"
+  },
+  "response": {
+    "body": {
+      "derivation_version": 1,
+      "model": {
+        "key": "<uuid>",
+        "version": 1
+      },
+      "records": [
+        {
+          "ap_type": "cpu",
+          "dataset": null,
+          "device": {
+            "ap_vendor": "Qualcomm",
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "tps",
+          "quant_type": "Q4_K_M",
+          "run": 0,
+          "target": "llama_cpp",
+          "unit": "tokens_per_s",
+          "value": 42.5
+        },
+        {
+          "ap_type": "cpu",
+          "dataset": null,
+          "device": {
+            "ap_vendor": "Qualcomm",
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "ttft_ms",
+          "quant_type": "Q4_K_M",
+          "run": 0,
+          "target": "llama_cpp",
+          "unit": "ms",
+          "value": 250.0
+        },
+        {
+          "ap_type": "cpu",
+          "dataset": null,
+          "device": {
+            "ap_vendor": "Qualcomm",
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "prompt_tokens",
+          "quant_type": "Q4_K_M",
+          "run": 0,
+          "target": "llama_cpp",
+          "unit": "count",
+          "value": 64.0
+        },
+        {
+          "ap_type": "cpu",
+          "dataset": null,
+          "device": {
+            "ap_vendor": "Qualcomm",
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "generated_tokens",
+          "quant_type": "Q4_K_M",
+          "run": 0,
+          "target": "llama_cpp",
+          "unit": "count",
+          "value": 128.0
+        },
+        {
+          "ap_type": null,
+          "dataset": "mmlu",
+          "device": null,
+          "metric": "accuracy_score",
+          "quant_type": "Q4_K_M",
+          "run": 0,
+          "target": "llama_cpp",
+          "unit": "score",
+          "value": 0.69
+        },
+        {
+          "ap_type": null,
+          "dataset": null,
+          "device": null,
+          "metric": "model_size_bytes",
+          "quant_type": "Q4_K_M",
+          "run": 0,
+          "target": "llama_cpp",
+          "unit": "bytes",
+          "value": 2000000000.0
+        }
+      ],
+      "summary": {
+        "accuracy": [
+          {
+            "dataset": "mmlu",
+            "quant_type": "Q4_K_M",
+            "score": 0.69,
+            "target": "llama_cpp"
+          }
+        ],
+        "quants": {
+          "Q4_K_M": {
+            "best_accuracy": 0.69,
+            "best_memory_mb": null,
+            "best_tps": 42.5,
+            "best_ttft_ms": 250.0
+          }
+        }
+      }
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "request": {
+    "body": {
+      "hf_repo": "org/tiny-llm"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "method": "POST",
+    "path": "/v1/repos/verifiedusertestaccount2/fixtureimportrepo/models/import"
+  },
+  "response": {
+    "body": {
+      "key": "<uuid>",
+      "state": "converting",
+      "version": 1
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 201
+  }
+}

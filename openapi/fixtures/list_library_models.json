@@ -16,7 +16,10 @@
           "full_name": "verifiedusertestaccount2/libmodel",
           "model_type": "general",
           "name": "libmodel",
-          "provider": null,
+          "provider": {
+            "logo_url": "https://logo.example/acme.png",
+            "name": "Acme AI"
+          },
           "tags": [
             "vision"
           ],
