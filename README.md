@@ -30,6 +30,26 @@ go install github.com/zetic-ai/melange-cli/cmd/melange@latest
 
 Prebuilt binaries (darwin/linux/windows, amd64/arm64) with checksums and SBOMs are on the [releases page](https://github.com/zetic-ai/melange-cli/releases).
 
+## Agent skills
+
+An [agent skill](https://agentskills.io) is available for driving `melange` from
+Claude Code, Codex, Cursor, and other compatible coding agents. Install it at
+user scope with the open Agent Skills installer:
+
+```sh
+# Install the skill (user scope recommended; select an agent when prompted)
+npx skills add zetic-ai/melange-cli --skill melange-cli-usage --global
+
+# Or install non-interactively for Claude Code
+npx skills add zetic-ai/melange-cli --skill melange-cli-usage --agent claude-code --global --yes
+
+# Update the installed skill after a melange-cli release
+npx skills update melange-cli-usage --global
+```
+
+Installing the `melange` binary does not install or update the agent skill.
+Restart your agent after installation so it can discover the skill.
+
 ## Authentication
 
 Create a Personal Access Token in Melange → Settings → Personal Access Tokens, then:
