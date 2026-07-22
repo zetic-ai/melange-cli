@@ -18,8 +18,36 @@ repository. Interrupting an upload (Ctrl-C) preserves the session; resume
 it with --resume SESSION_ID (already-uploaded bytes are never re-sent) or
 discard it with --cancel SESSION_ID. --sessions lists sessions.
 
+When a signed upload URL expires, reissue intentionally mints a fresh URL
+and carries no Idempotency-Key; create, complete, and cancel retain their
+documented idempotency keys.
+
 --dry-run prints the manifest that would be uploaded — including the
 destination layout — without any network calls.
+
+For a bucketed .pt2 model, repeat --bucket in declaration order and pass
+one complete group of --input files for each bucket. For example, two
+buckets and four inputs means two inputs per bucket: the first two inputs
+belong to the first bucket and the next two to the second. Within every
+bucket, input order defines input_index.
+
+--input-manifest accepts this CLI-private local-file shape (it is not the
+public API wire manifest):
+  {
+    "manifest_version": 2,
+    "files": [
+      {"path": "models/model.onnx", "role": "model"},
+      {"path": "samples/audio.npy", "role": "input", "input_index": 0}
+    ]
+  }
+path is required and is resolved relative to the manifest file. filename
+is optional. input_index is optional for inputs and defaults by order;
+bucket_index is valid for inputs when options.buckets is declared.
+
+With --wait, structured output is
+{"model": <created model>, "status": <final status>}; for example,
+--jq .model.key returns the model key. Without --wait, --json remains the
+raw upload-complete response.
 
 Exit codes: 0 success, 1 upload/verification/conversion failure, 2 usage
 error, 4 not authenticated, 130 interrupted (session preserved).
@@ -37,6 +65,14 @@ melange model upload MODEL_FILE [flags]
   # Preview the manifest without uploading
   melange model upload -R zetic/whisper-tiny model.onnx --dry-run
 
+  # A model-only manifest is valid; wait and print its stable model key
+  melange model upload -R zetic/whisper-tiny model.onnx --wait --jq .model.key
+
+  # Upload a .pt2 model with two shape buckets and two inputs per bucket
+  melange model upload -R zetic/vision model.pt2 \
+    --bucket 0:1x3x224x224 --input image-224.npy --input mask-224.npy \
+    --bucket 1:1x3x384x384 --input image-384.npy --input mask-384.npy --wait
+
   # Resume an interrupted upload
   melange model upload --resume up_ab12cd -R zetic/whisper-tiny
 
@@ -48,14 +84,14 @@ melange model upload MODEL_FILE [flags]
 ### Options
 
 ```
-      --bucket INDEX:DIMS             Bucket dims as INDEX:DIMS (not yet supported)
+      --bucket .pt2                   .pt2 bucket as `INDEX:DIMS` (repeatable; group --input files by bucket order)
       --cancel session                Cancel the upload session
       --dry-run                       Print the manifest without creating a session or uploading
       --external-data file            External data file, e.g. ONNX external weights (repeatable)
   -h, --help                          help for upload
       --inactivity-timeout duration   Per-chunk stall timeout during uploads (default 2m0s)
       --input file                    Sample input file (repeatable; order defines input_index)
-      --input-manifest file           JSON manifest file describing all files (alternative to flags)
+      --input-manifest file           CLI-local JSON manifest file describing all files (alternative to flags)
       --jq expression                 Filter JSON output using a jq expression (implies --json)
       --json                          Output the full result as JSON
   -R, --repo ACCOUNT/REPO             Target repository as ACCOUNT/REPO (required)

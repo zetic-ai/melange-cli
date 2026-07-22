@@ -49,6 +49,9 @@ error, 4 not authenticated.`,
   melange model status m_ab12cd -R zetic/whisper-tiny --jq .state`,
 		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateWaitOptions(doWait, timeout, cmd.Flags().Changed("timeout")); err != nil {
+				return err
+			}
 			account, name, err := splitRepoFlag(repo)
 			if err != nil {
 				return err
@@ -84,6 +87,16 @@ error, 4 not authenticated.`,
 	cmdutil.AddJSONFlags(cmd, &exporter)
 
 	return cmd
+}
+
+func validateWaitOptions(doWait bool, timeout time.Duration, timeoutSet bool) error {
+	if timeoutSet && !doWait {
+		return cmdutil.FlagError{Err: fmt.Errorf("--timeout requires --wait")}
+	}
+	if doWait && timeout <= 0 {
+		return cmdutil.FlagError{Err: fmt.Errorf("--timeout must be positive")}
+	}
+	return nil
 }
 
 // printStatus renders a model status: --json raw, TTY human block, or

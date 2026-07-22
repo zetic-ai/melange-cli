@@ -47,16 +47,15 @@ func generalTSV(ios *iostreams.IOStreams, records []gen.GeneralReportRecord) err
 	for _, r := range records {
 		tp.AddField(deref(r.Device.MarketingName))
 		tp.AddField(deref(r.Device.Name))
-		tp.AddField(deref(r.Device.Brand))
 		tp.AddField(deref(r.Device.Soc))
-		tp.AddField(deref(r.Device.OsVersion))
-		tp.AddField(string(r.ApType))
-		tp.AddField(r.Target)
+		tp.AddField(deref(r.Device.Os))
+		tp.AddField(deref(r.ApType))
+		tp.AddField(deref(r.Target))
 		tp.AddField(string(r.Precision))
 		tp.AddField(strconv.Itoa(r.Run))
-		tp.AddField(r.Metric)
+		tp.AddField(string(r.Metric))
 		tp.AddField(formatFloat(r.Value))
-		tp.AddField(r.Unit)
+		tp.AddField(string(r.Unit))
 		tp.EndRow()
 	}
 	return tp.Render()
@@ -75,7 +74,7 @@ func generalTable(ios *iostreams.IOStreams, resp *gen.GeneralReportResponse, m m
 	for _, r := range resp.Records {
 		dev := deviceKey(r.Device)
 		devices[dev] = true
-		col := column{apType: string(r.ApType), precision: string(r.Precision)}
+		col := column{apType: deref(r.ApType), precision: string(r.Precision)}
 		presentCols[col] = true
 		k := cellKey{device: dev, col: col}
 		cells[k] = append(cells[k], r)
@@ -205,64 +204,55 @@ func memoryRange(s gen.GeneralMemorySummary, prec string) string {
 		return ""
 	}
 	return fmt.Sprintf("load %s–%s / inf %s–%s MB",
-		formatFloat(mb.LoadMin), formatFloat(mb.LoadMax),
-		formatFloat(mb.InferenceMin), formatFloat(mb.InferenceMax))
+		formatOptionalFloat(mb.LoadMin), formatOptionalFloat(mb.LoadMax),
+		formatOptionalFloat(mb.InferenceMin), formatOptionalFloat(mb.InferenceMax))
 }
 
-// pickStats/pickMinMax/pickMemory select the per-precision bucket. A zero-value
-// bucket (all fields 0) is treated as absent so empty precisions are skipped.
+// pickStats/pickMinMax/pickMemory select a nullable per-precision bucket.
 func pickStats(s gen.GeneralLatencySummary, prec string) *gen.ReportStats {
-	var st gen.ReportStats
 	switch prec {
 	case "fp32":
-		st = s.Fp32
+		return s.Fp32
 	case "fp16":
-		st = s.Fp16
+		return s.Fp16
 	case "int8":
-		st = s.Int8
+		return s.Int8
 	default:
 		return nil
 	}
-	if st == (gen.ReportStats{}) {
-		return nil
-	}
-	return &st
 }
 
 func pickMinMax(s gen.GeneralSnrSummary, prec string) *gen.ReportMinMax {
-	var mm gen.ReportMinMax
 	switch prec {
 	case "fp32":
-		mm = s.Fp32
+		return s.Fp32
 	case "fp16":
-		mm = s.Fp16
+		return s.Fp16
 	case "int8":
-		mm = s.Int8
+		return s.Int8
 	default:
 		return nil
 	}
-	if mm == (gen.ReportMinMax{}) {
-		return nil
-	}
-	return &mm
 }
 
 func pickMemory(s gen.GeneralMemorySummary, prec string) *gen.ReportMemoryBounds {
-	var mb gen.ReportMemoryBounds
 	switch prec {
 	case "fp32":
-		mb = s.Fp32
+		return s.Fp32
 	case "fp16":
-		mb = s.Fp16
+		return s.Fp16
 	case "int8":
-		mb = s.Int8
+		return s.Int8
 	default:
 		return nil
 	}
-	if mb == (gen.ReportMemoryBounds{}) {
-		return nil
+}
+
+func formatOptionalFloat(value *float32) string {
+	if value == nil {
+		return "-"
 	}
-	return &mb
+	return formatFloat(*value)
 }
 
 func orDash(s string) string {

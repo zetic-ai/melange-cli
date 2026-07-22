@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/zetic-ai/melange-cli/internal/api"
 )
@@ -28,11 +29,20 @@ func NewAPIClient(f *Factory, host, token string) (*api.Client, error) {
 	if envTruthy(os.Getenv("MELANGE_DEBUG")) {
 		debug = f.IOStreams.ErrOut
 	}
+	timeout := api.DefaultRequestTimeout
+	if raw := strings.TrimSpace(os.Getenv("MELANGE_API_TIMEOUT")); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil || parsed <= 0 {
+			return nil, fmt.Errorf("MELANGE_API_TIMEOUT must be a positive duration (for example 30s or 2m), got %q", raw)
+		}
+		timeout = parsed
+	}
 	return api.NewClient(api.Options{
 		Host:      host,
 		Token:     token,
 		UserAgent: fmt.Sprintf("melange-cli/%s (%s; %s)", f.Version, runtime.GOOS, runtime.GOARCH),
 		Debug:     debug,
 		Transport: f.HTTPTransport,
+		Timeout:   timeout,
 	})
 }

@@ -57,6 +57,28 @@ func TestStatusRequiresRepo(t *testing.T) {
 	assert.Equal(t, 2, cmdutil.ExitCode(err))
 }
 
+func TestStatusWaitRequiresPositiveTimeout(t *testing.T) {
+	for _, timeout := range []string{"0s", "-1s"} {
+		t.Run(timeout, func(t *testing.T) {
+			e := setup(t)
+			err := run(t, e, "status", "m_1", "-R", repoArg, "--wait", "--timeout", timeout)
+			require.Error(t, err)
+			assert.Equal(t, 2, cmdutil.ExitCode(err))
+			assert.Contains(t, err.Error(), "--timeout must be positive")
+			assert.Empty(t, e.reg.Requests, "invalid wait budgets must fail before API access")
+		})
+	}
+}
+
+func TestStatusTimeoutRequiresWait(t *testing.T) {
+	e := setup(t)
+	err := run(t, e, "status", "m_1", "-R", repoArg, "--timeout", "1m")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "--timeout requires --wait")
+	assert.Empty(t, e.reg.Requests)
+}
+
 func TestStatusWaitUntilTerminalFailedExit1(t *testing.T) {
 	e := setup(t)
 	fakePoll(t)

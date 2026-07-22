@@ -15,12 +15,9 @@
       "records": [
         {
           "device": {
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "memory_inference_peak_mb",
@@ -37,12 +34,9 @@
         },
         {
           "device": {
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "tps",
@@ -59,12 +53,9 @@
         },
         {
           "device": {
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "ttft_ms",
@@ -81,12 +72,9 @@
         },
         {
           "device": {
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "prompt_tokens",
@@ -103,12 +91,9 @@
         },
         {
           "device": {
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "generated_tokens",

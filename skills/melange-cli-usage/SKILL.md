@@ -8,7 +8,9 @@ description: "Use when interacting with zetic.ai Melange: uploading/deploying on
 `melange` is the CLI for the Zetic.ai Melange platform (on-device AI model
 deployment and benchmarking). It is agent-first: data goes to stdout,
 progress/diagnostics go to stderr, exit codes are stable, and `--json`
-output is machine-exact. Run `melange help environment`, `melange help
+output is machine-exact except for documented composed or redacted results.
+Waited upload/import results compose model identity with final status, and
+download authorization URLs are redacted credentials. Run `melange help
 exit-codes`, and `melange help formatting` for the authoritative topics.
 
 ## Authentication
@@ -41,7 +43,10 @@ interactive prompts.
 ## Output contract
 
 - `--json`: for server-backed commands the payload is the API response
-  byte-for-byte (field names, order, unknown fields preserved).
+  byte-for-byte (field names, order, unknown fields preserved), except:
+  `model upload/import --wait` returns the documented
+  `{"model": ..., "status": ...}` composite, and `model download`
+  replaces signed artifact URLs with `"<redacted>"`.
 - `--jq EXPR` (implies `--json`): jq filter; filtered values are
   re-marshaled with sorted object keys; bare strings print raw.
 - `--template TMPL` (implies `--json`): Go template with `tablerow`,
@@ -62,12 +67,57 @@ melange repo create whisper-tiny --private --json --jq .full_name
 # 2. Preview the upload manifest first (no network calls)
 melange model upload -R acme/whisper-tiny model.onnx --input audio.bin --dry-run
 
-# 3. Upload and wait for conversion (--input order defines input_index)
-melange model upload -R acme/whisper-tiny model.onnx \
-  --input audio.bin --input mask.bin --wait --json
+# 3. Upload and wait once; preserve both identity and terminal status
+upload_json="$(melange model upload -R acme/whisper-tiny model.onnx \
+  --input audio.bin --input mask.bin --wait --json)" || exit $?
+model_key="$(printf '%s\n' "$upload_json" | jq -er '.model.key')" || exit $?
+model_state="$(printf '%s\n' "$upload_json" | jq -er '.status.state')" || exit $?
+test "$model_state" = ready || exit 1
 
-# 4. Check conversion later (MODEL_KEY like m_ab12cd)
-melange model status m_ab12cd -R acme/whisper-tiny --jq .state
+# 4. Use the captured key in later structured commands
+melange model view "$model_key" -R acme/whisper-tiny --json
+```
+
+For bucketed `.pt2` models, declare buckets in the same order as their input
+groups. Each bucket must have the same number of inputs; within a group, order
+defines `input_index`. Validate the mapping without a network call first:
+
+```sh
+melange model upload -R acme/vision model.pt2 \
+  --bucket 0:1x3x224x224 --input image224.npy --input mask224.npy \
+  --bucket 1:1x3x384x384 --input image384.npy --input mask384.npy \
+  --dry-run --json
+```
+
+Sample inputs are optional. This is a valid model-only preflight:
+`melange model upload -R acme/repo model.onnx --dry-run`.
+
+Expired upload URL reissue intentionally mints fresh signed URLs and sends no
+`Idempotency-Key`; create, complete, and cancel keep their replay keys.
+
+For advanced workflows, `--input-manifest` uses a CLI-private local-file
+document, not the public API wire manifest. Each `path` is resolved relative
+to the manifest file, so the document is independent of the process CWD:
+
+```json
+{
+  "manifest_version": 2,
+  "files": [
+    {"path": "models/model.onnx", "role": "model"},
+    {"path": "samples/audio.npy", "role": "input", "input_index": 0}
+  ]
+}
+```
+
+`path` and `role` are required. `filename` is optional. For input files,
+`input_index` is optional and defaults by order. Bucketed manifests add
+`options.buckets` entries shaped as
+`{"index": 0, "dims": [1, 3, 224, 224]}` and a matching `bucket_index`
+on each input. Then run:
+
+```sh
+melange model upload -R acme/whisper-tiny \
+  --input-manifest ./upload/manifest.json --dry-run --json
 ```
 
 - `-R ACCOUNT/REPO` is **required** on every `melange model` command —
@@ -89,12 +139,27 @@ melange model view m_ab12cd -R acme/whisper-tiny --jq .download_ready
 melange model targets m_ab12cd -R acme/whisper-tiny --json      # converted targets
 melange model set-default m_ab12cd -R acme/whisper-tiny         # pin the repo default
 melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait  # import an LLM (repo type llm)
-melange model download m_ab12cd -R acme/whisper-tiny --target tm_71 --output ./models
+melange model download m_ab12cd -R acme/whisper-tiny --target tm_71 --output ./models --yes
 ```
 
-`model download` is **billable** and idempotent: it authorizes once, then
-streams the artifact; `--output` defaults to the current directory, is
-validated before the charge, and never overwrites an existing file without --force.
+Waited upload and import output has one stable shape:
+`{"model": <create/import response>, "status": <final ModelStatusResponse>}`.
+Use `.model.key` for identity and `.status.state` for the terminal outcome.
+Without `--wait`, each command keeps its raw create/import response.
+
+`model download` is **billable** and replay-safe across CLI processes. It
+persists a host/repository/model/target authorization key in per-user application state and
+serializes processes with a lock. Local output is recovery metadata, not part
+of the billing identity: correcting an impossible file/stdout shape to a
+directory keeps the charged key. Durable completion/recovery state also keeps
+a waiting process or its later retry from rotating that key after another
+process succeeds. Signed URLs and access tokens are never stored. Transient
+artifact GETs retry; 403/404 refresh once, and 30 seconds without byte progress
+triggers a retry while each chunk resets the timer. `--output` never overwrites
+without `--force`. Known collisions validate before authorization, but artifact
+names arrive only in the billable response; a later collision keeps replay
+state and asks for `--force` without another charge. Agents must pass `--yes`.
+Use `--output -` only for one artifact and never with structured-output flags.
 
 ## Read benchmark reports: `melange report view`
 
@@ -153,8 +218,8 @@ lists sessions; `--cancel SESSION_ID` discards one.
 
 Call any `/v1` endpoint not yet wrapped by a dedicated command. Same
 transport as other commands: stored credentials, automatic retries for
-idempotent requests (GET/HEAD or anything with an `Idempotency-Key`
-header), standard error envelopes.
+GET/HEAD/PUT and anything with an `Idempotency-Key` header, standard error
+envelopes. Raw PATCH requests need an `Idempotency-Key` to be retried.
 
 ```sh
 melange api /v1/me --jq .account.name          # GET, extract one value
@@ -177,7 +242,9 @@ one-line summary on stderr; pagination and polling are your job here.
 - `-R ACCOUNT/REPO` is required on all `melange model` commands; there
   is no default repo.
 - Run uploads with `--dry-run` first to validate the manifest cheaply.
-- Never parse TTY tables — use `--json` (byte-exact) or `--jq`.
+- Never parse TTY tables — use `--json` or `--jq`. Plain `--json` is
+  byte-exact except for waited upload/import composites and redacted model
+  download authorization URLs.
 - Exit 130 means the upload session is preserved; resume with the
   printed `--resume` line instead of restarting the upload.
 - Exit 2 = your invocation is wrong (don't retry); exit 4 = credentials
@@ -186,3 +253,5 @@ one-line summary on stderr; pagination and polling are your job here.
   need the byte-exact server payload.
 - `MELANGE_DEBUG=1` logs request/response lines to stderr (tokens and
   headers are never logged).
+- `MELANGE_API_TIMEOUT` bounds ordinary API requests (default `30s`);
+  upload inactivity and conversion `--wait` have separate timeout flags.

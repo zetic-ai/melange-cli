@@ -33,12 +33,12 @@ func splitRepoFlag(value string) (account, name string, err error) {
 	return parts[0], parts[1], nil
 }
 
-// deref returns "" for nil string pointers.
-func deref(s *string) string {
+// deref returns "" for nil pointers to string-like generated types.
+func deref[T ~string](s *T) string {
 	if s == nil {
 		return ""
 	}
-	return *s
+	return string(*s)
 }
 
 // formatFloat renders a metric value with one decimal place.

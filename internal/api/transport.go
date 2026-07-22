@@ -96,9 +96,11 @@ func asciiLower(s string) string {
 
 // isLoopback reports whether hostname is a local loopback address.
 func isLoopback(hostname string) bool {
-	switch hostname {
-	case "localhost", "127.0.0.1", "::1":
+	if asciiLower(hostname) == "localhost" {
 		return true
+	}
+	if ip := net.ParseIP(hostname); ip != nil {
+		return ip.IsLoopback()
 	}
 	return false
 }
@@ -117,6 +119,10 @@ const (
 // immediately instead of being retried.
 type noRetry429Key struct{}
 
+// replaySafeKey marks a request whose non-idempotent-by-default method has
+// set-style semantics and may be replayed with the same body.
+type replaySafeKey struct{}
+
 // WithNoRetryOn429 returns a context that exempts the request from the
 // transport's 429 retry policy. Billable calls use this: a quota 429 is not
 // transient at retry timescales, so sitting through the backoff schedule only
@@ -132,10 +138,23 @@ func noRetryOn429(ctx context.Context) bool {
 	return v
 }
 
-// retryTransport retries idempotent requests (GET/HEAD, or any request with
-// an Idempotency-Key header) on 429/502/503/504 and connection errors, with
-// jittered exponential backoff. Retry-After is honored (capped) on 429s.
-// Requests marked with WithNoRetryOn429 surface 429s immediately.
+// WithReplaySafe explicitly permits retrying a replayable PUT/PATCH request.
+// Callers must only use it for set-style operations where replaying the exact
+// body cannot apply the mutation twice.
+func WithReplaySafe(ctx context.Context) context.Context {
+	return context.WithValue(ctx, replaySafeKey{}, true)
+}
+
+func replaySafe(ctx context.Context) bool {
+	v, _ := ctx.Value(replaySafeKey{}).(bool)
+	return v
+}
+
+// retryTransport retries idempotent GET/HEAD/PUT requests, PATCH requests
+// explicitly marked replay-safe, and any request carrying an Idempotency-Key
+// on 429/502/503/504 and connection errors, with jittered exponential
+// backoff. Retry-After is honored (capped) on 429s. Requests marked with
+// WithNoRetryOn429 surface 429s immediately.
 type retryTransport struct {
 	base  http.RoundTripper
 	sleep func(context.Context, time.Duration) error // injectable for tests
@@ -242,12 +261,15 @@ func isRetryableTransportErr(err error) bool {
 	return strings.Contains(msg, "connection reset") || strings.Contains(msg, "connection refused")
 }
 
-// retryEligible reports whether the request may be retried at all: it must be
-// idempotent (GET/HEAD or carrying an Idempotency-Key) and its body, if any,
-// must be replayable via GetBody.
+// retryEligible reports whether the request may be retried at all: its method
+// must be inherently idempotent, the request must be explicitly replay-safe,
+// or it must carry an Idempotency-Key. Its body, if any, must be replayable via
+// GetBody.
 func retryEligible(req *http.Request) bool {
 	idempotent := req.Method == http.MethodGet ||
 		req.Method == http.MethodHead ||
+		req.Method == http.MethodPut ||
+		(req.Method == http.MethodPatch && replaySafe(req.Context())) ||
 		req.Header.Get("Idempotency-Key") != ""
 	if !idempotent {
 		return false

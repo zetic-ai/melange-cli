@@ -4,7 +4,7 @@
 #   GITHUB_TOKEN      implicit (provided by Actions); `contents: write`
 #                     below lets it create the GitHub release + assets.
 #   TAP_GITHUB_TOKEN  required: a PAT with push access to
-#                     zetic-ai/homebrew-tap for publishing the formula.
+#                     zetic-ai/homebrew-tap for publishing the macOS cask.
 #
 # SBOM generation requires syft on PATH; the download-syft step below
 # installs it before GoReleaser runs.
@@ -16,33 +16,85 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  verify:
+    name: verify release source (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          node-version: "26"
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test (race)
+        if: matrix.os == 'ubuntu-latest'
+        run: go test -race ./...
+
+      - name: Test
+        if: matrix.os != 'ubuntu-latest'
+        run: go test ./...
+
+      - name: Lint
+        if: matrix.os == 'ubuntu-latest'
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        with:
+          version: v2.12.2
+
+      - name: Verify generated client
+        if: matrix.os == 'ubuntu-latest'
+        run: make gen-check
+
+      - name: Verify generated docs
+        if: matrix.os == 'ubuntu-latest'
+        run: make docs-check
+
   goreleaser:
     name: goreleaser
+    needs: verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # keyless cosign identity; no private signing key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Full history so GoReleaser can build the changelog.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Install syft (for SBOM generation)
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+
+      - name: Install cosign (for keyless checksum signing)
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+        with:
+          cosign-release: v3.1.2
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           distribution: goreleaser
-          # Pinned minor: goreleaser removes deprecated options (e.g. `brews`)
-          # in later minors; float again once the formula/cask question is
-          # settled deliberately.
+          # Pinned minor so release configuration changes are deliberate.
           version: "~> v2.17"
           args: release --clean
         env:

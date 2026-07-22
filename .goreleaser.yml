@@ -7,7 +7,7 @@
 #   GITHUB_TOKEN      provided automatically by GitHub Actions; needs
 #                     `contents: write` to create the GitHub release.
 #   TAP_GITHUB_TOKEN  a PAT with push access to zetic-ai/homebrew-tap,
-#                     used to publish the Homebrew formula.
+#                     used to publish the Homebrew cask.
 version: 2
 
 project_name: melange
@@ -48,18 +48,32 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Keyless Sigstore signing authenticates the checksum manifest to the exact
+# GitHub Actions workflow/tag identity. The installer verifies this bundle
+# before trusting any artifact digest; no long-lived signing key is needed.
+signs:
+  - id: cosign-checksums
+    cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+    artifacts: checksum
+
 # SBOMs are generated with syft (must be on PATH; the release workflow
 # installs it via anchore/sbom-action/download-syft).
 sboms:
   - artifacts: archive
 
-brews:
+homebrew_casks:
   - name: melange
     repository:
       owner: zetic-ai
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: https://melange.zetic.ai
     description: CLI for Melange, zetic.ai's on-device AI model deployment platform
     license: Apache-2.0
@@ -68,8 +82,6 @@ brews:
     commit_author:
       name: zetic-release-bot
       email: bot@zetic.ai
-    test: |
-      system "#{bin}/melange", "version"
 
 release:
   draft: false

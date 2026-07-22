@@ -30,6 +30,8 @@ package contract
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -179,13 +181,7 @@ func dropNulls(v any) any {
 // generated type), re-marshals it, and asserts the re-marshaled tree matches
 // the concretized input (nulls/absent treated equal). A field the generated
 // type does not model is dropped on re-marshal and surfaces here as a diff.
-//
-// tolerateZeroObjects collapses codegen-nullable zero VALUES to absent on both
-// sides — enabled ONLY for the report fixtures with the known nullable codegen
-// gap (get_general_report / get_llm_report / get_package_report), never
-// generally, so ordinary zero-valued scalars (e.g. usage counters) stay
-// strictly compared.
-func roundTrip(t *testing.T, name string, body json.RawMessage, dst any, tolerateZeroObjects bool) {
+func roundTrip(t *testing.T, name string, body json.RawMessage, dst any) {
 	t.Helper()
 	concrete := concretize(body)
 
@@ -212,76 +208,9 @@ func roundTrip(t *testing.T, name string, body json.RawMessage, dst any, tolerat
 	if err != nil {
 		t.Fatalf("%s: canonicalizing re-marshaled body: %v", name, err)
 	}
-	// KNOWN CODEGEN GAP (the three report fixtures only): oapi-codegen renders
-	// several nullable schema members (spec: `anyOf [Schema, null]`) as
-	// NON-pointer Go fields, so a fixture `null` re-marshals as that type's
-	// zero value instead of null:
-	//   - nullable ref structs (get_general_report's summary
-	//     ReportStats/ReportMinMax/ReportMemoryBounds; get_package_report's
-	//     PackageModeAggregates) -> an all-zero object;
-	//   - nullable scalar strings/enums (get_llm_report's record dataset and
-	//     ap_type, spec: `string | null`) -> an empty string "".
-	// Collapsing both an all-zero-numeric object AND an empty string to absent
-	// on BOTH sides tolerates exactly that asymmetry while still failing on a
-	// genuinely dropped non-zero/non-empty value. Scoped to the report fixtures
-	// (these carry no legitimately empty/zero leaf) so ordinary zero scalars and
-	// empty strings elsewhere stay strictly compared.
-	if tolerateZeroObjects {
-		want = collapseZeroObjects(want)
-		got = collapseZeroObjects(got)
-	}
 	if !reflect.DeepEqual(want, got) {
 		t.Fatalf("%s: response body did not round-trip through %T\n want: %s\n  got: %s",
 			name, dst, mustJSON(want), mustJSON(got))
-	}
-}
-
-// collapseZeroObjects maps codegen-nullable zero VALUES to nil so they compare
-// equal to an absent key (see roundTrip for why this is scoped to the report
-// fixtures): a numeric zero (json.Number "0"/"0.0") or an empty string "", and
-// any object/array whose every leaf collapses to nil. A node with any non-zero
-// number, non-empty string, or bool is preserved.
-func collapseZeroObjects(v any) any {
-	switch t := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(t))
-		for k, val := range t {
-			c := collapseZeroObjects(val)
-			if c == nil {
-				continue
-			}
-			out[k] = c
-		}
-		if len(out) == 0 {
-			return nil
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(t))
-		allNil := true
-		for _, val := range t {
-			c := collapseZeroObjects(val)
-			out = append(out, c)
-			if c != nil {
-				allNil = false
-			}
-		}
-		if len(out) == 0 || allNil {
-			return nil
-		}
-		return out
-	case float64:
-		if t == 0 {
-			return nil
-		}
-		return t
-	case string:
-		if t == "" {
-			return nil
-		}
-		return t
-	default:
-		return v
 	}
 }
 
@@ -455,9 +384,6 @@ type contractCase struct {
 	name         string
 	responseBody func() any
 	drive        func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error
-	// tolerateZeroObjects enables the report-summary nullable-ref workaround
-	// (see roundTrip); set only where the generated types have that known gap.
-	tolerateZeroObjects bool
 }
 
 func cases() []contractCase {
@@ -570,9 +496,8 @@ func cases() []contractCase {
 			},
 		},
 		{
-			name:                "get_general_report",
-			responseBody:        func() any { return &gen.GeneralReportResponse{} },
-			tolerateZeroObjects: true,
+			name:         "get_general_report",
+			responseBody: func() any { return &gen.GeneralReportResponse{} },
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
 				a, r := repoCoords(fx.Request.Path)
 				_, err := c.GetGeneralReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
@@ -580,14 +505,8 @@ func cases() []contractCase {
 			},
 		},
 		{
-			// Same known nullable-ref codegen gap as get_general_report: the
-			// report Summary generates as a NON-pointer struct, so a null
-			// summary sub-struct re-marshals as an all-zero object. The scoped
-			// tolerance (documented in roundTrip) is extended to exactly the
-			// llm/package reports that hit it, no wider.
-			name:                "get_llm_report",
-			responseBody:        func() any { return &gen.LlmReportResponse{} },
-			tolerateZeroObjects: true,
+			name:         "get_llm_report",
+			responseBody: func() any { return &gen.LlmReportResponse{} },
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
 				a, r := repoCoords(fx.Request.Path)
 				_, err := c.GetLlmReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
@@ -595,9 +514,8 @@ func cases() []contractCase {
 			},
 		},
 		{
-			name:                "get_package_report",
-			responseBody:        func() any { return &gen.PackageReportResponse{} },
-			tolerateZeroObjects: true,
+			name:         "get_package_report",
+			responseBody: func() any { return &gen.PackageReportResponse{} },
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
 				a, r := repoCoords(fx.Request.Path)
 				_, err := c.GetPackageReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
@@ -709,7 +627,7 @@ func TestResponseRoundTrip(t *testing.T) {
 			if tc.responseBody == nil {
 				t.Skip("no response body type wired")
 			}
-			roundTrip(t, tc.name, fx.Response.Body, tc.responseBody(), tc.tolerateZeroObjects)
+			roundTrip(t, tc.name, fx.Response.Body, tc.responseBody())
 		})
 	}
 }
@@ -754,5 +672,52 @@ func TestAllFixturesCovered(t *testing.T) {
 			t.Errorf("fixture %q has no contract case in fixtures_test.go; "+
 				"add one so the CLI round-trips it (see cases())", name)
 		}
+	}
+}
+
+// TestFixtureSourceDigest prevents a copied or hand-edited fixture set from
+// claiming provenance from a backend commit whose published payloads differ.
+func TestFixtureSourceDigest(t *testing.T) {
+	dir := fixturesDir(t)
+	raw, err := os.ReadFile(filepath.Join(dir, "..", "FIXTURES_SOURCE"))
+	if err != nil {
+		t.Fatalf("reading fixture source: %v", err)
+	}
+	var source []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			source = append(source, line)
+		}
+	}
+	if len(source) != 2 {
+		t.Fatalf("FIXTURES_SOURCE must contain commit and digest, got %d values", len(source))
+	}
+	commit, err := hex.DecodeString(source[0])
+	if err != nil || len(commit) != 20 {
+		t.Fatalf("invalid backend commit in FIXTURES_SOURCE: %q", source[0])
+	}
+	expected, err := hex.DecodeString(source[1])
+	if err != nil || len(expected) != sha256.Size {
+		t.Fatalf("invalid fixture digest in FIXTURES_SOURCE: %q", source[1])
+	}
+
+	entries, err := os.ReadDir(dir) // sorted by filename
+	if err != nil {
+		t.Fatalf("reading fixtures: %v", err)
+	}
+	h := sha256.New()
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		payload, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			t.Fatalf("reading fixture %s: %v", entry.Name(), err)
+		}
+		_, _ = h.Write(payload)
+	}
+	if !bytes.Equal(h.Sum(nil), expected) {
+		t.Fatalf("fixture digest mismatch: got %x, want %s", h.Sum(nil), source[1])
 	}
 }

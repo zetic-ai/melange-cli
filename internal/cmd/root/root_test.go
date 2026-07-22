@@ -40,6 +40,7 @@ func TestHelpEnvironmentTopic(t *testing.T) {
 		"MELANGE_API_KEY",
 		"MELANGE_API_KEY_FILE",
 		"MELANGE_HOST",
+		"MELANGE_API_TIMEOUT",
 		"MELANGE_DEBUG",
 		"1, true, yes, or on (case-insensitive)",
 		"NO_COLOR",
@@ -77,6 +78,8 @@ func TestHelpFormattingTopic(t *testing.T) {
 	for _, want := range []string{
 		"--json",
 		"byte-for-byte",
+		`{"model": ..., "status": ...}`,
+		"model download --json redacts signed artifact URLs",
 		"--jq",
 		"sorted order",
 		"--template",

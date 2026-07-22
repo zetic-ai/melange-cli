@@ -147,6 +147,15 @@ func TestRepoHelpListsSubcommands(t *testing.T) {
 	assert.Contains(t, help, "create")
 }
 
+func TestProjectIsRepoCommandAlias(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", "/v1/repos"),
+		jsonStub(200, page(t, 1, whisperRepo())))
+
+	require.NoError(t, run(t, e, "project", "list", "--json"))
+	assert.JSONEq(t, page(t, 1, whisperRepo()), e.out.String())
+}
+
 // ---------------------------------------------------------------------------
 // repo list
 // ---------------------------------------------------------------------------

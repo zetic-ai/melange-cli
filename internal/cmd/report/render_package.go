@@ -30,14 +30,13 @@ func packageTSV(ios *iostreams.IOStreams, records []gen.PackageReportRecord) err
 	for _, r := range records {
 		tp.AddField(deref(r.Device.MarketingName))
 		tp.AddField(deref(r.Device.Name))
-		tp.AddField(deref(r.Device.Brand))
 		tp.AddField(deref(r.Device.Soc))
-		tp.AddField(deref(r.Device.OsVersion))
-		tp.AddField(r.RunConfiguration.Package)
+		tp.AddField(deref(r.Device.Os))
+		tp.AddField(deref(r.RunConfiguration.Package))
 		tp.AddField(strconv.Itoa(r.RunConfiguration.Id))
-		tp.AddField(r.Metric)
+		tp.AddField(string(r.Metric))
 		tp.AddField(formatFloat(r.Value))
-		tp.AddField(r.Unit)
+		tp.AddField(string(r.Unit))
 		tp.EndRow()
 	}
 	return tp.Render()
@@ -48,7 +47,7 @@ func packageTSV(ios *iostreams.IOStreams, records []gen.PackageReportRecord) err
 func packageTable(ios *iostreams.IOStreams, s *gen.PackageReportSummary) error {
 	modes := []struct {
 		name string
-		agg  gen.PackageModeAggregates
+		agg  *gen.PackageModeAggregates
 	}{
 		{"auto", s.Auto},
 		{"speed", s.Speed},
@@ -56,7 +55,7 @@ func packageTable(ios *iostreams.IOStreams, s *gen.PackageReportSummary) error {
 	tp := tableprinter.New(ios)
 	tp.HeaderRow("mode", "tps", "ttft_ms", "mem_inf_peak_mb")
 	for _, m := range modes {
-		if m.agg == (gen.PackageModeAggregates{}) {
+		if m.agg == nil {
 			continue
 		}
 		tp.AddField(m.name)
@@ -68,9 +67,9 @@ func packageTable(ios *iostreams.IOStreams, s *gen.PackageReportSummary) error {
 	return tp.Render()
 }
 
-// statMedian renders a stat's median, or "-" for an absent (zero-value) stat.
-func statMedian(st gen.ReportStats) string {
-	if st == (gen.ReportStats{}) {
+// statMedian renders a stat's median, or "-" for an absent stat.
+func statMedian(st *gen.ReportStats) string {
+	if st == nil {
 		return "-"
 	}
 	return formatFloat(st.Median)

@@ -32,19 +32,22 @@ func renderLLM(ios *iostreams.IOStreams, body []byte, isTTY bool) error {
 func llmTSV(ios *iostreams.IOStreams, records []gen.LlmReportRecord) error {
 	tp := tableprinter.New(ios)
 	for _, r := range records {
-		tp.AddField(deref(r.Device.MarketingName))
-		tp.AddField(deref(r.Device.Name))
-		tp.AddField(deref(r.Device.Brand))
-		tp.AddField(deref(r.Device.Soc))
-		tp.AddField(deref(r.Device.OsVersion))
-		tp.AddField(string(r.ApType))
-		tp.AddField(r.Target)
-		tp.AddField(r.QuantType)
-		tp.AddField(r.Dataset)
+		var device gen.ReportDevice
+		if r.Device != nil {
+			device = *r.Device
+		}
+		tp.AddField(deref(device.MarketingName))
+		tp.AddField(deref(device.Name))
+		tp.AddField(deref(device.Soc))
+		tp.AddField(deref(device.Os))
+		tp.AddField(deref(r.ApType))
+		tp.AddField(deref(r.Target))
+		tp.AddField(deref(r.QuantType))
+		tp.AddField(deref(r.Dataset))
 		tp.AddField(strconv.Itoa(r.Run))
-		tp.AddField(r.Metric)
+		tp.AddField(string(r.Metric))
 		tp.AddField(formatFloat(r.Value))
-		tp.AddField(r.Unit)
+		tp.AddField(string(r.Unit))
 		tp.EndRow()
 	}
 	return tp.Render()
@@ -57,19 +60,20 @@ func llmTable(ios *iostreams.IOStreams, resp *gen.LlmReportResponse) error {
 	best := map[cellKey]float32{}
 	devices := map[string]bool{}
 	for _, r := range resp.Records {
-		if r.Metric != metricTps || r.QuantType == "" {
+		quant := deref(r.QuantType)
+		if r.Metric != metricTps || quant == "" || r.Device == nil {
 			continue
 		}
-		dev := llmDeviceKey(r.Device)
+		dev := llmDeviceKey(*r.Device)
 		devices[dev] = true
-		k := cellKey{device: dev, quant: r.QuantType}
+		k := cellKey{device: dev, quant: quant}
 		if cur, ok := best[k]; !ok || r.Value > cur {
 			best[k] = r.Value
 		}
 	}
 
-	// Union summary quants with quant types seen in records: a null summary
-	// (nullable-$ref decodes to a zero value) must not drop populated cells.
+	// Union summary quants with quant types seen in records so populated cells
+	// remain visible even when the summary carries no entry for that quant.
 	recordQuants := map[string]bool{}
 	for k := range best {
 		recordQuants[k.quant] = true
@@ -118,7 +122,7 @@ func quantOrder(quants map[string]gen.LlmQuantAggregates, recordQuants map[strin
 }
 
 // llmDeviceKey groups by marketing_name falling back to name.
-func llmDeviceKey(d gen.LlmReportDevice) string {
+func llmDeviceKey(d gen.ReportDevice) string {
 	if d.MarketingName != nil && *d.MarketingName != "" {
 		return *d.MarketingName
 	}
@@ -137,14 +141,15 @@ func llmAccuracy(ios *iostreams.IOStreams, entries []gen.LlmAccuracyEntry) error
 	fmt.Fprintln(&b, "\nAccuracy:")
 	sorted := append([]gen.LlmAccuracyEntry(nil), entries...)
 	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Dataset != sorted[j].Dataset {
-			return sorted[i].Dataset < sorted[j].Dataset
+		leftDataset, rightDataset := deref(sorted[i].Dataset), deref(sorted[j].Dataset)
+		if leftDataset != rightDataset {
+			return leftDataset < rightDataset
 		}
-		return sorted[i].QuantType < sorted[j].QuantType
+		return deref(sorted[i].QuantType) < deref(sorted[j].QuantType)
 	})
 	for _, e := range sorted {
 		fmt.Fprintf(&b, "  %-12s %-10s %s\n",
-			orDash(e.Dataset), orDash(e.QuantType), formatFloat(e.Score))
+			orDash(deref(e.Dataset)), orDash(deref(e.QuantType)), formatFloat(e.Score))
 	}
 	_, err := fmt.Fprint(ios.Out, b.String())
 	return err

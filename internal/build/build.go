@@ -1,7 +1,10 @@
 // Package build provides version information set at build time via -ldflags.
 package build
 
-import "fmt"
+import (
+	"fmt"
+	"runtime/debug"
+)
 
 // These variables are set at build time via:
 //
@@ -11,6 +14,19 @@ var (
 	Commit  = "none"
 	Date    = "unknown"
 )
+
+func init() {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		Version = resolveVersion(Version, info.Main.Version)
+	}
+}
+
+func resolveVersion(injected, module string) string {
+	if injected == "dev" && module != "" && module != "(devel)" {
+		return module
+	}
+	return injected
+}
 
 // Info returns a human-readable version string.
 func Info() string {

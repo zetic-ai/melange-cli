@@ -7,6 +7,7 @@
         "name": "Idempotency-Key",
         "required": false,
         "schema": {
+          "maxLength": 255,
           "type": "string"
         }
       }
@@ -92,10 +93,10 @@
             }
           }
         },
-        "description": "Rate limit or quota exceeded; retry after the number of seconds given in the `Retry-After` header.",
+        "description": "Rate limit or quota exceeded. Rate-limit responses include a `Retry-After` header; fixed quota exhaustion may omit it because there is no truthful retry delay.",
         "headers": {
           "Retry-After": {
-            "description": "Seconds to wait before retrying.",
+            "description": "Seconds to wait before retrying, when the server has a truthful retry window. Optional for fixed quota exhaustion.",
             "schema": {
               "type": "integer"
             }
@@ -239,6 +240,16 @@
             "type": "string"
           },
           "state": {
+            "enum": [
+              "CREATED",
+              "UPLOADING",
+              "VERIFYING",
+              "DISPATCH_PENDING",
+              "CONVERTING",
+              "FAILED",
+              "CANCELED",
+              "EXPIRED"
+            ],
             "title": "State",
             "type": "string"
           }
@@ -254,31 +265,33 @@
         "description": "Session state after a complete call (ADR-5 status vocabulary).\n\n`state` is the session state machine value; verification/promotion\nfailures surface as `state == \"FAILED\"` + `failure_code` on a 200 —\nthe POST itself succeeded, the SESSION failed. `terminal` means the\nsession will not transition further (CONVERTING is terminal for the\nsession: conversion progress continues on the model status endpoint).",
         "properties": {
           "failure_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Failure Code"
+            "nullable": true,
+            "title": "Failure Code",
+            "type": "string"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
           "model": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ModelRef"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "state": {
+            "enum": [
+              "CREATED",
+              "UPLOADING",
+              "VERIFYING",
+              "DISPATCH_PENDING",
+              "CONVERTING",
+              "FAILED",
+              "CANCELED",
+              "EXPIRED"
+            ],
             "title": "State",
             "type": "string"
           },
@@ -298,15 +311,9 @@
       "CompleteUploadRequest": {
         "properties": {
           "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
+            "nullable": true,
+            "title": "Source",
+            "type": "string"
           }
         },
         "title": "CompleteUploadRequest",
@@ -324,21 +331,19 @@
             "type": "array"
           },
           "manifest_version": {
-            "title": "Manifest Version",
-            "type": "integer",
             "enum": [
               2
-            ]
+            ],
+            "title": "Manifest Version",
+            "type": "integer"
           },
           "options": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ManifestOptions"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           }
         },
         "required": [
@@ -351,16 +356,10 @@
       "CreateProjectRequest": {
         "properties": {
           "description": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "maxLength": 500,
+            "nullable": true,
+            "title": "Description",
+            "type": "string"
           },
           "model_type": {
             "enum": [
@@ -378,33 +377,21 @@
             "type": "string"
           },
           "readme": {
-            "anyOf": [
-              {
-                "maxLength": 65536,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Readme"
+            "maxLength": 65536,
+            "nullable": true,
+            "title": "Readme",
+            "type": "string"
           },
           "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "maxLength": 50,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "maxItems": 20,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tags"
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "nullable": true,
+            "title": "Tags",
+            "type": "array"
           }
         },
         "required": [
@@ -418,27 +405,15 @@
         "description": "POST /v1/repos body — everything CreateProjectRequest validates plus\ncreation-time configuration, so a single POST yields a fully-configured\nrepo (no follow-up PATCH). The legacy `POST /v1/projects` keeps the base\nschema and ignores these fields.\n\nSemantics mirror UpdateRepoRequest: an explicit `use_case` wins; tags\nwithout `use_case` derive it (the model invariant). `is_private` needs no\nowner check at create time — the creator is the owner.",
         "properties": {
           "description": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "maxLength": 500,
+            "nullable": true,
+            "title": "Description",
+            "type": "string"
           },
           "is_private": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Private"
+            "nullable": true,
+            "title": "Is Private",
+            "type": "boolean"
           },
           "model_type": {
             "enum": [
@@ -456,51 +431,33 @@
             "type": "string"
           },
           "readme": {
-            "anyOf": [
-              {
-                "maxLength": 65536,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Readme"
+            "maxLength": 65536,
+            "nullable": true,
+            "title": "Readme",
+            "type": "string"
           },
           "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "maxLength": 50,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "maxItems": 20,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tags"
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "nullable": true,
+            "title": "Tags",
+            "type": "array"
           },
           "use_case": {
-            "anyOf": [
-              {
-                "enum": [
-                  "vision",
-                  "nlp",
-                  "llm",
-                  "speech",
-                  "other"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "vision",
+              "nlp",
+              "llm",
+              "speech",
+              "other"
             ],
-            "title": "Use Case"
+            "nullable": true,
+            "title": "Use Case",
+            "type": "string"
           }
         },
         "required": [
@@ -561,30 +518,18 @@
         "description": "One downloadable file of an authorized target.\n\n`url` is a time-limited signed GET URL (valid until `expires_at` of the\nenclosing authorization). `size` is per-file and only known for\nsingle-file targets (the stored `download_size` is the aggregate);\n`checksum` is null when the pipeline recorded none for the file.",
         "properties": {
           "checksum": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checksum"
+            "nullable": true,
+            "title": "Checksum",
+            "type": "string"
           },
           "name": {
             "title": "Name",
             "type": "string"
           },
           "size": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Size"
+            "nullable": true,
+            "title": "Size",
+            "type": "integer"
           },
           "url": {
             "title": "Url",
@@ -709,15 +654,9 @@
             "type": "boolean"
           },
           "uploaded_size": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Uploaded Size"
+            "nullable": true,
+            "title": "Uploaded Size",
+            "type": "integer"
           }
         },
         "required": [
@@ -731,44 +670,36 @@
       "GeneralLatencySummary": {
         "properties": {
           "all": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportStats"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "fp16": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportStats"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "fp32": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportStats"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "int8": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportStats"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           }
         },
         "required": [
@@ -783,44 +714,36 @@
       "GeneralMemorySummary": {
         "properties": {
           "all": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMemoryBounds"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "fp16": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMemoryBounds"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "fp32": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMemoryBounds"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "int8": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMemoryBounds"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           }
         },
         "required": [
@@ -836,25 +759,28 @@
         "description": "`run` is the opaque 0-based source-row ordinal within the record's\n(device, target, ap_type) group (derivation rule D9): records sharing\n(device, target, ap_type, run) form one run's metric set.",
         "properties": {
           "ap_type": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cpu",
-                  "gpu",
-                  "npu"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "cpu",
+              "gpu",
+              "npu"
             ],
-            "title": "Ap Type"
+            "nullable": true,
+            "title": "Ap Type",
+            "type": "string"
           },
           "device": {
             "$ref": "#/components/schemas/ReportDevice"
           },
           "metric": {
+            "enum": [
+              "latency_ms",
+              "tensor_copy_latency_ms",
+              "snr_db",
+              "memory_load_peak_mb",
+              "memory_load_min_mb",
+              "memory_inference_peak_mb",
+              "memory_inference_min_mb"
+            ],
             "title": "Metric",
             "type": "string"
           },
@@ -872,17 +798,16 @@
             "type": "integer"
           },
           "target": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target"
+            "nullable": true,
+            "title": "Target",
+            "type": "string"
           },
           "unit": {
+            "enum": [
+              "ms",
+              "db",
+              "mb"
+            ],
             "title": "Unit",
             "type": "string"
           },
@@ -956,44 +881,36 @@
       "GeneralSnrSummary": {
         "properties": {
           "all": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMinMax"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "fp16": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMinMax"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "fp32": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMinMax"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "int8": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportMinMax"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           }
         },
         "required": [
@@ -1015,18 +932,12 @@
             "type": "string"
           },
           "revision": {
-            "anyOf": [
-              {
-                "description": "Reserved. Revision pinning is not supported yet: a non-null revision is rejected with 422; omit it (or send null) to import the repository's current default-branch head.",
-                "maxLength": 256,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision"
+            "description": "Reserved. Revision pinning is not supported yet: a non-null revision is rejected with 422; omit it (or send null) to import the repository's current default-branch head.",
+            "maxLength": 256,
+            "minLength": 1,
+            "nullable": true,
+            "title": "Revision",
+            "type": "string"
           }
         },
         "required": [
@@ -1080,15 +991,9 @@
             "type": "boolean"
           },
           "upload_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Upload Url"
+            "nullable": true,
+            "title": "Upload Url",
+            "type": "string"
           }
         },
         "required": [
@@ -1129,15 +1034,9 @@
             "type": "string"
           },
           "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "nullable": true,
+            "title": "Description",
+            "type": "string"
           },
           "full_name": {
             "title": "Full Name",
@@ -1152,25 +1051,17 @@
             "type": "string"
           },
           "provider": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/LibraryProviderRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "readme": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
               }
             ],
-            "title": "Readme"
+            "nullable": true
+          },
+          "readme": {
+            "nullable": true,
+            "title": "Readme",
+            "type": "string"
           },
           "tags": {
             "items": {
@@ -1180,15 +1071,9 @@
             "type": "array"
           },
           "use_case": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Use Case"
+            "nullable": true,
+            "title": "Use Case",
+            "type": "string"
           }
         },
         "required": [
@@ -1215,15 +1100,9 @@
             "type": "string"
           },
           "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "nullable": true,
+            "title": "Description",
+            "type": "string"
           },
           "full_name": {
             "title": "Full Name",
@@ -1238,14 +1117,12 @@
             "type": "string"
           },
           "provider": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/LibraryProviderRef"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "tags": {
             "items": {
@@ -1255,15 +1132,9 @@
             "type": "array"
           },
           "use_case": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Use Case"
+            "nullable": true,
+            "title": "Use Case",
+            "type": "string"
           }
         },
         "required": [
@@ -1280,15 +1151,9 @@
       "LibraryProviderItem": {
         "properties": {
           "logo_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Logo Url"
+            "nullable": true,
+            "title": "Logo Url",
+            "type": "string"
           },
           "model_count": {
             "title": "Model Count",
@@ -1310,15 +1175,9 @@
         "description": "The provider (company) that published a library model.",
         "properties": {
           "logo_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Logo Url"
+            "nullable": true,
+            "title": "Logo Url",
+            "type": "string"
           },
           "name": {
             "title": "Name",
@@ -1413,41 +1272,23 @@
       "LlmAccuracyEntry": {
         "properties": {
           "dataset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dataset"
+            "nullable": true,
+            "title": "Dataset",
+            "type": "string"
           },
           "quant_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quant Type"
+            "nullable": true,
+            "title": "Quant Type",
+            "type": "string"
           },
           "score": {
             "title": "Score",
             "type": "number"
           },
           "target": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target"
+            "nullable": true,
+            "title": "Target",
+            "type": "string"
           }
         },
         "required": [
@@ -1462,48 +1303,24 @@
       "LlmQuantAggregates": {
         "properties": {
           "best_accuracy": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Accuracy"
+            "nullable": true,
+            "title": "Best Accuracy",
+            "type": "number"
           },
           "best_memory_mb": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Memory Mb"
+            "nullable": true,
+            "title": "Best Memory Mb",
+            "type": "number"
           },
           "best_tps": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Tps"
+            "nullable": true,
+            "title": "Best Tps",
+            "type": "number"
           },
           "best_ttft_ms": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Ttft Ms"
+            "nullable": true,
+            "title": "Best Ttft Ms",
+            "type": "number"
           }
         },
         "required": [
@@ -1515,171 +1332,71 @@
         "title": "LlmQuantAggregates",
         "type": "object"
       },
-      "LlmReportDevice": {
-        "properties": {
-          "ap_vendor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ap Vendor"
-          },
-          "brand": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "hardware": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hardware"
-          },
-          "marketing_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Marketing Name"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "os_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Os Version"
-          },
-          "real_device": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Real Device"
-          },
-          "soc": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Soc"
-          }
-        },
-        "title": "LlmReportDevice",
-        "type": "object"
-      },
       "LlmReportRecord": {
         "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `run` is the opaque\n0-based source-row ordinal within the record's (device, target,\nap_type, quant_type) group (derivation rule D9).",
         "properties": {
           "ap_type": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cpu",
-                  "gpu",
-                  "npu"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "cpu",
+              "gpu",
+              "npu"
             ],
-            "title": "Ap Type"
+            "nullable": true,
+            "title": "Ap Type",
+            "type": "string"
           },
           "dataset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dataset"
+            "nullable": true,
+            "title": "Dataset",
+            "type": "string"
           },
           "device": {
-            "anyOf": [
+            "allOf": [
               {
-                "$ref": "#/components/schemas/LlmReportDevice"
-              },
-              {
-                "type": "null"
+                "$ref": "#/components/schemas/ReportDevice"
               }
-            ]
+            ],
+            "nullable": true
           },
           "metric": {
+            "enum": [
+              "tps",
+              "ttft_ms",
+              "prompt_tokens",
+              "generated_tokens",
+              "memory_load_peak_mb",
+              "memory_load_min_mb",
+              "memory_inference_peak_mb",
+              "memory_inference_min_mb",
+              "accuracy_score",
+              "model_size_bytes"
+            ],
             "title": "Metric",
             "type": "string"
           },
           "quant_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quant Type"
+            "nullable": true,
+            "title": "Quant Type",
+            "type": "string"
           },
           "run": {
             "title": "Run",
             "type": "integer"
           },
           "target": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target"
+            "nullable": true,
+            "title": "Target",
+            "type": "string"
           },
           "unit": {
+            "enum": [
+              "tokens_per_s",
+              "ms",
+              "count",
+              "mb",
+              "score",
+              "bytes"
+            ],
             "title": "Unit",
             "type": "string"
           },
@@ -1758,11 +1475,18 @@
       "ManifestBucket": {
         "properties": {
           "dims": {
-            "items": {},
+            "items": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "minItems": 1,
             "title": "Dims",
             "type": "array"
           },
           "index": {
+            "exclusiveMaximum": 16,
             "minimum": 0,
             "title": "Index",
             "type": "integer"
@@ -1778,16 +1502,10 @@
       "ManifestFile": {
         "properties": {
           "bucket_index": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bucket Index"
+            "minimum": 0,
+            "nullable": true,
+            "title": "Bucket Index",
+            "type": "integer"
           },
           "client_file_id": {
             "maxLength": 128,
@@ -1808,16 +1526,10 @@
             "type": "string"
           },
           "input_index": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Input Index"
+            "minimum": 0,
+            "nullable": true,
+            "title": "Input Index",
+            "type": "integer"
           },
           "role": {
             "enum": [
@@ -1829,17 +1541,11 @@
             "type": "string"
           },
           "sha256": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256"
+            "maxLength": 64,
+            "minLength": 64,
+            "nullable": true,
+            "title": "Sha256",
+            "type": "string"
           },
           "size": {
             "exclusiveMinimum": 0,
@@ -1860,18 +1566,14 @@
       "ManifestOptions": {
         "properties": {
           "buckets": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/ManifestBucket"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Buckets"
+            "items": {
+              "$ref": "#/components/schemas/ManifestBucket"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "nullable": true,
+            "title": "Buckets",
+            "type": "array"
           }
         },
         "title": "ManifestOptions",
@@ -1918,28 +1620,16 @@
       "MeToken": {
         "properties": {
           "expires_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At"
+            "format": "date-time",
+            "nullable": true,
+            "title": "Expires At",
+            "type": "string"
           },
           "last_used_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Used At"
+            "format": "date-time",
+            "nullable": true,
+            "title": "Last Used At",
+            "type": "string"
           },
           "name": {
             "title": "Name",
@@ -1991,15 +1681,9 @@
             "type": "boolean"
           },
           "failure_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Failure Code"
+            "nullable": true,
+            "title": "Failure Code",
+            "type": "string"
           },
           "is_default": {
             "title": "Is Default",
@@ -2088,30 +1772,32 @@
             "type": "boolean"
           },
           "failure_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Failure Code"
+            "nullable": true,
+            "title": "Failure Code",
+            "type": "string"
+          },
+          "progress": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "title": "Progress",
+            "type": "number"
+          },
+          "retry_after": {
+            "maximum": 300,
+            "minimum": 1,
+            "nullable": true,
+            "title": "Retry After",
+            "type": "integer"
           },
           "stage": {
-            "anyOf": [
-              {
-                "enum": [
-                  "convert",
-                  "benchmark"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "convert",
+              "benchmark"
             ],
-            "title": "Stage"
+            "nullable": true,
+            "title": "Stage",
+            "type": "string"
           },
           "state": {
             "enum": [
@@ -2138,7 +1824,11 @@
           "terminal",
           "download_ready",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "failure_code",
+          "stage",
+          "progress",
+          "retry_after"
         ],
         "title": "ModelStatusResponse",
         "type": "object"
@@ -2210,37 +1900,19 @@
             "type": "array"
           },
           "os": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Os"
+            "nullable": true,
+            "title": "Os",
+            "type": "string"
           },
           "soc_manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Soc Manufacturer"
+            "nullable": true,
+            "title": "Soc Manufacturer",
+            "type": "string"
           },
           "soc_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Soc Model"
+            "nullable": true,
+            "title": "Soc Model",
+            "type": "string"
           }
         },
         "required": [
@@ -2253,14 +1925,12 @@
         "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable — clients must not parse it. `target`\nand `quant_type` are stable lowercase names derived from the internal\nenums; `compatibility` is null when the row carries no device\ncompatibility information (LLM targets and the all-null sentinel).",
         "properties": {
           "compatibility": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ModelTargetCompatibility"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "created_at": {
             "format": "date-time",
@@ -2280,15 +1950,9 @@
             "type": "string"
           },
           "quant_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quant Type"
+            "nullable": true,
+            "title": "Quant Type",
+            "type": "string"
           },
           "target": {
             "title": "Target",
@@ -2317,15 +1981,9 @@
             "type": "string"
           },
           "failure_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Failure Code"
+            "nullable": true,
+            "title": "Failure Code",
+            "type": "string"
           },
           "files": {
             "items": {
@@ -2339,6 +1997,16 @@
             "type": "string"
           },
           "state": {
+            "enum": [
+              "CREATED",
+              "UPLOADING",
+              "VERIFYING",
+              "DISPATCH_PENDING",
+              "CONVERTING",
+              "FAILED",
+              "CANCELED",
+              "EXPIRED"
+            ],
             "title": "State",
             "type": "string"
           },
@@ -2372,15 +2040,9 @@
             "type": "boolean"
           },
           "uploaded_size": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Uploaded Size"
+            "nullable": true,
+            "title": "Uploaded Size",
+            "type": "integer"
           },
           "verified": {
             "title": "Verified",
@@ -2415,6 +2077,16 @@
             "type": "string"
           },
           "state": {
+            "enum": [
+              "CREATED",
+              "UPLOADING",
+              "VERIFYING",
+              "DISPATCH_PENDING",
+              "CONVERTING",
+              "FAILED",
+              "CANCELED",
+              "EXPIRED"
+            ],
             "title": "State",
             "type": "string"
           },
@@ -2454,6 +2126,16 @@
             "type": "string"
           },
           "state": {
+            "enum": [
+              "CREATED",
+              "UPLOADING",
+              "VERIFYING",
+              "DISPATCH_PENDING",
+              "CONVERTING",
+              "FAILED",
+              "CANCELED",
+              "EXPIRED"
+            ],
             "title": "State",
             "type": "string"
           }
@@ -2471,34 +2153,28 @@
       "PackageModeAggregates": {
         "properties": {
           "memory_inference_peak_mb": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportStats"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "tps": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportStats"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "ttft_ms": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/ReportStats"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           }
         },
         "required": [
@@ -2515,6 +2191,19 @@
             "$ref": "#/components/schemas/ReportDevice"
           },
           "metric": {
+            "enum": [
+              "latency_ms",
+              "tensor_copy_latency_ms",
+              "snr_db",
+              "memory_load_peak_mb",
+              "memory_load_min_mb",
+              "memory_inference_peak_mb",
+              "memory_inference_min_mb",
+              "tps",
+              "ttft_ms",
+              "prompt_tokens",
+              "generated_tokens"
+            ],
             "title": "Metric",
             "type": "string"
           },
@@ -2522,6 +2211,13 @@
             "$ref": "#/components/schemas/PackageRunConfiguration"
           },
           "unit": {
+            "enum": [
+              "ms",
+              "db",
+              "mb",
+              "tokens_per_s",
+              "count"
+            ],
             "title": "Unit",
             "type": "string"
           },
@@ -2573,24 +2269,20 @@
         "description": "`auto` and `speed` are the same selection in v1 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
         "properties": {
           "auto": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/PackageModeAggregates"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           },
           "speed": {
-            "anyOf": [
+            "allOf": [
               {
                 "$ref": "#/components/schemas/PackageModeAggregates"
-              },
-              {
-                "type": "null"
               }
-            ]
+            ],
+            "nullable": true
           }
         },
         "required": [
@@ -2604,30 +2296,18 @@
         "description": "`configuration` is the SANITIZED producer payload (derivation rule\nP1): only pinned safe scalar config keys and per-module maps survive;\nunknown keys, nested junk and path/secret-looking strings are\ndropped. null when the producer sent none or nothing safe remains.",
         "properties": {
           "configuration": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Configuration"
+            "nullable": true,
+            "title": "Configuration",
+            "type": "object"
           },
           "id": {
             "title": "Id",
             "type": "integer"
           },
           "package": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Package"
+            "nullable": true,
+            "title": "Package",
+            "type": "string"
           }
         },
         "required": [
@@ -2708,15 +2388,9 @@
             "type": "string"
           },
           "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "nullable": true,
+            "title": "Description",
+            "type": "string"
           },
           "is_private": {
             "title": "Is Private",
@@ -2744,15 +2418,9 @@
         "description": "`used` this month vs the plan `limit`; `limit: null` = unlimited.",
         "properties": {
           "limit": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Limit"
+            "nullable": true,
+            "title": "Limit",
+            "type": "integer"
           },
           "used": {
             "title": "Used",
@@ -2857,15 +2525,9 @@
             "type": "string"
           },
           "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "nullable": true,
+            "title": "Description",
+            "type": "string"
           },
           "full_name": {
             "title": "Full Name",
@@ -2896,15 +2558,9 @@
             "type": "string"
           },
           "use_case": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Use Case"
+            "nullable": true,
+            "title": "Use Case",
+            "type": "string"
           }
         },
         "required": [
@@ -2921,86 +2577,35 @@
         "type": "object"
       },
       "ReportDevice": {
-        "description": "Device identity as recorded by the benchmark run; blanks are null.",
+        "description": "Locked ADR-4 device identity; persisted blanks are published as null.",
         "properties": {
-          "brand": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Brand"
-          },
-          "hardware": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hardware"
-          },
           "marketing_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Marketing Name"
+            "nullable": true,
+            "title": "Marketing Name",
+            "type": "string"
           },
           "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
+            "nullable": true,
+            "title": "Name",
+            "type": "string"
           },
-          "os_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Os Version"
-          },
-          "real_device": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Real Device"
+          "os": {
+            "nullable": true,
+            "title": "Os",
+            "type": "string"
           },
           "soc": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Soc"
+            "nullable": true,
+            "title": "Soc",
+            "type": "string"
           }
         },
+        "required": [
+          "name",
+          "marketing_name",
+          "soc",
+          "os"
+        ],
         "title": "ReportDevice",
         "type": "object"
       },
@@ -3008,48 +2613,24 @@
         "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
         "properties": {
           "inference_max": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Inference Max"
+            "nullable": true,
+            "title": "Inference Max",
+            "type": "number"
           },
           "inference_min": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Inference Min"
+            "nullable": true,
+            "title": "Inference Min",
+            "type": "number"
           },
           "load_max": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Load Max"
+            "nullable": true,
+            "title": "Load Max",
+            "type": "number"
           },
           "load_min": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Load Min"
+            "nullable": true,
+            "title": "Load Min",
+            "type": "number"
           }
         },
         "required": [
@@ -3129,30 +2710,18 @@
       "RequestedFile": {
         "properties": {
           "content_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Content Type"
+            "nullable": true,
+            "title": "Content Type",
+            "type": "string"
           },
           "path": {
             "title": "Path",
             "type": "string"
           },
           "sha256": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256"
+            "nullable": true,
+            "title": "Sha256",
+            "type": "string"
           },
           "size": {
             "title": "Size",
@@ -3170,62 +2739,38 @@
         "description": "PATCH body for a repo — every field optional; only fields present in\nthe payload are applied (exclude_unset semantics).",
         "properties": {
           "description": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "maxLength": 500,
+            "nullable": true,
+            "title": "Description",
+            "type": "string"
           },
           "is_private": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Private"
+            "nullable": true,
+            "title": "Is Private",
+            "type": "boolean"
           },
           "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "maxLength": 50,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "maxItems": 20,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tags"
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "nullable": true,
+            "title": "Tags",
+            "type": "array"
           },
           "use_case": {
-            "anyOf": [
-              {
-                "enum": [
-                  "vision",
-                  "nlp",
-                  "llm",
-                  "speech",
-                  "other"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "vision",
+              "nlp",
+              "llm",
+              "speech",
+              "other"
             ],
-            "title": "Use Case"
+            "nullable": true,
+            "title": "Use Case",
+            "type": "string"
           }
         },
         "title": "UpdateRepoRequest",
@@ -3234,15 +2779,9 @@
       "UploadStatusResponse": {
         "properties": {
           "expires_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At"
+            "nullable": true,
+            "title": "Expires At",
+            "type": "string"
           },
           "files": {
             "items": {
@@ -3328,26 +2867,14 @@
             "type": "string"
           },
           "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
+            "nullable": true,
+            "title": "Name",
+            "type": "string"
           },
           "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Status"
+            "nullable": true,
+            "title": "Status",
+            "type": "string"
           },
           "version": {
             "title": "Version",
@@ -3373,8 +2900,7 @@
   "info": {
     "description": "External developer API for Zetic. Authenticate with `Authorization: Bearer <token>`.",
     "title": "Zetic Public API",
-    "version": "1.0.0",
-    "x-backend-commit": "2805192040528e6fc5007799854b7d4403a14d8e"
+    "version": "1.0.0"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -3389,26 +2915,20 @@
             "name": "task",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "enum": [
-                      "vision",
-                      "nlp",
-                      "llm",
-                      "speech",
-                      "other"
-                    ],
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
               "description": "Repeatable use-case filter; items matching ANY given task are included.",
-              "title": "Task"
+              "items": {
+                "enum": [
+                  "vision",
+                  "nlp",
+                  "llm",
+                  "speech",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "nullable": true,
+              "title": "Task",
+              "type": "array"
             }
           },
           {
@@ -3417,16 +2937,10 @@
             "name": "search",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
               "description": "Case-insensitive substring match on the model name.",
-              "title": "Search"
+              "nullable": true,
+              "title": "Search",
+              "type": "string"
             }
           },
           {
@@ -3435,16 +2949,10 @@
             "name": "provider",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
               "description": "Exact provider (company) name.",
-              "title": "Provider"
+              "nullable": true,
+              "title": "Provider",
+              "type": "string"
             }
           },
           {
@@ -3491,9 +2999,6 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -3554,9 +3059,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -3593,9 +3095,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -3635,9 +3134,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -3693,9 +3189,6 @@
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -3748,9 +3241,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -3802,9 +3292,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -3853,7 +3340,18 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "description": "The response contains time-limited signed upload URLs.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -3932,9 +3430,6 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -3992,9 +3487,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -4137,7 +3629,18 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "description": "The response contains time-limited signed upload URLs.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -4185,15 +3688,9 @@
             "name": "search",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Search"
+              "nullable": true,
+              "title": "Search",
+              "type": "string"
             }
           },
           {
@@ -4240,9 +3737,6 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -4294,9 +3788,6 @@
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -4347,9 +3838,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -4406,9 +3894,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -4478,9 +3963,6 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -4568,9 +4050,6 @@
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -4630,7 +4109,18 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "description": "The response can contain time-limited signed upload URLs.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "201": {
             "content": {
@@ -4640,7 +4130,18 @@
                 }
               }
             },
-            "description": "Created"
+            "description": "Created",
+            "headers": {
+              "Cache-Control": {
+                "description": "The response can contain time-limited signed upload URLs.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -4813,9 +4314,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -4833,7 +4331,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}": {
       "delete": {
-        "description": "Cancel an active session (idempotent); staging cleanup is best-effort.\n\nAccepts every active state, including VERIFYING: if a completion request\ncrashed mid-flight and left the session wedged in VERIFYING, cancel is\nthe self-serve recovery that releases the repository's active-session\nslot.",
+        "description": "Cancel a pre-completion session (idempotent); cleanup is best-effort.\n\nOnly CREATED and UPLOADING are cancelable. Once completion has claimed\nVERIFYING, cancellation returns 409 so it cannot delete staging while a\nverifier/promoter or the durable dispatch retry path owns the session.",
         "operationId": "cancel_model_upload",
         "parameters": [
           {
@@ -4890,8 +4388,8 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -5036,6 +4534,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -5056,7 +4557,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files": {
       "post": {
-        "description": "Fresh resumable upload URLs for declared files of an UPLOADING session.",
+        "description": "Fresh resumable upload URLs for declared files of an UPLOADING session.\n\nReissue deliberately has no idempotency-key contract: every accepted\ncall mints fresh, short-lived credentials for the same staging objects.",
         "operationId": "reissue_upload_files",
         "parameters": [
           {
@@ -5085,9 +4586,6 @@
               "title": "Upload Id",
               "type": "string"
             }
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -5109,7 +4607,18 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "description": "The response can contain time-limited signed upload URLs.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -5197,9 +4706,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -5267,9 +4773,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -5339,8 +4842,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -5410,8 +4913,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -5481,8 +4984,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -5552,9 +5055,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -5622,9 +5122,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -5695,7 +5192,18 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "description": "The response contains time-limited signed artifact URLs.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "201": {
             "content": {
@@ -5705,7 +5213,18 @@
                 }
               }
             },
-            "description": "Created"
+            "description": "Created",
+            "headers": {
+              "Cache-Control": {
+                "description": "The response contains time-limited signed artifact URLs.",
+                "schema": {
+                  "enum": [
+                    "no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -5718,6 +5237,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -5765,9 +5287,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -5807,9 +5326,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"

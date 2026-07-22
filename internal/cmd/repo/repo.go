@@ -10,8 +10,9 @@ import (
 // NewCmdRepo builds the `melange repo` command group.
 func NewCmdRepo(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "repo <command>",
-		Short: "Manage model repositories",
+		Use:     "repo <command>",
+		Aliases: []string{"project"},
+		Short:   "Manage model repositories",
 		Long: `Work with Melange model repositories: list the repositories your token
 can see, inspect a single repository, create new ones, edit their
 metadata, and delete them.

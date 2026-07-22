@@ -39,8 +39,8 @@ melange report view MODEL_KEY [flags]
   # The dashboard table (auto-derived mode picks)
   melange report view m_ab12cd -R zetic/whisper-tiny
 
-  # Force the LLM report and fill cells with the speed pick
-  melange report view m_ab12cd -R zetic/whisper-tiny --type llm --mode speed
+  # Force the LLM report (mode selection applies only to general reports)
+  melange report view m_ab12cd -R zetic/whisper-tiny --type llm
 
   # Agent pattern: best NPU latency per device, from the raw records
   melange report view m_ab12cd -R zetic/whisper-tiny --json \

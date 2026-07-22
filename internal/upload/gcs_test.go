@@ -2,10 +2,12 @@ package upload_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -227,6 +229,10 @@ func (g *fakeGCS) dataPuts() []gcsRequest {
 
 func noSleep(context.Context, time.Duration) error { return nil }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
 func testUploader() *upload.Uploader {
 	return &upload.Uploader{
 		Client:    &http.Client{},
@@ -278,6 +284,109 @@ func TestStartSessionExpiredSignature(t *testing.T) {
 	require.ErrorIs(t, err, upload.ErrSessionExpired)
 	assert.NotContains(t, err.Error(), "SIG", "signed query must not leak into errors")
 }
+
+func TestStartSessionRetriesTransientTransportFailure(t *testing.T) {
+	attempts := 0
+	u := testUploader()
+	u.Client.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		attempts++
+		if attempts == 1 {
+			return nil, errors.New("connection reset")
+		}
+		return &http.Response{
+			StatusCode: http.StatusCreated,
+			Header:     http.Header{"Location": []string{"https://storage.example/session"}},
+			Body:       http.NoBody,
+		}, nil
+	})
+
+	uri, err := u.StartSession(context.Background(), "https://storage.example/start?secret=yes")
+	require.NoError(t, err)
+	assert.Equal(t, "https://storage.example/session", uri)
+	assert.Equal(t, 2, attempts)
+}
+
+func TestStartSessionRedactsURLRepeatedByTransportCause(t *testing.T) {
+	u := testUploader()
+	u.MaxRetries = -1
+	u.Client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, &url.Error{
+			Op:  "Post",
+			URL: req.URL.String(),
+			Err: fmt.Errorf("transport rejected %s", req.URL.String()),
+		}
+	})
+
+	_, err := u.StartSession(context.Background(), "https://storage.example/start?X-Goog-Signature=SECRET")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "SECRET")
+	assert.NotContains(t, err.Error(), "X-Goog-Signature")
+	assert.Contains(t, err.Error(), "storage.example")
+}
+
+func TestQueryOffsetRetriesTransientTransportFailure(t *testing.T) {
+	attempts := 0
+	u := testUploader()
+	u.Client.Transport = roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		attempts++
+		if attempts == 1 {
+			return nil, errors.New("connection reset")
+		}
+		return &http.Response{
+			StatusCode: 308,
+			Header:     http.Header{"Range": []string{"bytes=0-9"}},
+			Body:       http.NoBody,
+		}, nil
+	})
+
+	offset, done, err := u.QueryOffset(context.Background(), "https://storage.example/session?secret=yes", 100)
+	require.NoError(t, err)
+	assert.False(t, done)
+	assert.Equal(t, int64(10), offset)
+	assert.Equal(t, 2, attempts)
+}
+
+func TestStartSessionHonorsUploadInactivityTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(2 * time.Second):
+			w.WriteHeader(http.StatusCreated)
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	u := testUploader()
+	u.StallTimeout = 20 * time.Millisecond
+	u.MaxRetries = -1
+
+	start := time.Now()
+	_, err := u.StartSession(context.Background(), srv.URL+"/start?secret=yes")
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), time.Second,
+		"a hung resumable-start request must respect the upload inactivity budget")
+}
+
+func TestQueryOffsetHonorsUploadInactivityTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(2 * time.Second):
+			w.WriteHeader(statusResumeIncompleteForTest)
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	u := testUploader()
+	u.StallTimeout = 20 * time.Millisecond
+	u.MaxRetries = -1
+
+	start := time.Now()
+	_, _, err := u.QueryOffset(context.Background(), srv.URL+"/session?secret=yes", 100)
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), time.Second,
+		"a hung offset query must respect the upload inactivity budget")
+}
+
+const statusResumeIncompleteForTest = 308
 
 func TestUploadFileSingleChunk(t *testing.T) {
 	g := newFakeGCS(t)

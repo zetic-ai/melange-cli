@@ -2,7 +2,9 @@
 
 melange is the CLI for the Zetic.ai Melange platform (on-device AI model
 deployment and benchmarking). Agent contract: data on stdout, progress and
-diagnostics on stderr; stable exit codes; `--json` is byte-exact API output.
+diagnostics on stderr; stable exit codes; `--json` is byte-exact API output
+except that waited upload/import commands return a documented model+status
+composite and `model download` redacts signed artifact URLs (credentials).
 Full docs: docs/reference/melange.md; live topics: `melange help environment`,
 `melange help exit-codes`, `melange help formatting`.
 
@@ -26,6 +28,7 @@ merges all pages into one envelope.
 MELANGE_API_KEY       personal access token (ztp_...); overrides all stored creds
 MELANGE_API_KEY_FILE  path to token file; unreadable => error (no fallback)
 MELANGE_HOST          API host (default https://api.zetic.ai)
+MELANGE_API_TIMEOUT   positive duration per ordinary API call (default 30s)
 MELANGE_DEBUG         1/true/yes/on: log request/response lines to stderr
 NO_COLOR, TERM=dumb   disable color
 Credential precedence: MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring >
@@ -55,7 +58,7 @@ melange auth logout
   Delete stored token (keyring + config) for the resolved host. Env vars are
   not touched and still take precedence afterward.
 
-## melange repo
+## melange repo (alias: melange project)
 
 Manage model repositories, addressed as ACCOUNT/NAME (account defaults to the
 account behind your token).
@@ -83,15 +86,35 @@ Upload models and track conversion. -R ACCOUNT/REPO is REQUIRED on every
 model command; there is no default repository.
 
 melange model upload MODEL_FILE -R ACCOUNT/REPO [--input FILE ...]
-    [--external-data FILE ...] [--input-manifest FILE] [--dry-run] [--wait]
+    [--bucket INDEX:DIMxDIM... ...] [--external-data FILE ...]
+    [--input-manifest FILE] [--dry-run] [--wait]
     [--timeout 30m] [--resume ID | --cancel ID | --sessions] [--json]
   Resumable upload session: manifest (sizes + CRC32C) -> signed-URL streaming
   -> server-side verification -> conversion. --input order defines input_index.
+  Inputs are optional; a model-only manifest is valid.
   --dry-run prints the manifest with no network calls. Ctrl-C (exit 130)
   preserves the session and prints the exact resume command on stderr
   ("Resume with: melange model upload --resume <id> -R <repo>"); resumed
-  uploads never re-send acknowledged bytes.
+  uploads never re-send acknowledged bytes. Expired-URL reissue intentionally
+  mints fresh URLs without Idempotency-Key; create/complete/cancel retain keys.
   Example: melange model upload -R acme/whisper model.onnx --input a.bin --wait
+  Bucketed .pt2: repeat --bucket in declaration order. Split --input files into
+  one equal-sized group per bucket; order inside each group is input_index.
+  Example: melange model upload -R acme/vision model.pt2 \
+    --bucket 0:1x3x224x224 --input image224.npy --input mask224.npy \
+    --bucket 1:1x3x384x384 --input image384.npy --input mask384.npy --dry-run --json
+  With --wait, structured output is
+  {"model": <created ModelRef>, "status": <final ModelStatusResponse>}.
+  Use --jq .model.key for identity and --jq .status.state for outcome.
+  Without --wait, --json remains the raw upload-complete response.
+  --input-manifest is a CLI-private local-file JSON document (not the public
+  wire manifest). Shape example:
+    {"manifest_version":2,"files":[
+      {"path":"models/model.onnx","role":"model"},
+      {"path":"samples/audio.npy","role":"input","input_index":0}]}
+  Each path is resolved relative to the manifest file. filename is optional;
+  input_index defaults by input order. Bucketed documents add options.buckets
+  ({"index":0,"dims":[1,3,224,224]}) and bucket_index on each input.
 
 melange model status MODEL_KEY -R ACCOUNT/REPO [--wait] [--timeout 30m] [--json]
   Conversion status: state (converting/optimizing/ready/failed), stage,
@@ -119,14 +142,23 @@ melange model set-default MODEL_KEY -R ACCOUNT/REPO [--json]
 melange model import HF_REPO -R ACCOUNT/REPO [--wait] [--timeout 30m] [--json]
   Import an LLM from a public HuggingFace repo (repo must be model type llm) and
   convert it. --wait polls to a terminal state (exit 0 ready, 1 failed/timeout,
-  130 interrupted).
-  Example: melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait
+  130 interrupted). With --wait, structured output is
+  {"model": <raw import response>, "status": <final ModelStatusResponse>}.
+  Without --wait, --json remains the raw import response.
+  Example: melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait --jq .model.key
 
-melange model download MODEL_KEY -R ACCOUNT/REPO --target TARGET_ID [--output PATH] [--json]
-  BILLABLE, idempotent artifact download: authorize once, then stream. --output
-  defaults to the current directory; validated before the charge and never
-  overwrites an existing file.
-  Example: melange model download m_ab12cd -R acme/whisper --target tm_71 --output ./models
+melange model download MODEL_KEY -R ACCOUNT/REPO --target TARGET_ID --yes [--output PATH|-] [--json]
+  BILLABLE, cross-process replay-safe artifact download. The authorization key
+  is target-scoped in per-user application state; output corrections keep it, and a process lock
+  plus completion/recovery tombstone protects concurrent followers. Transient
+  GETs retry, expired URLs refresh with the same key, and 30s without progress
+  triggers a retry. --output never overwrites without --force. Known collisions
+  validate before charging, but server artifact names arrive after authorization;
+  those collisions retain replay state for the instructed --force rerun.
+  Agents/non-TTY runs must pass --yes. --output - supports one artifact and
+  writes fully staged, verified bytes; it cannot combine with structured output.
+  Download --json redacts signed URLs and is therefore not byte-exact.
+  Example: melange model download m_ab12cd -R acme/whisper --target tm_71 --output ./models --yes
 
 ## melange report
 

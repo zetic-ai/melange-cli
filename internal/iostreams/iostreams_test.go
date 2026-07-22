@@ -107,6 +107,13 @@ func TestColorEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Test cases describe the complete color environment. Clear any
+			// values inherited from the caller (for example CI commonly sets
+			// NO_COLOR and TERM=dumb) before applying the case-specific values.
+			t.Setenv("NO_COLOR", "")
+			t.Setenv("TERM", "")
+			t.Setenv("CLICOLOR_FORCE", "")
+
 			streams, _, _, _ := iostreams.Test()
 			streams.SetStdoutTTY(tt.stdoutTTY)
 

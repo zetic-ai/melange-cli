@@ -183,8 +183,32 @@ func SaveTo(cfg *Config, path string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("writing config: %w", err)
+	tmp, err := os.CreateTemp(dir, ".config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("creating temporary config: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) // no-op after a successful rename
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close() //nolint:errcheck
+		return fmt.Errorf("securing temporary config: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close() //nolint:errcheck
+		return fmt.Errorf("writing temporary config: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close() //nolint:errcheck
+		return fmt.Errorf("syncing temporary config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing temporary config: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replacing config: %w", err)
+	}
+	if err := syncDir(dir); err != nil {
+		return fmt.Errorf("syncing config directory: %w", err)
 	}
 	return nil
 }

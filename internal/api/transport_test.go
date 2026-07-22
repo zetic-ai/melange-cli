@@ -122,6 +122,52 @@ func TestRetryPOSTWithIdempotencyKeyRetried(t *testing.T) {
 	assert.Equal(t, `{"n":1}`, string(replayed))
 }
 
+func TestRetryPUTWithReplayableBody(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("PUT", "/v1/default"), httpmock.StatusStringResponse(503, "unavailable"))
+	reg.Register(httpmock.REST("PUT", "/v1/default"), httpmock.StatusStringResponse(200, "ok"))
+
+	rt, _ := newTestRetry(reg)
+	req, _ := http.NewRequest("PUT", "https://api.zetic.ai/v1/default", strings.NewReader(`{"enabled":true}`))
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Len(t, reg.Requests, 2, "PUT is idempotent and safe to replay when its body is rewindable")
+}
+
+func TestRetryPATCHRequiresExplicitReplaySafeContext(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("PATCH", "/v1/repos/acme/model"), httpmock.StatusStringResponse(503, "unavailable"))
+	reg.Register(httpmock.REST("PATCH", "/v1/repos/acme/model"), httpmock.StatusStringResponse(200, "ok"))
+
+	rt, _ := newTestRetry(reg)
+	ctx := WithReplaySafe(context.Background())
+	req, _ := http.NewRequestWithContext(ctx, "PATCH", "https://api.zetic.ai/v1/repos/acme/model", strings.NewReader(`{"description":"x"}`))
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Len(t, reg.Requests, 2)
+}
+
+func TestRetryPATCHNotRetriedWithoutReplaySafeMarker(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("PATCH", "/v1/repos/acme/model"), httpmock.StatusStringResponse(503, "unavailable"))
+
+	rt, sleeps := newTestRetry(reg)
+	req, _ := http.NewRequest("PATCH", "https://api.zetic.ai/v1/repos/acme/model", strings.NewReader(`{"description":"x"}`))
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, 503, resp.StatusCode)
+	assert.Len(t, reg.Requests, 1)
+	assert.Empty(t, *sleeps)
+}
+
 func TestRetryNoRetryOn429SurfacesImmediately(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("POST", "/v1/dl"),

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,25 @@ func TestExitCodeAPIError(t *testing.T) {
 			assert.Equal(t, tt.want, cmdutil.ExitCode(tt.err))
 		})
 	}
+}
+
+func TestNewAPIClientTimeoutEnv(t *testing.T) {
+	t.Setenv("MELANGE_API_TIMEOUT", "45s")
+	ios, _, _, _ := iostreams.Test()
+	f := &cmdutil.Factory{IOStreams: ios, Version: "test"}
+
+	client, err := cmdutil.NewAPIClient(f, "https://api.zetic.ai", "")
+	require.NoError(t, err)
+	assert.Equal(t, 45*time.Second, client.RequestTimeout())
+}
+
+func TestNewAPIClientRejectsUnboundedTimeout(t *testing.T) {
+	t.Setenv("MELANGE_API_TIMEOUT", "0")
+	ios, _, _, _ := iostreams.Test()
+	f := &cmdutil.Factory{IOStreams: ios, Version: "test"}
+
+	_, err := cmdutil.NewAPIClient(f, "https://api.zetic.ai", "")
+	require.ErrorContains(t, err, "MELANGE_API_TIMEOUT")
 }
 
 func TestNewAPIClient(t *testing.T) {

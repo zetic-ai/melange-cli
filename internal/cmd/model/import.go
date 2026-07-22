@@ -36,14 +36,15 @@ Pinning a HuggingFace revision is not supported yet: imports always use
 the repository's current default-branch head.
 
 On success a confirmation with the model key, version, and state goes
-to stderr; with --json the created model reference is written to stdout
-exactly as the API returned it (with --wait, the final status is
-emitted instead).
+to stderr. Without --wait, --json writes the import response exactly as
+the API returned it. With --wait, structured output is
+{"model": <import response>, "status": <final status>}; for example,
+--jq .model.key returns the imported model key.
 
 Exit codes: 0 success, 1 API error or failed conversion under --wait,
 2 usage error, 4 not authenticated, 130 interrupted.`,
-		Example: `  # Import a model and wait for conversion
-  melange model import meta-llama/Llama-3.2-1B -R zetic/llama --wait
+		Example: `  # Import a model, wait, and print its stable model key
+  melange model import meta-llama/Llama-3.2-1B -R zetic/llama --wait --jq .model.key
 
   # Import without waiting
   melange model import meta-llama/Llama-3.2-1B -R zetic/llama
@@ -52,6 +53,9 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
   melange model import meta-llama/Llama-3.2-1B -R zetic/llama --json --jq .key`,
 		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateWaitOptions(doWait, timeout, cmd.Flags().Changed("timeout")); err != nil {
+				return err
+			}
 			account, name, err := splitRepoFlag(repo)
 			if err != nil {
 				return err
@@ -84,7 +88,8 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
 				imported.Key, imported.Version, imported.State)
 
 			if doWait {
-				return waitForModel(ctx, f, g, account, name, imported.Key, timeout, exporter)
+				return waitForModelWithResult(ctx, f, g, account, name, imported.Key,
+					timeout, exporter, json.RawMessage(resp.Body))
 			}
 			if exporter != nil {
 				return exporter.Write(ios, json.RawMessage(resp.Body))

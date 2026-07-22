@@ -8,6 +8,10 @@
 #   MELANGE_VERSION      install a specific version (e.g. v1.2.3); default: latest release
 #   MELANGE_INSTALL_DIR  install directory; default /usr/local/bin, falling back
 #                        to ~/.local/bin when /usr/local/bin is not writable
+#
+# Security: release checksums are signed keylessly by the repository's release
+# workflow. `cosign` must be installed so this script can authenticate the
+# checksum manifest before trusting it.
 set -eu
 
 REPO="zetic-ai/melange-cli"
@@ -54,6 +58,19 @@ curl -fsSL -o "${tmpdir}/${archive}" "${base_url}/${archive}" ||
     err "download failed: ${base_url}/${archive}"
 curl -fsSL -o "${tmpdir}/checksums.txt" "${base_url}/checksums.txt" ||
     err "download failed: ${base_url}/checksums.txt"
+curl -fsSL -o "${tmpdir}/checksums.txt.sigstore.json" "${base_url}/checksums.txt.sigstore.json" ||
+    err "download failed: ${base_url}/checksums.txt.sigstore.json"
+
+command -v cosign >/dev/null 2>&1 ||
+    err "cosign is required to authenticate releases; install it from https://docs.sigstore.dev/cosign/system_config/installation/"
+
+cosign verify-blob \
+    --bundle "${tmpdir}/checksums.txt.sigstore.json" \
+    --certificate-identity "https://github.com/zetic-ai/melange-cli/.github/workflows/release.yml@refs/tags/${version}" \
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+    "${tmpdir}/checksums.txt" >/dev/null ||
+    err "signature verification failed for checksums.txt"
+echo "Release signature verified." >&2
 
 expected=$(grep " ${archive}\$" "${tmpdir}/checksums.txt" | awk '{print $1}')
 [ -n "$expected" ] || err "no checksum found for ${archive} in checksums.txt"

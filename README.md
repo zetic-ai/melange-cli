@@ -6,14 +6,17 @@ Designed agents-first: non-interactive safe, structured `--json` output, stable 
 
 ## Install
 
-**Homebrew** (macOS/Linux):
+**Homebrew** (macOS):
 
 ```sh
 brew tap zetic-ai/tap
 brew install melange
 ```
 
-**Installer script** (macOS/Linux; verifies checksums, installs to `/usr/local/bin` or `~/.local/bin`):
+**Installer script** (macOS/Linux; requires
+[`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/),
+verifies the release-workflow signature and checksum, then installs to
+`/usr/local/bin` or `~/.local/bin`):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install.sh | sh
@@ -45,10 +48,15 @@ melange model status m_ab12cd -R acme/whisper-tiny
 melange api /v1/me --jq .account.name    # any /v1 endpoint
 ```
 
+Bucketed `.pt2` uploads use repeatable `--bucket INDEX:DIMxDIM...` declarations.
+Inputs are grouped by bucket declaration order; preview the exact manifest with
+`--dry-run --json` before uploading.
+
 ## For agents
 
 - Authenticate via env: `export MELANGE_API_KEY=ztp_...` (overrides stored credentials); verify with `melange auth status --json`.
-- Always use `--json` (byte-exact API payload) or `--jq` — never parse TTY tables. Data is on stdout; progress/diagnostics on stderr.
+- Always use `--json` or `--jq` — never parse TTY tables. Plain `--json` is byte-exact except that waited upload/import commands compose `{"model": ..., "status": ...}` and `model download` redacts signed artifact URLs. Data is on stdout; progress/diagnostics on stderr.
+- Billable `model download` commands keep a host/repository/model/target-bound authorization key in per-user application state and serialize concurrent processes. Output corrections, failed followers, and directory collisions retain the key; follow the reported directory/`--force` remediation without another charge.
 - Branch on stable exit codes: `0` ok, `1` failure (possibly transient), `2` usage error (fix the command), `4` auth, `130` interrupted (upload session preserved).
 - Load the usage skill at [`skills/melange-cli-usage/SKILL.md`](skills/melange-cli-usage/SKILL.md), or the compact surface reference in [`llms.txt`](llms.txt).
 - Built-in topics: `melange help environment`, `melange help exit-codes`, `melange help formatting`.

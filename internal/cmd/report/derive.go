@@ -64,7 +64,7 @@ func deviceKey(d gen.ReportDevice) string {
 func buildRuns(records []gen.GeneralReportRecord) map[runKey]*run {
 	runs := map[runKey]*run{}
 	for _, rec := range records {
-		k := runKey{target: rec.Target, run: rec.Run}
+		k := runKey{target: deref(rec.Target), run: rec.Run}
 		r := runs[k]
 		if r == nil {
 			r = &run{}

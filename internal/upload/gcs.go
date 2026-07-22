@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
+	"syscall"
 	"time"
 )
 
@@ -87,13 +90,22 @@ func (u *Uploader) sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
+func (u *Uploader) requestContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if u.StallTimeout > 0 {
+		return context.WithTimeout(ctx, u.StallTimeout)
+	}
+	return ctx, func() {}
+}
+
 // StartSession opens a resumable session: POST to the signed URL with
 // `x-goog-resumable: start` and an empty body; the Location response header
 // is the resumable session URI (a bearer credential — never log it).
 func (u *Uploader) StartSession(ctx context.Context, uploadURL string) (string, error) {
 	for failures := 0; ; {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, http.NoBody)
+		rctx, cancel := u.requestContext(ctx)
+		req, err := http.NewRequestWithContext(rctx, http.MethodPost, uploadURL, http.NoBody)
 		if err != nil {
+			cancel()
 			return "", fmt.Errorf("starting upload session: %w", redactErr(err))
 		}
 		req.Header.Set("x-goog-resumable", "start")
@@ -101,6 +113,7 @@ func (u *Uploader) StartSession(ctx context.Context, uploadURL string) (string, 
 
 		resp, err := u.client().Do(req)
 		status, retryable, err := u.classify(ctx, resp, err)
+		cancel()
 		if err != nil {
 			return "", fmt.Errorf("starting upload session: %w", err)
 		}
@@ -114,6 +127,9 @@ func (u *Uploader) StartSession(ctx context.Context, uploadURL string) (string, 
 		case retryable:
 			failures++
 			if failures > u.maxRetries() {
+				if status == 0 {
+					return "", fmt.Errorf("starting upload session: transient transport failure after %d attempts", failures)
+				}
 				return "", fmt.Errorf("starting upload session: GCS returned HTTP %d after %d attempts", status, failures)
 			}
 			if err := u.sleep(ctx, backoffDelay(failures)); err != nil {
@@ -130,8 +146,10 @@ func (u *Uploader) StartSession(ctx context.Context, uploadURL string) (string, 
 // upload (HTTP 200/201); otherwise offset is the next byte to send.
 func (u *Uploader) QueryOffset(ctx context.Context, sessionURI string, total int64) (offset int64, done bool, err error) {
 	for failures := 0; ; {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPut, sessionURI, http.NoBody)
+		rctx, cancel := u.requestContext(ctx)
+		req, err := http.NewRequestWithContext(rctx, http.MethodPut, sessionURI, http.NoBody)
 		if err != nil {
+			cancel()
 			return 0, false, fmt.Errorf("querying upload offset: %w", redactErr(err))
 		}
 		req.Header.Set("Content-Range", fmt.Sprintf("bytes */%d", total))
@@ -139,6 +157,7 @@ func (u *Uploader) QueryOffset(ctx context.Context, sessionURI string, total int
 
 		resp, err := u.client().Do(req)
 		status, retryable, err := u.classify(ctx, resp, err)
+		cancel()
 		if err != nil {
 			return 0, false, fmt.Errorf("querying upload offset: %w", err)
 		}
@@ -150,6 +169,9 @@ func (u *Uploader) QueryOffset(ctx context.Context, sessionURI string, total int
 		case retryable:
 			failures++
 			if failures > u.maxRetries() {
+				if status == 0 {
+					return 0, false, fmt.Errorf("querying upload offset: transient transport failure after %d attempts", failures)
+				}
 				return 0, false, fmt.Errorf("querying upload offset: GCS returned HTTP %d after %d attempts", status, failures)
 			}
 			if err := u.sleep(ctx, backoffDelay(failures)); err != nil {
@@ -301,10 +323,37 @@ func (u *Uploader) classify(ctx context.Context, resp *http.Response, err error)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return 0, false, ctxErr
 		}
+		if retryableGCSTransportError(err) {
+			return 0, true, nil
+		}
 		return 0, false, redactErr(err)
 	}
 	drain(resp)
 	return resp.StatusCode, retryableGCSStatus(resp.StatusCode), nil
+}
+
+// retryableGCSTransportError recognizes failures where replaying an empty
+// resumable-start/offset-query request is safe and likely useful. Certificate
+// and other permanent protocol errors deliberately fall through.
+func retryableGCSTransportError(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "unexpected eof")
 }
 
 // retryableGCSStatus: 5xx, plus 408 (request timeout) and 429 (rate limit).
@@ -342,7 +391,17 @@ func redactErr(err error) error {
 		if parsed, perr := url.Parse(ue.URL); perr == nil {
 			host = parsed.Host
 		}
-		return fmt.Errorf("%s to %s failed: %w", ue.Op, host, ue.Err)
+		// Do not wrap the underlying cause: custom transports sometimes echo
+		// the complete request URL in it, which would reintroduce the signed
+		// credential we just removed. Preserve context sentinels so callers can
+		// still distinguish cancellation and inactivity timeouts safely.
+		if errors.Is(ue.Err, context.Canceled) {
+			return fmt.Errorf("%s to %s failed: %w", ue.Op, host, context.Canceled)
+		}
+		if errors.Is(ue.Err, context.DeadlineExceeded) {
+			return fmt.Errorf("%s to %s failed: %w", ue.Op, host, context.DeadlineExceeded)
+		}
+		return fmt.Errorf("%s to %s failed", ue.Op, host)
 	}
 	return err
 }

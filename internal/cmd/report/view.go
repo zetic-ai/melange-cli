@@ -64,8 +64,8 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 		Example: `  # The dashboard table (auto-derived mode picks)
   melange report view m_ab12cd -R zetic/whisper-tiny
 
-  # Force the LLM report and fill cells with the speed pick
-  melange report view m_ab12cd -R zetic/whisper-tiny --type llm --mode speed
+  # Force the LLM report (mode selection applies only to general reports)
+  melange report view m_ab12cd -R zetic/whisper-tiny --type llm
 
   # Agent pattern: best NPU latency per device, from the raw records
   melange report view m_ab12cd -R zetic/whisper-tiny --json \
@@ -82,6 +82,9 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 			if err != nil {
 				return err
 			}
+			if cmd.Flags().Changed("mode") && cmd.Flags().Changed("type") && reportKind(typ) != kindGeneral {
+				return modeKindError()
+			}
 			account, name, err := splitRepoFlag(repo)
 			if err != nil {
 				return err
@@ -96,6 +99,9 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 			kind, body, err := fetchReport(ctx, g, kinds, account, name, key, cmd.Flags().Changed("type"))
 			if err != nil {
 				return err
+			}
+			if cmd.Flags().Changed("mode") && kind != kindGeneral {
+				return modeKindError()
 			}
 
 			ios := f.IOStreams
@@ -122,6 +128,10 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 	cmdutil.AddJSONFlags(cmd, &exporter)
 
 	return cmd
+}
+
+func modeKindError() error {
+	return cmdutil.FlagError{Err: errors.New("--mode only applies to general reports")}
 }
 
 // parseMode validates the --mode flag.

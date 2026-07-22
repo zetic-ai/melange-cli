@@ -36,7 +36,8 @@ type uploadOptions struct {
 	inputs        []string
 	external      []string
 	inputManifest string
-	bucket        string
+	bucket        []string
+	bucketSpecs   []upload.BucketSpec
 	dryRun        bool
 	doWait        bool
 	timeout       time.Duration
@@ -70,8 +71,36 @@ repository. Interrupting an upload (Ctrl-C) preserves the session; resume
 it with --resume SESSION_ID (already-uploaded bytes are never re-sent) or
 discard it with --cancel SESSION_ID. --sessions lists sessions.
 
+When a signed upload URL expires, reissue intentionally mints a fresh URL
+and carries no Idempotency-Key; create, complete, and cancel retain their
+documented idempotency keys.
+
 --dry-run prints the manifest that would be uploaded — including the
 destination layout — without any network calls.
+
+For a bucketed .pt2 model, repeat --bucket in declaration order and pass
+one complete group of --input files for each bucket. For example, two
+buckets and four inputs means two inputs per bucket: the first two inputs
+belong to the first bucket and the next two to the second. Within every
+bucket, input order defines input_index.
+
+--input-manifest accepts this CLI-private local-file shape (it is not the
+public API wire manifest):
+  {
+    "manifest_version": 2,
+    "files": [
+      {"path": "models/model.onnx", "role": "model"},
+      {"path": "samples/audio.npy", "role": "input", "input_index": 0}
+    ]
+  }
+path is required and is resolved relative to the manifest file. filename
+is optional. input_index is optional for inputs and defaults by order;
+bucket_index is valid for inputs when options.buckets is declared.
+
+With --wait, structured output is
+{"model": <created model>, "status": <final status>}; for example,
+--jq .model.key returns the model key. Without --wait, --json remains the
+raw upload-complete response.
 
 Exit codes: 0 success, 1 upload/verification/conversion failure, 2 usage
 error, 4 not authenticated, 130 interrupted (session preserved).`,
@@ -81,6 +110,14 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
   # Preview the manifest without uploading
   melange model upload -R zetic/whisper-tiny model.onnx --dry-run
 
+  # A model-only manifest is valid; wait and print its stable model key
+  melange model upload -R zetic/whisper-tiny model.onnx --wait --jq .model.key
+
+  # Upload a .pt2 model with two shape buckets and two inputs per bucket
+  melange model upload -R zetic/vision model.pt2 \
+    --bucket 0:1x3x224x224 --input image-224.npy --input mask-224.npy \
+    --bucket 1:1x3x384x384 --input image-384.npy --input mask-384.npy --wait
+
   # Resume an interrupted upload
   melange model upload --resume up_ab12cd -R zetic/whisper-tiny
 
@@ -89,6 +126,9 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
   melange model upload --cancel up_ab12cd -R zetic/whisper-tiny`,
 		Args: cmdutil.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateWaitOptions(opts.doWait, opts.timeout, cmd.Flags().Changed("timeout")); err != nil {
+				return err
+			}
 			return runUploadCommand(cmd.Context(), opts, args)
 		},
 	}
@@ -97,8 +137,8 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
 	fl.StringVarP(&opts.repo, "repo", "R", "", "Target repository as `ACCOUNT/REPO` (required)")
 	fl.StringArrayVar(&opts.inputs, "input", nil, "Sample input `file` (repeatable; order defines input_index)")
 	fl.StringArrayVar(&opts.external, "external-data", nil, "External data `file`, e.g. ONNX external weights (repeatable)")
-	fl.StringVar(&opts.inputManifest, "input-manifest", "", "JSON manifest `file` describing all files (alternative to flags)")
-	fl.StringVar(&opts.bucket, "bucket", "", "Bucket dims as `INDEX:DIMS` (not yet supported)")
+	fl.StringVar(&opts.inputManifest, "input-manifest", "", "CLI-local JSON manifest `file` describing all files (alternative to flags)")
+	fl.StringArrayVar(&opts.bucket, "bucket", nil, "`.pt2` bucket as `INDEX:DIMS` (repeatable; group --input files by bucket order)")
 	fl.BoolVar(&opts.dryRun, "dry-run", false, "Print the manifest without creating a session or uploading")
 	fl.BoolVar(&opts.doWait, "wait", false, "After upload, wait until conversion reaches a terminal state")
 	fl.DurationVar(&opts.timeout, "timeout", 30*time.Minute, "Maximum time to wait with --wait")
@@ -112,10 +152,6 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
 }
 
 func runUploadCommand(ctx context.Context, opts *uploadOptions, args []string) error {
-	if opts.bucket != "" {
-		return cmdutil.FlagError{Err: errors.New(
-			"bucketed .pt2 uploads not yet supported by the CLI; use the dashboard or melange api")}
-	}
 	modes := 0
 	for _, on := range []bool{opts.resumeID != "", opts.cancelID != "", opts.sessions} {
 		if on {
@@ -126,15 +162,15 @@ func runUploadCommand(ctx context.Context, opts *uploadOptions, args []string) e
 		return cmdutil.FlagError{Err: errors.New("--resume, --cancel, and --sessions are mutually exclusive")}
 	}
 	if (opts.cancelID != "" || opts.sessions) && (len(args) > 0 || len(opts.inputs) > 0 ||
-		len(opts.external) > 0 || opts.inputManifest != "") {
+		len(opts.external) > 0 || len(opts.bucket) > 0 || opts.inputManifest != "") {
 		return cmdutil.FlagError{Err: errors.New("file arguments cannot be combined with --cancel/--sessions")}
 	}
 	if opts.dryRun && modes > 0 {
 		return cmdutil.FlagError{Err: errors.New("--dry-run cannot be combined with --resume, --cancel, or --sessions")}
 	}
-	if opts.inputManifest != "" && (len(args) > 0 || len(opts.inputs) > 0 || len(opts.external) > 0) {
+	if opts.inputManifest != "" && (len(args) > 0 || len(opts.inputs) > 0 || len(opts.external) > 0 || len(opts.bucket) > 0) {
 		return cmdutil.FlagError{Err: errors.New(
-			"--input-manifest cannot be combined with MODEL_FILE, --input, or --external-data")}
+			"--input-manifest cannot be combined with MODEL_FILE, --input, --external-data, or --bucket")}
 	}
 
 	account, name, err := splitRepoFlag(opts.repo)
@@ -175,21 +211,56 @@ func buildSpecs(opts *uploadOptions, args []string) ([]upload.FileSpec, error) {
 	var specs []upload.FileSpec
 	var err error
 	if opts.inputManifest != "" {
-		specs, err = upload.LoadManifestDoc(opts.inputManifest, note)
+		specs, opts.bucketSpecs, err = upload.LoadManifestDocV2(opts.inputManifest, note)
 	} else {
 		if len(args) != 1 {
 			return nil, cmdutil.FlagError{Err: errors.New(
 				"MODEL_FILE is required (or pass --input-manifest); see `melange model upload --help`")}
 		}
-		specs, err = upload.BuildManifest(args[0], opts.inputs, opts.external, note)
+		if len(opts.bucket) > 0 {
+			opts.bucketSpecs, err = parseBucketFlags(opts.bucket)
+			if err == nil {
+				specs, err = upload.BuildBucketedManifest(
+					args[0], opts.inputs, opts.external, opts.bucketSpecs, note)
+			}
+		} else {
+			specs, err = upload.BuildManifest(args[0], opts.inputs, opts.external, note)
+		}
 	}
 	if err != nil {
-		if errors.Is(err, upload.ErrDuplicateFilename) {
+		if errors.Is(err, upload.ErrDuplicateFilename) || errors.Is(err, upload.ErrInvalidManifest) {
 			return nil, cmdutil.FlagError{Err: err}
 		}
 		return nil, err
 	}
 	return specs, nil
+}
+
+func parseBucketFlags(values []string) ([]upload.BucketSpec, error) {
+	buckets := make([]upload.BucketSpec, 0, len(values))
+	for _, value := range values {
+		parts := strings.SplitN(value, ":", 2)
+		if len(parts) != 2 {
+			return nil, cmdutil.FlagError{Err: fmt.Errorf(
+				"invalid --bucket %q: expected INDEX:DIMxDIM", value)}
+		}
+		index, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return nil, cmdutil.FlagError{Err: fmt.Errorf(
+				"invalid --bucket %q: index must be an integer", value)}
+		}
+		var dims []int
+		for _, raw := range strings.Split(parts[1], "x") {
+			dim, err := strconv.Atoi(raw)
+			if err != nil {
+				return nil, cmdutil.FlagError{Err: fmt.Errorf(
+					"invalid --bucket %q: dimensions must be integers separated by x", value)}
+			}
+			dims = append(dims, dim)
+		}
+		buckets = append(buckets, upload.BucketSpec{Index: index, Dims: dims})
+	}
+	return buckets, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +277,7 @@ type dryRunFile struct {
 	CRC32C        string `json:"crc32c"`
 	SHA256        string `json:"sha256"`
 	InputIndex    *int   `json:"input_index,omitempty"`
+	BucketIndex   *int   `json:"bucket_index,omitempty"`
 	CanonicalPath string `json:"canonical_path"`
 }
 
@@ -236,14 +308,22 @@ func renderDryRun(opts *uploadOptions, specs []upload.FileSpec) error {
 			if s.Role == upload.RoleInput {
 				idx := s.InputIndex
 				files[i].InputIndex = &idx
+				if s.BucketIndex != nil {
+					bucket := *s.BucketIndex
+					files[i].BucketIndex = &bucket
+				}
 			}
 		}
-		return opts.exporter.Write(ios, map[string]any{
+		result := map[string]any{
 			"repo":       opts.repo,
 			"dry_run":    true,
 			"files":      files,
 			"total_size": total,
-		})
+		}
+		if len(opts.bucketSpecs) > 0 {
+			result["options"] = map[string]any{"buckets": opts.bucketSpecs}
+		}
+		return opts.exporter.Write(ios, result)
 	}
 
 	tp := tableprinter.New(ios)
@@ -277,6 +357,7 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 	body := gen.CreateModelUploadJSONRequestBody{
 		ManifestVersion: gen.N2,
 		Files:           manifestFiles(specs),
+		Options:         manifestOptions(opts.bucketSpecs),
 	}
 	resp, err := g.CreateModelUploadWithResponse(ctx, opts.account, opts.name,
 		&gen.CreateModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()}, body)
@@ -315,6 +396,19 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 	return transferAndComplete(ctx, opts, g, st)
 }
 
+// manifestOptions converts validated local bucket declarations to the exact
+// OpenAPI wire shape. A nil pointer omits options for ordinary models.
+func manifestOptions(specs []upload.BucketSpec) *gen.ManifestOptions {
+	if len(specs) == 0 {
+		return nil
+	}
+	buckets := make([]gen.ManifestBucket, len(specs))
+	for i, bucket := range specs {
+		buckets[i] = gen.ManifestBucket{Index: bucket.Index, Dims: bucket.Dims}
+	}
+	return &gen.ManifestOptions{Buckets: &buckets}
+}
+
 // manifestFiles converts local specs into the wire manifest.
 func manifestFiles(specs []upload.FileSpec) []gen.ManifestFile {
 	files := make([]gen.ManifestFile, len(specs))
@@ -333,6 +427,10 @@ func manifestFiles(specs []upload.FileSpec) []gen.ManifestFile {
 		if s.Role == upload.RoleInput {
 			idx := s.InputIndex
 			mf.InputIndex = &idx
+			if s.BucketIndex != nil {
+				bucket := *s.BucketIndex
+				mf.BucketIndex = &bucket
+			}
 		}
 		files[i] = mf
 	}
@@ -375,7 +473,7 @@ func activeSessionConflict(ctx context.Context, opts *uploadOptions, g *gen.Clie
 	if resp, err := g.ListModelUploadsWithResponse(ctx, opts.account, opts.name); err == nil &&
 		api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) == nil && resp.JSON200 != nil {
 		for _, s := range resp.JSON200.Results {
-			if strings.EqualFold(s.State, sessionStateUploading) {
+			if strings.EqualFold(string(s.State), sessionStateUploading) {
 				sessionID = s.Id
 				break
 			}
@@ -472,7 +570,12 @@ func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 			}
 			sf.SessionURI = uri
 			sf.Offset = 0
-			saveState(st)
+			if err := st.Save(); err != nil {
+				// The session URI is a bearer credential and the only way to
+				// resume without opening a new session. Never transfer a byte
+				// until it is durably persisted.
+				return fmt.Errorf("persisting resumable upload session before transfer: %w", err)
+			}
 		} else {
 			// Resuming an existing session: the server's committed offset is
 			// authoritative — the state offset is only a hint.
@@ -516,7 +619,6 @@ func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResp
 // reissueURL fetches a fresh signed resumable-start URL for one file.
 func reissueURL(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State, sf *upload.StateFile) error {
 	resp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, st.SessionID,
-		&gen.ReissueUploadFilesParams{IdempotencyKey: newIdempotencyKeyParam()},
 		gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: []string{sf.ClientFileID}})
 	if err != nil {
 		return err
@@ -563,7 +665,7 @@ func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWi
 		return fmt.Errorf("unexpected response completing upload session (HTTP %d)", resp.StatusCode())
 	}
 
-	if strings.EqualFold(out.State, "FAILED") {
+	if strings.EqualFold(string(out.State), "FAILED") {
 		fmt.Fprintf(ios.ErrOut, "✗ Upload verification failed: %s (session %s)\n", deref(out.FailureCode), out.Id)
 		fmt.Fprintf(ios.ErrOut, "Fix the reported file and upload again.\n")
 		// FAILED is terminal: the session can never be resumed, so keeping
@@ -577,9 +679,9 @@ func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWi
 
 	if out.Model != nil {
 		fmt.Fprintf(ios.ErrOut, "✓ Upload complete: model %s version %d (state %s)\n",
-			out.Model.Key, out.Model.Version, strings.ToLower(out.State))
+			out.Model.Key, out.Model.Version, strings.ToLower(string(out.State)))
 	} else {
-		fmt.Fprintf(ios.ErrOut, "✓ Upload complete: session %s (state %s)\n", out.Id, strings.ToLower(out.State))
+		fmt.Fprintf(ios.ErrOut, "✓ Upload complete: session %s (state %s)\n", out.Id, strings.ToLower(string(out.State)))
 	}
 	// The session reached a server-terminal outcome; local state is done.
 	_ = upload.RemoveState(st.SessionID)
@@ -588,12 +690,30 @@ func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWi
 		if out.Model == nil {
 			return errors.New("cannot --wait: the complete response carried no model reference")
 		}
-		return waitForModel(ctx, opts.f, g, opts.account, opts.name, out.Model.Key, opts.timeout, opts.exporter)
+		modelJSON, err := completedModelJSON(resp.Body)
+		if err != nil {
+			return err
+		}
+		return waitForModelWithResult(ctx, opts.f, g, opts.account, opts.name,
+			out.Model.Key, opts.timeout, opts.exporter, modelJSON)
 	}
 	if opts.exporter != nil {
 		return opts.exporter.Write(ios, json.RawMessage(resp.Body))
 	}
 	return nil
+}
+
+func completedModelJSON(body []byte) (json.RawMessage, error) {
+	var response struct {
+		Model json.RawMessage `json:"model"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("decoding completed upload model: %w", err)
+	}
+	if len(response.Model) == 0 || string(response.Model) == "null" {
+		return nil, errors.New("decoding completed upload model: response carried no model reference")
+	}
+	return response.Model, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -628,9 +748,9 @@ func runResume(ctx context.Context, opts *uploadOptions, args []string) error {
 	if err != nil {
 		return err
 	}
-	if terminalSessionState(detail.State) {
+	if terminalSessionState(string(detail.State)) {
 		_ = upload.RemoveState(opts.resumeID)
-		return fmt.Errorf("session %s is %s; start a new upload", opts.resumeID, strings.ToLower(detail.State))
+		return fmt.Errorf("session %s is %s; start a new upload", opts.resumeID, strings.ToLower(string(detail.State)))
 	}
 
 	if st == nil {
@@ -724,7 +844,6 @@ func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.Cli
 
 	if len(pending) > 0 {
 		rresp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, opts.resumeID,
-			&gen.ReissueUploadFilesParams{IdempotencyKey: newIdempotencyKeyParam()},
 			gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: pending})
 		if err != nil {
 			return nil, err
@@ -814,7 +933,7 @@ func runSessions(ctx context.Context, opts *uploadOptions) error {
 	tp.HeaderRow("id", "state", "created", "expires", "files")
 	for _, s := range sessions {
 		tp.AddField(s.Id)
-		tp.AddField(s.State)
+		tp.AddField(string(s.State))
 		if isTTY {
 			tp.AddField(text.RelativeTime(s.CreatedAt, now))
 		} else {
@@ -882,6 +1001,18 @@ func (p *progress) doneAs(n int64) {
 // the final status. Failed models exit 1; a timeout prints how to keep
 // checking and exits 1.
 func waitForModel(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResponses, account, name, key string, timeout time.Duration, exporter *cmdutil.Exporter) error {
+	return waitForModelWithResult(ctx, f, g, account, name, key, timeout, exporter, nil)
+}
+
+type waitedModelResult struct {
+	Model  json.RawMessage `json:"model"`
+	Status json.RawMessage `json:"status"`
+}
+
+// waitForModelWithResult preserves the model-producing response alongside the
+// terminal status for structured upload/import output. A nil model keeps the
+// model status command's existing raw-status contract.
+func waitForModelWithResult(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResponses, account, name, key string, timeout time.Duration, exporter *cmdutil.Exporter, model json.RawMessage) error {
 	ios := f.IOStreams
 	var last *gen.ModelStatusResponse
 	var raw []byte
@@ -915,7 +1046,13 @@ func waitForModel(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResp
 		return err
 	}
 
-	if perr := printStatus(f, exporter, last, raw, key, account+"/"+name); perr != nil {
+	var perr error
+	if exporter != nil && model != nil {
+		perr = exporter.Write(ios, waitedModelResult{Model: model, Status: json.RawMessage(raw)})
+	} else {
+		perr = printStatus(f, exporter, last, raw, key, account+"/"+name)
+	}
+	if perr != nil {
 		return perr
 	}
 	if strings.EqualFold(string(last.State), string(gen.ModelStatusResponseStateFailed)) {

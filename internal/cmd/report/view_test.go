@@ -185,7 +185,7 @@ func TestReportGeneralNonTTYRecordPerLine(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	assert.Len(t, lines, 7, "one line per raw record, no derived table")
 	// The first record: Pixel npu NPU_FP32 fp32 run 0 latency_ms 5.0 ms.
-	assert.Equal(t, "Pixel\tPixel\t\t\t\tnpu\tNPU_FP32\tfp32\t0\tlatency_ms\t5.0\tms", lines[0])
+	assert.Equal(t, "Pixel\tPixel\t\t\tnpu\tNPU_FP32\tfp32\t0\tlatency_ms\t5.0\tms", lines[0])
 	assert.Empty(t, e.errOut.String())
 }
 
@@ -254,6 +254,27 @@ func TestReportInvalidModeExits2(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 2, cmdutil.ExitCode(err))
 	assert.Empty(t, e.reg.Requests)
+}
+
+func TestReportModeIsRejectedForExplicitLLMBeforeAPI(t *testing.T) {
+	e := setup(t)
+	err := run(t, e, "report", "view", "m_x", "-R", "zetic/whisper",
+		"--type", "llm", "--mode", "speed")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "--mode only applies to general reports")
+	assert.Empty(t, e.reg.Requests)
+}
+
+func TestReportModeIsRejectedWhenProbeFindsLLM(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", generalPath), jsonStub(404, notFound))
+	e.reg.Register(httpmock.REST("GET", llmPath), jsonStub(200, llmFixture()))
+
+	err := run(t, e, "report", "view", "m_x", "-R", "zetic/whisper", "--mode", "speed")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "--mode only applies to general reports")
 }
 
 func TestReportForbiddenExits1(t *testing.T) {
@@ -338,7 +359,7 @@ func TestReportPackageNonTTYRecordPerLine(t *testing.T) {
 	require.NoError(t, run(t, e, "report", "view", "m_x", "-R", "zetic/whisper", "--type", "package"))
 	lines := strings.Split(strings.TrimRight(e.out.String(), "\n"), "\n")
 	require.Len(t, lines, 1)
-	assert.Equal(t, "Pixel\tPixel\t\t\t\tpkg\t1\ttps\t50.0\ttokens_per_s", lines[0])
+	assert.Equal(t, "Pixel\tPixel\t\t\tpkg\t1\ttps\t50.0\ttokens_per_s", lines[0])
 }
 
 // lineWith returns the single output line containing sub, failing otherwise.

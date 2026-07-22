@@ -7,7 +7,13 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+// DefaultRequestTimeout bounds one ordinary Melange API call, including
+// retries and response-body reads. Long-running conversion waits and signed
+// storage transfers use their own independent budgets.
+const DefaultRequestTimeout = 30 * time.Second
 
 // Options configures a Client.
 type Options struct {
@@ -16,6 +22,7 @@ type Options struct {
 	UserAgent string            // e.g. "melange-cli/1.0.0 (darwin; arm64)"
 	Debug     io.Writer         // nil = debug logging off
 	Transport http.RoundTripper // base transport; nil = http.DefaultTransport
+	Timeout   time.Duration     // per API request; 0 = DefaultRequestTimeout
 }
 
 // Client is an HTTP client for the Melange public API. The transport chain is
@@ -47,11 +54,18 @@ func NewClient(opts Options) (*Client, error) {
 	retry := newRetryTransport(rt)
 	rt = &authTransport{base: retry, host: baseURL.Host, token: opts.Token, userAgent: opts.UserAgent}
 
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DefaultRequestTimeout
+	}
 	return &Client{
 		baseURL: baseURL,
-		http:    &http.Client{Transport: rt},
+		http:    &http.Client{Transport: rt, Timeout: timeout},
 	}, nil
 }
+
+// RequestTimeout reports the configured ordinary API request budget.
+func (c *Client) RequestTimeout() time.Duration { return c.http.Timeout }
 
 // Do sends a request to a path relative to the client's host (e.g. "/v1/me",
 // optionally with a query string like "/v1/repos?limit=5") and returns the

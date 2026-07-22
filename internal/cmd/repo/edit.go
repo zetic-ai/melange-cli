@@ -103,7 +103,7 @@ not found), 2 usage error, 4 not authenticated.`,
 				}
 			}
 
-			resp, err := g.UpdateRepoWithResponse(ctx, account, name, body)
+			resp, err := g.UpdateRepoWithResponse(api.WithReplaySafe(ctx), account, name, body)
 			if err != nil {
 				return err
 			}

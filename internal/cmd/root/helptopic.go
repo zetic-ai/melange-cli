@@ -28,6 +28,9 @@ var helpTopics = []helpTopic{
                         unreadable, commands fail rather than silently
                         falling back to another credential.
   MELANGE_HOST          API host to target (default https://api.zetic.ai).
+  MELANGE_API_TIMEOUT   Positive duration bounding each ordinary API call
+                        (default 30s; examples: 45s, 2m). Conversion waits
+                        and signed storage transfers use separate budgets.
   MELANGE_DEBUG         Set to 1, true, yes, or on (case-insensitive) to
                         log request/response lines to stderr. Headers and
                         tokens are never logged.
@@ -74,7 +77,11 @@ retried by the CLI), and 130 as cancellation.
 
 --json emits the complete documented result as JSON. For server-backed
 commands the payload is the API response byte-for-byte: field names,
-field order, and unknown fields are preserved exactly.
+field order, and unknown fields are preserved exactly. Waited upload and
+import commands compose {"model": ..., "status": ...} so agents retain
+both the created model key and terminal status. Safety exception: melange
+model download --json redacts signed artifact URLs because they are
+short-lived credentials.
 
 --jq EXPRESSION filters the result with a jq expression (implies
 --json). Filtered values are re-marshaled, so object keys are emitted

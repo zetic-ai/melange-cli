@@ -11,16 +11,37 @@ also for public models owned by others.
 On a terminal the command previews the target and its size and asks for
 confirmation before anything is charged; non-interactive runs (and
 --no-input) require --yes instead. The authorization request carries an
-Idempotency-Key, so transient failures are retried without a double
-charge. Exceeding the quota is an error with nothing charged.
+Idempotency-Key that is persisted in per-user application state and reused
+by later CLI processes for the same host, account/repo, model, and target. Local output
+is tracked separately so a post-authorization correction from file or
+stdout to a directory keeps the charged key. A cross-process lock
+serializes transfers; durable completion/recovery state prevents a
+waiting or failed follower from rotating the key after another process
+succeeds. The private state stores no signed URLs or access tokens.
+Exceeding the quota is an error with nothing charged.
 
 Files are written to --output (default: the current directory; an
 existing directory receives one file per artifact, any other path names
 the destination file for single-artifact targets). Each file is
 downloaded to a temporary file, verified against the artifact's
-checksum when one is available, and atomically renamed into place —
+checksum when one is available, and atomically committed into place —
 interrupted downloads never leave partial files. Existing files are
-never overwritten without --force.
+never overwritten without --force. Connection resets, timeouts, 429
+(honoring Retry-After), and HTTP 502–504 artifact failures are retried
+with bounded backoff. An expired 403/404 signed URL is refreshed once
+with the persisted authorization key. A transfer with no byte progress
+for 30 seconds is canceled and retried; every received chunk resets that
+inactivity timer.
+
+The CLI validates the output path and known file collisions before the
+billable request. Artifact names are only disclosed by that response, so
+an existing same-named file inside an output directory is necessarily
+detected afterward; replay state is kept and the error tells you to
+re-run the same command with --force without another charge.
+
+Set --output - for one artifact to write verified binary bytes to stdout.
+The artifact is fully staged and verified before stdout is touched; this
+mode cannot be combined with --json, --jq, or --template.
 
 With --json the authorization response is written to stdout with every
 artifact url replaced by "<redacted>" (the only documented deviation
@@ -56,7 +77,7 @@ melange model download MODEL_KEY --target TARGET_ID [flags]
   -h, --help                help for download
       --jq expression       Filter JSON output using a jq expression (implies --json)
       --json                Output the full result as JSON
-  -o, --output directory    Destination directory (or file for single-artifact targets) (default ".")
+  -o, --output directory    Destination directory, single-artifact file, or - for binary stdout (default ".")
   -R, --repo ACCOUNT/REPO   Repository as ACCOUNT/REPO (required)
       --target TARGET_ID    Target to download as TARGET_ID (see `melange model targets`)
       --template string     Format JSON output using a Go template (implies --json)

@@ -72,7 +72,12 @@ func TestClientRefusesTokenOverPlaintextHTTP(t *testing.T) {
 }
 
 func TestClientAllowsTokenOverLoopbackHTTP(t *testing.T) {
-	for _, host := range []string{"http://127.0.0.1:8080", "http://localhost:3000", "http://[::1]:9999"} {
+	for _, host := range []string{
+		"http://127.0.0.1:8080",
+		"http://127.42.0.9:8080",
+		"http://LOCALHOST:3000",
+		"http://[::1]:9999",
+	} {
 		t.Run(host, func(t *testing.T) {
 			reg := &httpmock.Registry{}
 			reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, "{}"))
@@ -98,6 +103,35 @@ func TestClientHostWithoutSchemeDefaultsToHTTPS(t *testing.T) {
 
 	require.Len(t, reg.Requests, 1)
 	assert.Equal(t, "https", reg.Requests[0].URL.Scheme)
+}
+
+func TestClientRequestTimeoutBoundsAPIRequests(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/slow"), func(req *http.Request) (*http.Response, error) {
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	})
+
+	client, err := api.NewClient(api.Options{
+		Host:      "https://api.zetic.ai",
+		Transport: reg,
+		Timeout:   20 * time.Millisecond,
+	})
+	require.NoError(t, err)
+
+	start := time.Now()
+	_, err = client.Do(context.Background(), "GET", "/v1/slow", nil, nil) //nolint:bodyclose
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), time.Second,
+		"ordinary API requests must not hang indefinitely")
+}
+
+func TestClientDefaultRequestTimeoutIsBounded(t *testing.T) {
+	reg := &httpmock.Registry{}
+	client, err := api.NewClient(api.Options{Host: "https://api.zetic.ai", Transport: reg})
+	require.NoError(t, err)
+	assert.Equal(t, api.DefaultRequestTimeout, client.RequestTimeout())
 }
 
 // TestGetMe exercises the generated-client path: the wire call goes through

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -14,22 +15,52 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
+	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/downloadstate"
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 // redactedURL replaces artifact URLs in --json output: signed URLs are
 // short-lived credentials and must never land in logs or agent transcripts.
 const redactedURL = "<redacted>"
+
+const (
+	artifactMaxAttempts          = 4
+	artifactMaxAuthorizationRuns = 2 // initial authorization plus one URL refresh
+	artifactMaxRetryDelay        = 30 * time.Second
+)
+
+// Retry hooks are variables so white-box tests can verify Retry-After and
+// bounded backoff without waiting in real time.
+var (
+	artifactRetrySleep                = sleepArtifactRetry
+	artifactRetryNow                  = time.Now
+	artifactTransferInactivityTimeout = 30 * time.Second
+	artifactRetryJitter               = func(max time.Duration) time.Duration {
+		if max <= 0 {
+			return 0
+		}
+		var b [8]byte
+		if _, err := cryptorand.Read(b[:]); err != nil {
+			return 0
+		}
+		return time.Duration(binary.BigEndian.Uint64(b[:]) % uint64(max))
+	}
+)
 
 type downloadOptions struct {
 	f *cmdutil.Factory
@@ -57,16 +88,37 @@ also for public models owned by others.
 On a terminal the command previews the target and its size and asks for
 confirmation before anything is charged; non-interactive runs (and
 --no-input) require --yes instead. The authorization request carries an
-Idempotency-Key, so transient failures are retried without a double
-charge. Exceeding the quota is an error with nothing charged.
+Idempotency-Key that is persisted in per-user application state and reused
+by later CLI processes for the same host, account/repo, model, and target. Local output
+is tracked separately so a post-authorization correction from file or
+stdout to a directory keeps the charged key. A cross-process lock
+serializes transfers; durable completion/recovery state prevents a
+waiting or failed follower from rotating the key after another process
+succeeds. The private state stores no signed URLs or access tokens.
+Exceeding the quota is an error with nothing charged.
 
 Files are written to --output (default: the current directory; an
 existing directory receives one file per artifact, any other path names
 the destination file for single-artifact targets). Each file is
 downloaded to a temporary file, verified against the artifact's
-checksum when one is available, and atomically renamed into place —
+checksum when one is available, and atomically committed into place —
 interrupted downloads never leave partial files. Existing files are
-never overwritten without --force.
+never overwritten without --force. Connection resets, timeouts, 429
+(honoring Retry-After), and HTTP 502–504 artifact failures are retried
+with bounded backoff. An expired 403/404 signed URL is refreshed once
+with the persisted authorization key. A transfer with no byte progress
+for 30 seconds is canceled and retried; every received chunk resets that
+inactivity timer.
+
+The CLI validates the output path and known file collisions before the
+billable request. Artifact names are only disclosed by that response, so
+an existing same-named file inside an output directory is necessarily
+detected afterward; replay state is kept and the error tells you to
+re-run the same command with --force without another charge.
+
+Set --output - for one artifact to write verified binary bytes to stdout.
+The artifact is fully staged and verified before stdout is touched; this
+mode cannot be combined with --json, --jq, or --template.
 
 With --json the authorization response is written to stdout with every
 artifact url replaced by "<redacted>" (the only documented deviation
@@ -97,6 +149,10 @@ authenticated, 130 interrupted.`,
 					"--target TARGET_ID is required; list targets with: melange model targets %s -R %s",
 					opts.key, opts.repo)}
 			}
+			if opts.output == "-" && opts.exporter != nil {
+				return cmdutil.FlagError{Err: errors.New(
+					"--output - cannot be combined with --json, --jq, or --template")}
+			}
 			// Validate the writable destination BEFORE anything is charged: a
 			// bad --output must never cost quota.
 			if err := validOutput(opts.output, opts.force); err != nil {
@@ -109,7 +165,7 @@ authenticated, 130 interrupted.`,
 	fl := cmd.Flags()
 	fl.StringVarP(&opts.repo, "repo", "R", "", "Repository as `ACCOUNT/REPO` (required)")
 	fl.StringVar(&opts.target, "target", "", "Target to download as `TARGET_ID` (see `melange model targets`)")
-	fl.StringVarP(&opts.output, "output", "o", ".", "Destination `directory` (or file for single-artifact targets)")
+	fl.StringVarP(&opts.output, "output", "o", ".", "Destination `directory`, single-artifact file, or - for binary stdout")
 	fl.BoolVar(&opts.yes, "yes", false, "Skip the billable-download confirmation")
 	fl.BoolVar(&opts.force, "force", false, "Overwrite existing files")
 	cmdutil.AddJSONFlags(cmd, &opts.exporter)
@@ -117,7 +173,7 @@ authenticated, 130 interrupted.`,
 	return cmd
 }
 
-func runDownload(ctx context.Context, opts *downloadOptions) error {
+func runDownload(ctx context.Context, opts *downloadOptions) (retErr error) {
 	g, err := genClient(opts.f)
 	if err != nil {
 		return err
@@ -129,33 +185,29 @@ func runDownload(ctx context.Context, opts *downloadOptions) error {
 		}
 	}
 
-	// One Idempotency-Key per logical download: the retry transport replays
-	// the SAME key on transient 5xx, so the server never charges twice. 429
-	// retries are exempted — a bandwidth-quota 429 is not transient at retry
-	// timescales, so it must surface immediately with the quota message.
-	resp, err := g.CreateDownloadAuthorizationWithResponse(api.WithNoRetryOn429(ctx),
-		opts.account, opts.name, opts.key,
-		opts.target, &gen.CreateDownloadAuthorizationParams{IdempotencyKey: newIdempotencyKeyParam()})
+	identity, output, err := downloadReplayScope(opts, g)
 	if err != nil {
 		return err
 	}
-	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-		var apiErr *api.Error
-		if errors.As(aerr, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
-			hint := "The download was not authorized and nothing was charged; check `melange usage quotas`."
-			if apiErr.RetryAfter > 0 {
-				hint += fmt.Sprintf(" Retry after %s.", apiErr.RetryAfter)
+	lease, err := downloadstate.Acquire(ctx, identity, output, newIdempotencyKey)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if retErr != nil {
+			if preserveErr := lease.PreserveRecovery(); preserveErr != nil {
+				retErr = errors.Join(retErr, preserveErr)
 			}
-			return fmt.Errorf("%w\n%s", aerr, hint)
 		}
-		return aerr
-	}
-	auth := resp.JSON201
-	if auth == nil {
-		auth = resp.JSON200 // Idempotency-Key replay: fresh URLs, no new charge
-	}
-	if auth == nil {
-		return fmt.Errorf("unexpected response authorizing download (HTTP %d)", resp.StatusCode())
+		if closeErr := lease.Close(); closeErr != nil {
+			retErr = errors.Join(retErr, closeErr)
+		}
+	}()
+	replay := lease.State()
+
+	auth, rawAuthorization, err := authorizeDownload(ctx, g, opts, replay.IdempotencyKey)
+	if err != nil {
+		return err
 	}
 
 	paths, err := planArtifactPaths(opts, auth.Artifacts)
@@ -164,12 +216,32 @@ func runDownload(ctx context.Context, opts *downloadOptions) error {
 	}
 
 	var total int64
-	for i, art := range auth.Artifacts {
-		n, err := downloadArtifact(ctx, opts, art, paths[i])
+	authorizationRuns := 1
+	for i := 0; i < len(auth.Artifacts); {
+		n, err := downloadArtifact(ctx, opts, auth.Artifacts[i], paths[i])
 		if err != nil {
+			var expired *expiredArtifactURLError
+			if errors.As(err, &expired) {
+				if authorizationRuns < artifactMaxAuthorizationRuns {
+					refreshed, raw, refreshErr := authorizeDownload(ctx, g, opts, replay.IdempotencyKey)
+					if refreshErr != nil {
+						return refreshErr
+					}
+					merged, mergeErr := mergeRefreshedArtifacts(auth, refreshed)
+					if mergeErr != nil {
+						return mergeErr
+					}
+					auth = merged
+					rawAuthorization = raw
+					authorizationRuns++
+					continue
+				}
+				return fmt.Errorf("%w; authorization URLs were refreshed once and replay state was kept — re-run the same command", err)
+			}
 			return err
 		}
 		total += n
+		i++
 	}
 
 	ios := opts.f.IOStreams
@@ -177,17 +249,123 @@ func runDownload(ctx context.Context, opts *downloadOptions) error {
 	if len(paths) == 1 {
 		dest = paths[0]
 	}
+	if dest == "-" {
+		dest = "stdout"
+	}
 	fmt.Fprintf(ios.ErrOut, "✓ Downloaded %d artifact(s) (%s) to %s\n",
 		len(auth.Artifacts), text.FormatBytes(total), dest)
 
 	if opts.exporter != nil {
-		redacted, err := redactAuthorization(resp.Body)
+		redacted, err := redactAuthorization(rawAuthorization)
 		if err != nil {
 			return err
 		}
-		return opts.exporter.Write(ios, redacted)
+		if err := opts.exporter.Write(ios, redacted); err != nil {
+			return err
+		}
 	}
-	return nil
+	return lease.Complete()
+}
+
+// authorizeDownload obtains signed artifact URLs with the persisted key. The
+// API transport may retry this call in-process, and a later process or URL
+// refresh uses the exact same key. A bandwidth-quota 429 is deliberately not
+// retried by the API transport because it is not transient at that timescale.
+func authorizeDownload(ctx context.Context, g *gen.ClientWithResponses, opts *downloadOptions, key string) (*gen.DownloadAuthorizationResponse, []byte, error) {
+	idempotencyKey := gen.IdempotencyKey(key)
+	resp, err := g.CreateDownloadAuthorizationWithResponse(api.WithNoRetryOn429(ctx),
+		opts.account, opts.name, opts.key, opts.target,
+		&gen.CreateDownloadAuthorizationParams{IdempotencyKey: &idempotencyKey})
+	if err != nil {
+		return nil, nil, err
+	}
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+		var apiErr *api.Error
+		if errors.As(aerr, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
+			hint := "The download was not authorized and nothing was charged; check `melange usage quotas`."
+			if apiErr.RetryAfter > 0 {
+				hint += fmt.Sprintf(" Retry after %s.", apiErr.RetryAfter)
+			}
+			return nil, nil, fmt.Errorf("%w\n%s", aerr, hint)
+		}
+		return nil, nil, aerr
+	}
+	auth := resp.JSON201
+	if auth == nil {
+		auth = resp.JSON200
+	}
+	if auth == nil {
+		return nil, nil, fmt.Errorf("unexpected response authorizing download (HTTP %d)", resp.StatusCode())
+	}
+	return auth, resp.Body, nil
+}
+
+func downloadReplayScope(opts *downloadOptions, g *gen.ClientWithResponses) (downloadstate.Identity, downloadstate.Output, error) {
+	client, ok := g.ClientInterface.(*gen.Client)
+	if !ok {
+		return downloadstate.Identity{}, downloadstate.Output{}, errors.New("determining API host for download replay state")
+	}
+	u, err := url.Parse(client.Server)
+	if err != nil {
+		return downloadstate.Identity{}, downloadstate.Output{}, fmt.Errorf("determining API host for download replay state: %w", err)
+	}
+	// Credentials and query parameters never belong in replay state, even if
+	// a nonstandard client was constructed with them in its base URL.
+	u.User = nil
+	u.RawQuery = ""
+	u.Fragment = ""
+	host := strings.TrimRight(u.String(), "/")
+
+	mode := "file"
+	outputPath := opts.output
+	if opts.output == "-" {
+		mode = "stdout"
+	} else {
+		outputPath, err = filepath.Abs(opts.output)
+		if err != nil {
+			return downloadstate.Identity{}, downloadstate.Output{}, fmt.Errorf("resolving --output for download replay state: %w", err)
+		}
+		outputPath = filepath.Clean(outputPath)
+		if info, statErr := os.Stat(opts.output); statErr == nil && info.IsDir() {
+			mode = "directory"
+		}
+	}
+	identity := downloadstate.Identity{
+		Host:    host,
+		Account: opts.account,
+		Repo:    opts.name,
+		Model:   opts.key,
+		Target:  opts.target,
+	}
+	return identity, downloadstate.Output{Mode: mode, Path: outputPath}, nil
+}
+
+// mergeRefreshedArtifacts accepts only a replay of the same authorization.
+// Names and verification metadata remain bound to the original path plan;
+// only fresh signed URLs and expiry are adopted.
+func mergeRefreshedArtifacts(original, refreshed *gen.DownloadAuthorizationResponse) (*gen.DownloadAuthorizationResponse, error) {
+	if refreshed.AuthorizationId != original.AuthorizationId || len(refreshed.Artifacts) != len(original.Artifacts) {
+		return nil, errors.New("refreshed download authorization did not match the original; replay state was kept")
+	}
+	byName := make(map[string]gen.DownloadArtifact, len(refreshed.Artifacts))
+	for _, art := range refreshed.Artifacts {
+		byName[art.Name] = art
+	}
+	merged := *original
+	merged.ExpiresAt = refreshed.ExpiresAt
+	merged.Artifacts = append([]gen.DownloadArtifact(nil), original.Artifacts...)
+	for i, art := range merged.Artifacts {
+		fresh, ok := byName[art.Name]
+		if !ok || !sameOptionalInt(art.Size, fresh.Size) || deref(art.Checksum) != deref(fresh.Checksum) {
+			return nil, errors.New("refreshed download authorization changed artifact metadata; replay state was kept")
+		}
+		merged.Artifacts[i].Url = fresh.Url
+	}
+	return &merged, nil
+}
+
+func sameOptionalInt(a, b *int) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }
 
 // validOutput rejects --output values that could only fail after the
@@ -196,23 +374,44 @@ func runDownload(ctx context.Context, opts *downloadOptions) error {
 // Dir-mode collisions cannot be checked here — artifact names only exist
 // after the billable POST — so planArtifactPaths re-checks post-charge.
 func validOutput(output string, force bool) error {
+	if output == "-" {
+		return nil
+	}
 	if info, err := os.Stat(output); err == nil {
 		if info.IsDir() {
-			return nil
+			return preflightWritableDirectory(output)
 		}
 		if !force {
 			return cmdutil.FlagError{Err: fmt.Errorf(
 				"--output %q already exists; pass --force to overwrite", output)}
 		}
-		return nil
+		return preflightWritableDirectory(filepath.Dir(output))
 	}
 	if strings.HasSuffix(output, string(os.PathSeparator)) {
 		return cmdutil.FlagError{Err: fmt.Errorf(
 			"--output %q is not an existing directory", output)}
 	}
-	if info, err := os.Stat(filepath.Dir(output)); err != nil || !info.IsDir() {
+	parent := filepath.Dir(output)
+	if info, err := os.Stat(parent); err != nil || !info.IsDir() {
 		return cmdutil.FlagError{Err: fmt.Errorf(
 			"--output %q: parent directory does not exist", output)}
+	}
+	return preflightWritableDirectory(parent)
+}
+
+func preflightWritableDirectory(dir string) error {
+	probe, err := os.CreateTemp(dir, ".melange-download-write-test-*")
+	if err != nil {
+		return cmdutil.FlagError{Err: fmt.Errorf("destination directory %q is not writable: %w", dir, err)}
+	}
+	path := probe.Name()
+	closeErr := probe.Close()
+	removeErr := os.Remove(path)
+	if closeErr != nil {
+		return cmdutil.FlagError{Err: fmt.Errorf("destination directory %q is not writable: %w", dir, closeErr)}
+	}
+	if removeErr != nil {
+		return cmdutil.FlagError{Err: fmt.Errorf("cleaning destination writability probe in %q: %w", dir, removeErr)}
 	}
 	return nil
 }
@@ -279,6 +478,11 @@ func planArtifactPaths(opts *downloadOptions, artifacts []gen.DownloadArtifact) 
 		return nil, errors.New("the authorization carried no artifacts; try again or contact support")
 	}
 
+	stdoutMode := opts.output == "-"
+	if stdoutMode && len(artifacts) != 1 {
+		return nil, fmt.Errorf("target has %d artifacts; --output - requires exactly one artifact", len(artifacts))
+	}
+
 	dirMode := false
 	if info, err := os.Stat(opts.output); err == nil && info.IsDir() {
 		dirMode = true
@@ -290,6 +494,7 @@ func planArtifactPaths(opts *downloadOptions, artifacts []gen.DownloadArtifact) 
 
 	paths := make([]string, len(artifacts))
 	seen := map[string]bool{}
+	seenNames := make([]string, 0, len(artifacts))
 	for i, art := range artifacts {
 		if err := validArtifactName(art.Name); err != nil {
 			return nil, err
@@ -297,79 +502,203 @@ func planArtifactPaths(opts *downloadOptions, artifacts []gen.DownloadArtifact) 
 		if seen[art.Name] {
 			return nil, fmt.Errorf("duplicate artifact name %q in authorization", art.Name)
 		}
+		for _, prior := range seenNames {
+			if strings.EqualFold(prior, art.Name) {
+				return nil, fmt.Errorf("artifact names %q and %q collide on case-insensitive filesystems", prior, art.Name)
+			}
+		}
 		seen[art.Name] = true
-		if dirMode {
+		seenNames = append(seenNames, art.Name)
+		if stdoutMode {
+			paths[i] = "-"
+		} else if dirMode {
 			paths[i] = filepath.Join(opts.output, art.Name)
 		} else {
 			paths[i] = opts.output
 		}
-		if _, err := os.Stat(paths[i]); err == nil && !opts.force {
-			return nil, fmt.Errorf("%s already exists; pass --force to overwrite", paths[i])
+		if paths[i] != "-" {
+			if _, err := os.Stat(paths[i]); err == nil && !opts.force {
+				return nil, postAuthorizationCollision(paths[i])
+			}
 		}
 	}
 	return paths, nil
 }
 
 // validArtifactName rejects server-supplied names that could escape the
-// output directory. The API contract is plain basenames; anything else is
-// treated as hostile.
+// output directory or alias a special Windows device. The API contract is
+// portable plain basenames; anything else is treated as hostile.
 func validArtifactName(name string) error {
 	if name == "" || name == "." || name == ".." ||
-		strings.ContainsAny(name, `/\`) || filepath.IsAbs(name) {
+		strings.ContainsAny(name, `/\<>:"|?*`) || filepath.IsAbs(name) ||
+		strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") {
 		return fmt.Errorf("unsafe artifact name %q in authorization", name)
+	}
+	for _, r := range name {
+		if r < 0x20 {
+			return fmt.Errorf("unsafe artifact name %q in authorization", name)
+		}
+	}
+	stem, _, _ := strings.Cut(name, ".")
+	switch strings.ToUpper(stem) {
+	case "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+		return fmt.Errorf("unsafe artifact name %q in authorization (reserved device name)", name)
 	}
 	return nil
 }
 
-// downloadArtifact streams one signed URL to its destination: temp file in
-// the same directory, checksum verification, then an atomic rename. On any
-// failure the temp file is removed and the destination is left untouched.
-func downloadArtifact(ctx context.Context, opts *downloadOptions, art gen.DownloadArtifact, dest string) (written int64, err error) {
-	client := bareHTTPClient(opts.f)
+type expiredArtifactURLError struct {
+	name   string
+	status int
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, art.Url, nil)
+func (e *expiredArtifactURLError) Error() string {
+	return fmt.Sprintf("downloading %s: HTTP %d from an expired or unavailable signed URL", e.name, e.status)
+}
+
+type artifactStatusError struct {
+	name          string
+	status        int
+	retryAfter    time.Duration
+	hasRetryAfter bool
+}
+
+func (e *artifactStatusError) Error() string {
+	return fmt.Sprintf("downloading %s: HTTP %d", e.name, e.status)
+}
+
+// downloadArtifact retries only failures that can safely succeed with a new
+// GET. Every attempt creates its own temporary file, so a reset or timeout
+// never appends to partial bytes from the preceding attempt.
+func downloadArtifact(ctx context.Context, opts *downloadOptions, art gen.DownloadArtifact, dest string) (int64, error) {
+	client := bareHTTPClient(opts.f)
+	for attempt := 0; attempt < artifactMaxAttempts; attempt++ {
+		written, err := downloadArtifactOnce(ctx, client, opts, art, dest)
+		if err == nil {
+			return written, nil
+		}
+		if _, expired := err.(*expiredArtifactURLError); expired {
+			return 0, err
+		}
+		delay, transient := artifactRetryDelay(ctx, err, attempt)
+		if !transient || attempt == artifactMaxAttempts-1 {
+			return 0, err
+		}
+		if err := artifactRetrySleep(ctx, delay); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return 0, canceledSilently{}
+			}
+			return 0, downloadFailure(art.Name, err)
+		}
+	}
+	return 0, errors.New("download retry attempts exhausted")
+}
+
+// downloadArtifactOnce streams one signed URL to its destination: temp file
+// in the same directory, checksum verification, then an atomic commit. On any
+// failure the temp file is removed and the destination is left untouched.
+func downloadArtifactOnce(ctx context.Context, client *http.Client, opts *downloadOptions, art gen.DownloadArtifact, dest string) (written int64, err error) {
+	transferCtx, touch, stop := withArtifactInactivity(ctx, artifactTransferInactivityTimeout)
+	defer stop()
+	req, err := http.NewRequestWithContext(transferCtx, http.MethodGet, art.Url, nil)
 	if err != nil {
 		// URL parse errors arrive as *url.Error embedding the full URL.
 		return 0, fmt.Errorf("building download request for %s: %w", art.Name, stripSignedURL(err))
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if cause := context.Cause(transferCtx); isArtifactInactivity(cause) {
+			return 0, downloadFailure(art.Name, cause)
+		}
 		return 0, downloadFailure(art.Name, err)
 	}
+	touch()
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("downloading %s: HTTP %d (the signed URL may have expired; re-run the download)",
-			art.Name, resp.StatusCode)
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
+			return 0, &expiredArtifactURLError{name: art.Name, status: resp.StatusCode}
+		}
+		retryAfter, hasRetryAfter := parseArtifactRetryAfter(resp.Header.Get("Retry-After"))
+		return 0, &artifactStatusError{
+			name:          art.Name,
+			status:        resp.StatusCode,
+			retryAfter:    retryAfter,
+			hasRetryAfter: hasRetryAfter,
+		}
 	}
 
-	total := int64(0)
+	total := int64(-1)
 	if art.Size != nil {
+		if *art.Size < 0 {
+			return 0, fmt.Errorf("downloading %s: authorization carried invalid size %d", art.Name, *art.Size)
+		}
 		total = int64(*art.Size)
-	} else if resp.ContentLength > 0 {
+		if resp.ContentLength >= 0 && resp.ContentLength != total {
+			return 0, fmt.Errorf("downloading %s: authorized size is %d bytes but storage reports %d bytes",
+				art.Name, total, resp.ContentLength)
+		}
+	} else if resp.ContentLength >= 0 {
 		total = resp.ContentLength
+	}
+	if total < 0 && !recognizedArtifactChecksum(art) {
+		return 0, fmt.Errorf("downloading %s: cannot verify completeness because both artifact size and a recognized checksum are unavailable", art.Name)
 	}
 	prog := newDownloadProgress(opts.f, art.Name, total)
 
-	tmp, err := os.CreateTemp(filepath.Dir(dest), ".melange-download-*")
+	tmpDir := filepath.Dir(dest)
+	if dest == "-" {
+		tmpDir = os.TempDir()
+	}
+	tmp, err := os.CreateTemp(tmpDir, ".melange-download-*")
 	if err != nil {
 		return 0, err
 	}
 	defer func() {
-		if err != nil {
-			_ = tmp.Close()
-			_ = os.Remove(tmp.Name())
-		}
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 	}()
 
 	crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	sha := sha256.New()
 	pw := &progressWriter{prog: prog}
-	written, err = io.Copy(io.MultiWriter(tmp, crc, sha, pw), resp.Body)
+	reader := io.Reader(&activityReader{reader: resp.Body, touch: touch})
+	if total >= 0 {
+		// Read one byte beyond the expected size to detect overruns, without
+		// overflowing for a malicious MaxInt64 size in the authorization.
+		limit := total
+		if limit < math.MaxInt64 {
+			limit++
+		}
+		reader = io.LimitReader(reader, limit)
+	}
+	written, err = io.Copy(io.MultiWriter(tmp, crc, sha, pw), reader)
 	if err != nil {
+		if cause := context.Cause(transferCtx); isArtifactInactivity(cause) {
+			return 0, downloadFailure(art.Name, cause)
+		}
 		return 0, downloadFailure(art.Name, err)
+	}
+	if total >= 0 && written != total {
+		return 0, fmt.Errorf("downloading %s: authorized size is %d bytes but received %d bytes",
+			art.Name, total, written)
 	}
 	if err = verifyArtifactChecksum(opts.f, art, crc, sha); err != nil {
 		return 0, err
+	}
+	if err = tmp.Sync(); err != nil {
+		return 0, err
+	}
+	if dest == "-" {
+		if _, err = tmp.Seek(0, io.SeekStart); err != nil {
+			return 0, err
+		}
+		if _, err = io.Copy(opts.f.IOStreams.Out, tmp); err != nil {
+			return 0, fmt.Errorf("writing %s to stdout: %w", art.Name, err)
+		}
+		prog.doneAs(written)
+		return written, nil
 	}
 	if err = tmp.Close(); err != nil {
 		return 0, err
@@ -379,11 +708,170 @@ func downloadArtifact(ctx context.Context, opts *downloadOptions, art gen.Downlo
 	if err = os.Chmod(tmp.Name(), 0o644); err != nil {
 		return 0, err
 	}
-	if err = os.Rename(tmp.Name(), dest); err != nil {
+	if err = commitDownloadedFile(tmp.Name(), dest, opts.force); err != nil {
 		return 0, err
 	}
 	prog.doneAs(written)
 	return written, nil
+}
+
+type artifactInactivityError struct{ timeout time.Duration }
+
+func (e *artifactInactivityError) Error() string {
+	return fmt.Sprintf("artifact transfer inactive for %s", e.timeout)
+}
+
+func (*artifactInactivityError) Timeout() bool   { return true }
+func (*artifactInactivityError) Temporary() bool { return true }
+
+func isArtifactInactivity(err error) bool {
+	var inactive *artifactInactivityError
+	return errors.As(err, &inactive)
+}
+
+type activityReader struct {
+	reader io.Reader
+	touch  func()
+}
+
+func (r *activityReader) Read(buffer []byte) (int, error) {
+	n, err := r.reader.Read(buffer)
+	if n > 0 {
+		r.touch()
+	}
+	return n, err
+}
+
+func withArtifactInactivity(parent context.Context, timeout time.Duration) (context.Context, func(), func()) {
+	ctx, cancel := context.WithCancelCause(parent)
+	activity := make(chan struct{}, 1)
+	done := make(chan struct{})
+	timer := time.NewTimer(timeout)
+	go func() {
+		defer close(done)
+		defer timer.Stop()
+		for {
+			select {
+			case <-activity:
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(timeout)
+			case <-timer.C:
+				cancel(&artifactInactivityError{timeout: timeout})
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	touch := func() {
+		select {
+		case activity <- struct{}{}:
+		default:
+		}
+	}
+	stop := func() {
+		cancel(context.Canceled)
+		<-done
+	}
+	return ctx, touch, stop
+}
+
+func artifactRetryDelay(ctx context.Context, err error, attempt int) (time.Duration, bool) {
+	if ctx.Err() != nil {
+		return 0, false
+	}
+	var statusErr *artifactStatusError
+	if errors.As(err, &statusErr) {
+		switch statusErr.status {
+		case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			if statusErr.status == http.StatusTooManyRequests && statusErr.hasRetryAfter {
+				return statusErr.retryAfter, true
+			}
+		default:
+			return 0, false
+		}
+	} else if !transientArtifactNetworkError(err) {
+		return 0, false
+	}
+
+	base := 100 * time.Millisecond
+	for i := 0; i < attempt && base < 2*time.Second; i++ {
+		base *= 2
+	}
+	if base > 2*time.Second {
+		base = 2 * time.Second
+	}
+	return base + artifactRetryJitter(base/2), true
+}
+
+func transientArtifactNetworkError(err error) bool {
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNABORTED) || errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func parseArtifactRetryAfter(raw string) (time.Duration, bool) {
+	if raw == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && seconds >= 0 {
+		if seconds >= int(artifactMaxRetryDelay/time.Second) {
+			return artifactMaxRetryDelay, true
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+	when, err := http.ParseTime(raw)
+	if err != nil {
+		return 0, false
+	}
+	delay := when.Sub(artifactRetryNow())
+	if delay < 0 {
+		delay = 0
+	}
+	if delay > artifactMaxRetryDelay {
+		delay = artifactMaxRetryDelay
+	}
+	return delay, true
+}
+
+func sleepArtifactRetry(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// commitDownloadedFile publishes a verified temporary file with platform-
+// specific atomic replace/no-replace primitives. The temp lives beside the
+// destination, so publication never crosses filesystems and closes the
+// collision TOCTOU window between preflight and commit.
+func commitDownloadedFile(tmp, dest string, force bool) error {
+	if err := publishDownloadedFile(tmp, dest, force); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return postAuthorizationCollision(dest)
+		}
+		return fmt.Errorf("atomically committing download to %s: %w", dest, err)
+	}
+	return nil
+}
+
+func postAuthorizationCollision(dest string) error {
+	return fmt.Errorf("%s already exists; re-run the same command with --force to overwrite and resume using the kept authorization replay state without another charge", dest)
 }
 
 // downloadFailure maps a transfer error to a safe, actionable error. A
@@ -442,6 +930,19 @@ func verifyArtifactChecksum(f *cmdutil.Factory, art gen.DownloadArtifact, crc ha
 		warnUnverified(f, art.Name)
 	}
 	return nil
+}
+
+func recognizedArtifactChecksum(art gen.DownloadArtifact) bool {
+	expected := deref(art.Checksum)
+	algo, _, found := strings.Cut(expected, ":")
+	if !found {
+		return false
+	}
+	switch strings.ToLower(algo) {
+	case "sha256", "crc32c":
+		return true
+	}
+	return false
 }
 
 func checksumMismatch(name, expected, got string) error {

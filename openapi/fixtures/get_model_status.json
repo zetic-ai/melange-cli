@@ -10,6 +10,8 @@
       "created_at": "<datetime>",
       "download_ready": false,
       "failure_code": null,
+      "progress": null,
+      "retry_after": 5,
       "stage": "convert",
       "state": "converting",
       "terminal": false,

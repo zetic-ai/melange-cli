@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -244,6 +245,26 @@ func TestLoadAndSave(t *testing.T) {
 	assert.Equal(t, cfg.Host, loaded.Host)
 	assert.Equal(t, cfg.DefaultRepo, loaded.DefaultRepo)
 	assert.Equal(t, "secret", loaded.Hosts["custom.example.com"].APIKey)
+}
+
+func TestSaveTightensExistingConfigPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix permission bits")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yml")
+	require.NoError(t, os.WriteFile(path, []byte("host: old\n"), 0644))
+	require.NoError(t, os.Chmod(path, 0644))
+
+	before, err := os.Stat(path)
+	require.NoError(t, err)
+	require.NoError(t, config.SaveTo(&config.Config{Host: "https://api.zetic.ai"}, path))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.False(t, os.SameFile(before, info),
+		"config saves must atomically replace instead of truncating in place")
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm(),
+		"rewriting an old config must not preserve permissive modes")
 }
 
 func TestConfigDir(t *testing.T) {

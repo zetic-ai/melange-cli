@@ -17,13 +17,9 @@
           "ap_type": "cpu",
           "dataset": null,
           "device": {
-            "ap_vendor": "Qualcomm",
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "tps",
@@ -37,13 +33,9 @@
           "ap_type": "cpu",
           "dataset": null,
           "device": {
-            "ap_vendor": "Qualcomm",
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "ttft_ms",
@@ -57,13 +49,9 @@
           "ap_type": "cpu",
           "dataset": null,
           "device": {
-            "ap_vendor": "Qualcomm",
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "prompt_tokens",
@@ -77,13 +65,9 @@
           "ap_type": "cpu",
           "dataset": null,
           "device": {
-            "ap_vendor": "Qualcomm",
-            "brand": "Samsung",
-            "hardware": "QTI",
             "marketing_name": "Samsung Galaxy S25",
             "name": "SM-S931U1",
-            "os_version": "15",
-            "real_device": "real-device-code",
+            "os": "15",
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "generated_tokens",
