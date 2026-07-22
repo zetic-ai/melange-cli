@@ -576,6 +576,257 @@
         "title": "CreateUploadResponse",
         "type": "object"
       },
+      "DeploymentGuideModel": {
+        "properties": {
+          "download_ready": {
+            "title": "Download Ready",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "converting",
+              "optimizing",
+              "ready",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "general",
+              "llm"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repository",
+          "key",
+          "version",
+          "type",
+          "state",
+          "download_ready"
+        ],
+        "title": "DeploymentGuideModel",
+        "type": "object"
+      },
+      "DeploymentGuideResponse": {
+        "properties": {
+          "credential_placeholder": {
+            "title": "Credential Placeholder",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "integer"
+          },
+          "inference_mode": {
+            "enum": [
+              "auto",
+              "speed",
+              "accuracy"
+            ],
+            "title": "Inference Mode",
+            "type": "string"
+          },
+          "language": {
+            "enum": [
+              "android-kotlin",
+              "android-java",
+              "ios-swift",
+              "flutter"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "model": {
+            "$ref": "#/components/schemas/DeploymentGuideModel"
+          },
+          "sdk": {
+            "$ref": "#/components/schemas/DeploymentGuideSDK"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentGuideStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "guide_version",
+          "language",
+          "inference_mode",
+          "model",
+          "sdk",
+          "credential_placeholder",
+          "steps"
+        ],
+        "title": "DeploymentGuideResponse",
+        "type": "object"
+      },
+      "DeploymentGuideSDK": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "DeploymentGuideSDK",
+        "type": "object"
+      },
+      "DeploymentGuideStep": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "code_language": {
+            "title": "Code Language",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "code_language",
+          "code"
+        ],
+        "title": "DeploymentGuideStep",
+        "type": "object"
+      },
+      "DeploymentInferenceModeOption": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "auto",
+              "speed",
+              "accuracy"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description"
+        ],
+        "title": "DeploymentInferenceModeOption",
+        "type": "object"
+      },
+      "DeploymentLanguageOption": {
+        "properties": {
+          "code_language": {
+            "title": "Code Language",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "android-kotlin",
+              "android-java",
+              "ios-swift",
+              "flutter"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "code_language"
+        ],
+        "title": "DeploymentLanguageOption",
+        "type": "object"
+      },
+      "DeploymentOptionsResponse": {
+        "properties": {
+          "default_inference_mode": {
+            "enum": [
+              "auto",
+              "speed",
+              "accuracy"
+            ],
+            "title": "Default Inference Mode",
+            "type": "string"
+          },
+          "default_language": {
+            "enum": [
+              "android-kotlin",
+              "android-java",
+              "ios-swift",
+              "flutter"
+            ],
+            "title": "Default Language",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "integer"
+          },
+          "inference_modes": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentInferenceModeOption"
+            },
+            "title": "Inference Modes",
+            "type": "array"
+          },
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentLanguageOption"
+            },
+            "title": "Languages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "guide_version",
+          "default_language",
+          "default_inference_mode",
+          "languages",
+          "inference_modes"
+        ],
+        "title": "DeploymentOptionsResponse",
+        "type": "object"
+      },
       "DownloadArtifact": {
         "description": "One downloadable file of an authorized target.\n\n`url` is a time-limited signed GET URL (valid until `expires_at` of the\nenclosing authorization). `size` is per-file and only known for\nsingle-file targets (the stored `download_size` is the aggregate);\n`checksum` is null when the pipeline recorded none for the file.",
         "properties": {
@@ -3402,6 +3653,43 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/deployment/options": {
+      "get": {
+        "description": "Supported deterministic guide selectors. React Native is excluded.",
+        "operationId": "get_deployment_options",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentOptionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Deployment Options",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
     "/v1/library/models": {
       "get": {
         "description": "Browse the public model library, newest first.\n\nResults are ordered by created_at descending, then id descending.",
@@ -5311,6 +5599,122 @@
         ]
       }
     },
+    "/v1/repos/{account_name}/{repo_name}/models/{model_key}/deployment-guide": {
+      "get": {
+        "description": "Exact SDK install/use guide for one contained, visible model.\n\nThe credential is always a fixed placeholder. The request PAT, internal\ndebug tokens, storage paths, and producer metadata are never inputs.",
+        "operationId": "get_deployment_guide",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "model_key",
+            "required": true,
+            "schema": {
+              "title": "Model Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "android-kotlin",
+              "enum": [
+                "android-kotlin",
+                "android-java",
+                "ios-swift",
+                "flutter"
+              ],
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "inference_mode",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "enum": [
+                "auto",
+                "speed",
+                "accuracy"
+              ],
+              "title": "Inference Mode",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentGuideResponse"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "description": "Deployment guides contain no credential, but are caller-scoped resources.",
+                "schema": {
+                  "enum": [
+                    "private, no-store"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Deployment Guide",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
     "/v1/repos/{account_name}/{repo_name}/models/{model_key}/reports/general": {
       "get": {
         "description": "Raw general benchmark measurements for a model, one record per\n(device, run, metric), with a per-precision summary the dashboard's\nheadline numbers derive from. 404 when the model has no general\nreport. Derivation rules are versioned via `derivation_version`.",
@@ -5898,6 +6302,10 @@
     {
       "description": "Usage and quota reporting.",
       "name": "usage"
+    },
+    {
+      "description": "Credential-safe SDK deployment options and code guides.",
+      "name": "deployment"
     },
     {
       "description": "Legacy project endpoints.",

@@ -226,6 +226,8 @@ func TestLibraryViewReadmeExcerpt(t *testing.T) {
 	assert.Contains(t, out, "line10")
 	assert.NotContains(t, out, "line11", "readme is excerpted to 10 lines")
 	assert.Contains(t, out, "readme truncated")
+	assert.Contains(t, out, "melange model list -R zetic/whisper-tiny")
+	assert.Contains(t, out, "melange deploy guide MODEL_KEY -R zetic/whisper-tiny")
 }
 
 func TestLibraryViewShortReadmeNoTruncationNote(t *testing.T) {
@@ -302,8 +304,10 @@ func TestLibraryViewHelpBridgesDiscoveryToReportsWithoutConflatingIDs(t *testing
 	help := e.out.String()
 	assert.Contains(t, help, "Library entries are repository coordinates, not converted model keys")
 	assert.Contains(t, help, `repo=$(melange library list --search QUERY --jq '.results[0].full_name')`)
-	assert.Contains(t, help, `key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')`)
+	assert.Contains(t, help, `key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default and .state=="ready")) + map(select(.state=="ready")))[0].key // empty')`)
+	assert.Contains(t, help, `[ -n "$key" ] ||`)
 	assert.Contains(t, help, `melange report view "$key" -R "$repo" --json`)
+	assert.Contains(t, help, `melange deploy guide "$key" -R "$repo" --language android-kotlin --mode auto`)
 	assert.NotContains(t, help, `melange report view "$key" -R "$repo" --type llm`)
 	assert.Contains(t, help, "Never import a library model solely to read its public benchmarks")
 }

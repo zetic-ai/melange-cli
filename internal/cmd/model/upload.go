@@ -124,7 +124,11 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
     --bucket 1:1x3x384x384 --input image-384.npy --input mask-384.npy --wait
 
   # Resolve a resumable pre-completion session id
-  session_id=$(melange model upload --sessions -R zetic/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id')
+
+  session_id=$(melange model upload --sessions -R zetic/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id // empty')
+
+  # Do not accidentally send the literal JSON value null as an id
+  [ -n "$session_id" ] || { echo "No resumable upload session found" >&2; exit 1; }
 
   # Resume it
   melange model upload --resume "$session_id" -R zetic/whisper-tiny
@@ -366,16 +370,32 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 		Files:           manifestFiles(specs),
 		Options:         manifestOptions(opts.bucketSpecs),
 	}
-	resp, err := g.CreateModelUploadWithResponse(ctx, opts.account, opts.name,
-		&gen.CreateModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()}, body)
-	if err != nil {
-		return err
-	}
-	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-		if resp.StatusCode() == 409 {
-			return activeSessionConflict(ctx, opts, g, aerr)
+	var resp *gen.CreateModelUploadResult
+	for createAttempt := 0; createAttempt < 2; createAttempt++ {
+		resp, err = g.CreateModelUploadWithResponse(ctx, opts.account, opts.name,
+			&gen.CreateModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()}, body)
+		if err != nil {
+			return err
 		}
-		return aerr
+		if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+			if resp.StatusCode() != 409 {
+				return aerr
+			}
+			stale, conflictErr := activeSessionConflict(ctx, opts, g, aerr)
+			if stale && createAttempt == 0 {
+				fmt.Fprintln(opts.f.IOStreams.ErrOut,
+					"The conflicting session finished while the upload was starting; retrying once.")
+				continue
+			}
+			if stale {
+				return fmt.Errorf("%w\nThe conflicting session is no longer active; retry the upload", aerr)
+			}
+			return conflictErr
+		}
+		break
+	}
+	if resp == nil {
+		return errors.New("creating upload session produced no response")
 	}
 	session := resp.JSON201
 	if session == nil {
@@ -474,35 +494,46 @@ func stateFromSession(session *gen.ModelUploadResponse, specs []upload.FileSpec,
 }
 
 // activeSessionConflict turns a 409 on create into state-aware remediation.
+// Its bool result is true when the conflicting session became terminal during
+// conflict resolution, so the caller may safely retry session creation once.
 // Only pre-completion sessions are offered resume/cancel commands.
-func activeSessionConflict(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, orig error) error {
+func activeSessionConflict(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, orig error) (bool, error) {
 	preferredID := ""
 	var apiErr *api.Error
 	if errors.As(orig, &apiErr) {
 		preferredID = apiErr.ActiveUploadID
 	}
-	sessionID, state := resolveActiveSession(ctx, opts, g, preferredID)
+	sessionID, state, stale := resolveActiveSession(ctx, opts, g, preferredID)
+	if stale {
+		return true, nil
+	}
 	if sessionID == "" {
-		return fmt.Errorf("%w\nList sessions with: melange model upload --sessions -R %s", orig, opts.repo)
+		return false, fmt.Errorf("%w\nList sessions with: melange model upload --sessions -R %s", orig, opts.repo)
 	}
 	printActiveSessionGuidance(opts, sessionID, state)
-	return cmdutil.ErrSilent
+	return false, cmdutil.ErrSilent
 }
 
 // resolveActiveSession prefers the structured conflict ID. Its detail endpoint
 // provides the authoritative state; the list endpoint is a compatibility
 // fallback for older servers and for a transient detail lookup failure.
-func resolveActiveSession(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, preferredID string) (string, string) {
+func resolveActiveSession(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, preferredID string) (string, string, bool) {
 	if preferredID != "" {
 		if resp, err := g.GetModelUploadWithResponse(ctx, opts.account, opts.name, preferredID); err == nil &&
 			api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) == nil && resp.JSON200 != nil {
-			return preferredID, string(resp.JSON200.State)
+			state := string(resp.JSON200.State)
+			if activeUploadSessionState(state) {
+				return preferredID, state, false
+			}
+			if terminalSessionState(state) {
+				return preferredID, state, true
+			}
 		}
 	}
 
 	resp, err := g.ListModelUploadsWithResponse(ctx, opts.account, opts.name)
 	if err != nil || api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) != nil || resp.JSON200 == nil {
-		return preferredID, ""
+		return preferredID, "", false
 	}
 	for _, session := range resp.JSON200.Results {
 		if preferredID != "" && session.Id != preferredID {
@@ -510,10 +541,13 @@ func resolveActiveSession(ctx context.Context, opts *uploadOptions, g *gen.Clien
 		}
 		state := string(session.State)
 		if activeUploadSessionState(state) {
-			return session.Id, state
+			return session.Id, state, false
 		}
 	}
-	return preferredID, ""
+	// The create returned an active-slot conflict, but the authoritative list
+	// now contains no active slot holder. The old session crossed a terminal
+	// boundary during the race; one create retry is safe.
+	return preferredID, "", true
 }
 
 func activeUploadSessionState(state string) bool {
@@ -844,7 +878,7 @@ func fetchUploadSession(ctx context.Context, opts *uploadOptions, g *gen.ClientW
 // compared case-insensitively) is terminal — such a session can never be
 // resumed.
 func terminalSessionState(state string) bool {
-	for _, terminal := range []string{"FAILED", "CANCELED", "EXPIRED"} {
+	for _, terminal := range []string{"FAILED", "CANCELED", "EXPIRED", "CONVERTING", "COMPLETED"} {
 		if strings.EqualFold(state, terminal) {
 			return true
 		}

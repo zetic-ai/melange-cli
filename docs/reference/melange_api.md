@@ -41,9 +41,11 @@ A 2xx response body is committed to stdout only after the complete body is read,
 so a timeout or connection reset cannot leave a partial success payload. The
 read remains bounded by the ordinary request budget; set MELANGE_API_TIMEOUT to
 a longer positive duration for a legitimately slow or large response. Use
--q/--jq or -t/--template to post-process JSON. Non-2xx bodies also pass through
-to stdout unfiltered while a one-line summary goes to stderr. Pagination,
-polling, and Idempotency-Key generation are the caller's responsibility.
+-q/--jq or -t/--template to post-process JSON responses up to 16 MiB; omit the
+filter or narrow the API query for larger bodies. Non-2xx bodies also pass
+through to stdout unfiltered while a one-line summary goes to stderr.
+Pagination, polling, and Idempotency-Key generation are the caller's
+responsibility.
 
 Exit codes: 0 success, 1 HTTP or transport error, 2 usage error,
 4 not authenticated (or the server rejected the token), 130 interrupted.

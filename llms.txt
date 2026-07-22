@@ -178,6 +178,26 @@ melange model download MODEL_KEY -R ACCOUNT/REPO --target TARGET_ID --yes [--out
   Download --json redacts signed URLs and is therefore not byte-exact.
   Example: melange model download "$model_key" -R acme/whisper --target "$target_id" --output ./models --yes
 
+## melange deploy
+
+Get deterministic, credential-safe SDK deployment code for a converted model.
+
+melange deploy options [--json|--jq|--template]
+  List supported languages and inference modes. Languages: android-kotlin,
+  android-java, ios-swift, flutter. Modes: auto, speed, accuracy. React Native
+  is not supported.
+
+melange deploy guide MODEL_KEY -R ACCOUNT/REPO
+    [--language android-kotlin|android-java|ios-swift|flutter]
+    [--mode auto|speed|accuracy] [--json|--jq|--template]
+  Print ordered Markdown with SDK 1.9.0 install and inference snippets. Defaults
+  match the dashboard: android-kotlin + auto. The model repository, key,
+  version, family, and selected mode are resolved by public-v1. General model
+  tensors remain an explicit model-specific TODO. JSON returns the structured
+  guide. Output always uses YOUR_PERSONAL_KEY and never interpolates the active
+  PAT. MODEL_KEY is a Melange repository model key, never a Hugging Face ID.
+  Example: melange deploy guide "$model_key" -R acme/whisper --language ios-swift --mode speed
+
 ## melange report
 
 Read a model's benchmark report. -R ACCOUNT/REPO is required.
@@ -218,8 +238,10 @@ melange library view ACCOUNT/NAME [--json|--jq|--template]
   ACCOUNT/NAME identifies a public repository, not a converted MODEL_KEY. Read
   its existing default model and report directly, without importing/uploading:
     repo=$(melange library list --search QUERY --jq '.results[0].full_name')
-    key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+    key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default and .state=="ready")) + map(select(.state=="ready")))[0].key // empty')
+    [ -n "$key" ] || { echo "No ready model is available in $repo" >&2; exit 1; }
     melange report view "$key" -R "$repo" --json
+    melange deploy guide "$key" -R "$repo" --language android-kotlin --mode auto
   Never import a library model solely to read its public benchmarks.
 
 melange library providers [--json|--jq]

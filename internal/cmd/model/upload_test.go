@@ -559,6 +559,41 @@ func TestUploadStructuredActiveSessionConflictUsesResolvedState(t *testing.T) {
 	}
 }
 
+func TestUploadRetriesOnceWhenConflictSessionAlreadyTurnedTerminal(t *testing.T) {
+	e := setup(t)
+	_, model, input := modelDir(t)
+	activeID := "0123456789abcdef0123456789abcdef"
+
+	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models"),
+		jsonStub(409,
+			fmt.Sprintf(`{"type":"error","error":{"type":"conflict_error","message":"an upload session is already active","active_upload_id":%q},"request_id":"req_1"}`, activeID)))
+	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads/"+activeID),
+		jsonStub(200, fmt.Sprintf(
+			`{"id":%q,"state":"CONVERTING","tag":"zt_old","expires_at":"2026-07-22T10:00:00Z","files":[]}`,
+			activeID)))
+	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models"),
+		jsonStub(201, sessionBody(issuedFile("f0", "zt_x/model.onnx", sigF0)+","+
+			issuedFile("f1", "zt_x/inputs/00_audio.bin", sigF1))))
+	e.reg.Register(gcsStart("/sig-f0"), locationResponse(201, sessF0))
+	e.reg.Register(gcsPut("/sess-f0", "bytes 0-999/1000"), httpmock.StatusStringResponse(200, ""))
+	e.reg.Register(gcsStart("/sig-f1"), locationResponse(201, sessF1))
+	e.reg.Register(gcsPut("/sess-f1", "bytes 0-499/500"), httpmock.StatusStringResponse(200, ""))
+	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models/uploads/up_1/complete"),
+		jsonStub(200, completeOK()))
+
+	require.NoError(t, run(t, e, "upload", "-R", repoArg, model, "--input", input))
+	e.reg.Verify(t)
+	assert.Contains(t, e.errOut.String(), "finished while the upload was starting; retrying once")
+}
+
+func TestUploadHelpGuardsEmptyResumeSession(t *testing.T) {
+	e := setup(t)
+
+	require.NoError(t, run(t, e, "upload", "--help"))
+	assert.Contains(t, e.out.String(), "// empty")
+	assert.Contains(t, e.out.String(), `[ -n "$session_id" ]`)
+}
+
 func assertActiveConflictGuidance(t *testing.T, stderr, sessionID, state string) {
 	t.Helper()
 	assert.Contains(t, stderr, sessionID)

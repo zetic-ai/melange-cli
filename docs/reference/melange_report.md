@@ -26,7 +26,8 @@ melange report <command> [flags]
 
 ```
   # Prefer the public repository's default model; fall back to a ready model
-  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results | (map(select(.is_default and .state=="ready")) + map(select(.state=="ready")))[0].key // empty')
+  [ -n "$model_key" ] || { echo "No ready model is available" >&2; exit 1; }
 
   # The dashboard table for that model's general report
   melange report view "$model_key" -R zetic/whisper-tiny

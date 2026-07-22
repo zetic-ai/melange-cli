@@ -107,6 +107,14 @@ func TestRetryAfterLongerThanRemainingRequestBudgetSurfaces429(t *testing.T) {
 	assert.Empty(t, *sleeps, "the retry transport must not sleep past the request budget")
 }
 
+func TestRetryDelayReservesTimeForTheNextAttempt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	assert.False(t, retryDelayFitsBudget(ctx, time.Second),
+		"the backoff must leave a minimum budget for the retry request itself")
+}
+
 func TestRetryPOSTNotRetried(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("POST", "/v1/models"), httpmock.StatusStringResponse(502, "bad gateway"))

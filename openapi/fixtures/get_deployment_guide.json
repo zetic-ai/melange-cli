@@ -1,0 +1,45 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/deployment-guide?language=android-kotlin&inference_mode=auto"
+  },
+  "response": {
+    "body": {
+      "credential_placeholder": "YOUR_PERSONAL_KEY",
+      "guide_version": 1,
+      "inference_mode": "auto",
+      "language": "android-kotlin",
+      "model": {
+        "download_ready": true,
+        "key": "<uuid>",
+        "repository": "verifiedusertestaccount2/fixturerepo",
+        "state": "ready",
+        "type": "general",
+        "version": 1
+      },
+      "sdk": {
+        "name": "ZeticMLange",
+        "version": "1.9.0"
+      },
+      "steps": [
+        {
+          "code": "// In your module (app-level) Gradle file (usually <project>/<app-module>/build.gradle.kts)\nandroid {\n    // ...\n    packaging {\n        jniLibs {\n            useLegacyPackaging = true\n        }\n    }\n}\n\ndependencies {\n    // ...\n    implementation(\"com.zeticai.mlange:mlange:1.9.0\")\n    // ...\n}",
+          "code_language": "kotlin",
+          "title": "Add ZeticMLange in the app Gradle file"
+        },
+        {
+          "code": "import com.zeticai.mlange.core.model.*\nimport com.zeticai.mlange.core.tensor.Tensor\n\n// version: optional (omit or null = latest). modelMode: RUN_AUTO, RUN_SPEED, or RUN_ACCURACY.\nval model = ZeticMLangeModel(context, \"YOUR_PERSONAL_KEY\", \"verifiedusertestaccount2/fixturerepo\", version = 1, modelMode = ModelMode.RUN_AUTO, onDownload = { progress -> /* 0.0 to 1.0 */ })\n\nval outputs = try {\n    // Tensor shapes and preprocessing are model-specific. Inspect the model's tensor I/O metadata.\n    val inputs: Array<Tensor> = TODO(\"Build inputs from the model tensor I/O metadata\")\n    model.run(inputs)\n} finally {\n    model.close()\n}",
+          "code_language": "kotlin",
+          "title": "Load and run the model"
+        }
+      ]
+    },
+    "headers": {
+      "Cache-Control": "private, no-store",
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

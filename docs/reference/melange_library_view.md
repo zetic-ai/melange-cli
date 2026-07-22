@@ -19,8 +19,10 @@ Library entries are repository coordinates, not converted model keys. Public
 library repositories can be inspected directly, without importing or uploading:
 
 repo=$(melange library list --search QUERY --jq '.results[0].full_name')
-key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default and .state=="ready")) + map(select(.state=="ready")))[0].key // empty')
+[ -n "$key" ] || { echo "No ready model is available in $repo" >&2; exit 1; }
 melange report view "$key" -R "$repo" --json
+melange deploy guide "$key" -R "$repo" --language android-kotlin --mode auto
 
 Never import a library model solely to read its public benchmarks.
 

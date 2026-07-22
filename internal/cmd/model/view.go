@@ -107,6 +107,7 @@ func printModelTTY(f *cmdutil.Factory, m *gen.ModelDetailResponse, repo string) 
 	}
 	fmt.Fprintf(&b, "Created:         %s\n", text.RelativeTime(m.CreatedAt, now))
 	fmt.Fprintf(&b, "Updated:         %s\n", text.RelativeTime(m.UpdatedAt, now))
+	fmt.Fprintf(&b, "\nDeployment guide: melange deploy guide %s -R %s\n", m.Key, repo)
 	_, err := fmt.Fprint(ios.Out, b.String())
 	return err
 }
@@ -115,7 +116,7 @@ func printModelTTY(f *cmdutil.Factory, m *gen.ModelDetailResponse, repo string) 
 // lines (failure_code only when the server sent one, like model status).
 func printModelTSV(f *cmdutil.Factory, m *gen.ModelDetailResponse) error {
 	var b strings.Builder
-	write := func(k, v string) { b.WriteString(k + "\t" + v + "\n") }
+	write := func(k, v string) { b.WriteString(k + "\t" + text.EscapeTSVCell(v) + "\n") }
 	write("key", m.Key)
 	write("version", strconv.Itoa(m.Version))
 	write("type", m.Type)

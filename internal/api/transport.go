@@ -113,6 +113,9 @@ const (
 	retryMaxAttempts = 4
 	retryBaseDelay   = 500 * time.Millisecond
 	retryAfterCap    = 30 * time.Second
+	// Do not spend the entire caller deadline sleeping. A retry needs enough
+	// budget to establish a connection and receive an actionable response.
+	retryAttemptReserve = time.Second
 )
 
 // noRetry429Key marks a request context whose 429 responses must surface
@@ -242,7 +245,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // the normal retry policy.
 func retryDelayFitsBudget(ctx context.Context, delay time.Duration) bool {
 	deadline, ok := ctx.Deadline()
-	return !ok || time.Until(deadline) > delay
+	return !ok || time.Until(deadline) > delay+retryAttemptReserve
 }
 
 // isRetryableTransportErr reports whether a transport-level error is worth

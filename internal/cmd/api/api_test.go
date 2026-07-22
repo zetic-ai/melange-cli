@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -476,6 +477,62 @@ func TestAPIPartialSuccessfulBodyNeverLeaksToStdout(t *testing.T) {
 	}
 }
 
+func TestAPISmallSuccessfulBodyDoesNotRequireTempDirectory(t *testing.T) {
+	e := setup(t)
+	t.Setenv("TMPDIR", t.TempDir()+"/does-not-exist")
+	e.reg.Register(httpmock.REST("GET", "/v1/me"),
+		httpmock.StatusStringResponse(200, `{"account":{"name":"zetic"}}`))
+
+	require.NoError(t, run(t, e, "api", "/v1/me"))
+	assert.Equal(t, `{"account":{"name":"zetic"}}`, e.out.String())
+}
+
+func TestAPILargeSuccessfulBodySpillFailureLeavesStdoutEmpty(t *testing.T) {
+	e := setup(t)
+	t.Setenv("TMPDIR", t.TempDir()+"/does-not-exist")
+	body := strings.Repeat("x", 2<<20)
+	e.reg.Register(httpmock.REST("GET", "/v1/large"), httpmock.StatusStringResponse(200, body))
+
+	err := run(t, e, "api", "/v1/large")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "staging response")
+	assert.Empty(t, e.out.String(), "a spill failure must not commit a partial success body")
+}
+
+func TestAPIFilteredSuccessfulBodyHasActionableMemoryLimit(t *testing.T) {
+	e := setup(t)
+	body := `"` + strings.Repeat("x", 16<<20) + `"`
+	e.reg.Register(httpmock.REST("GET", "/v1/huge-json"), httpmock.StatusStringResponse(200, body))
+
+	err := run(t, e, "api", "/v1/huge-json", "--jq", ".")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "filtered response exceeds")
+	assert.Contains(t, err.Error(), "omit --jq/--template")
+	assert.Empty(t, e.out.String(), "a rejected filtered body must preserve transactional stdout")
+}
+
+func TestAPINon2xxReadFailurePreservesReceivedRawPrefix(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", "/v1/broken"), func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Status:     "400 Bad Request",
+			Proto:      "HTTP/1.1",
+			Header:     make(http.Header),
+			Body: io.NopCloser(io.MultiReader(
+				bytes.NewBufferString("upstream-prefix"),
+				failingReader{err: io.ErrUnexpectedEOF},
+			)),
+			Request: req,
+		}, nil
+	})
+
+	err := run(t, e, "api", "/v1/broken")
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	assert.Equal(t, "upstream-prefix", e.out.String(),
+		"non-2xx output remains a raw stream even when the body ends unexpectedly")
+}
+
 // ---------------------------------------------------------------------------
 // credential safety
 // ---------------------------------------------------------------------------
@@ -513,4 +570,5 @@ func TestAPIHelpDocumentsContract(t *testing.T) {
 	assert.Contains(t, help, "--input -")
 	assert.Contains(t, help, "committed to stdout only after the complete body is read")
 	assert.Contains(t, help, "MELANGE_API_TIMEOUT")
+	assert.Contains(t, help, "16 MiB")
 }

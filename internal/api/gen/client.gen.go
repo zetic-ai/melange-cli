@@ -167,6 +167,183 @@ func (e CreateRepoRequestUseCase) Valid() bool {
 	}
 }
 
+// Defines values for DeploymentGuideModelState.
+const (
+	DeploymentGuideModelStateConverting DeploymentGuideModelState = "converting"
+	DeploymentGuideModelStateFailed     DeploymentGuideModelState = "failed"
+	DeploymentGuideModelStateOptimizing DeploymentGuideModelState = "optimizing"
+	DeploymentGuideModelStateReady      DeploymentGuideModelState = "ready"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentGuideModelState enum.
+func (e DeploymentGuideModelState) Valid() bool {
+	switch e {
+	case DeploymentGuideModelStateConverting:
+		return true
+	case DeploymentGuideModelStateFailed:
+		return true
+	case DeploymentGuideModelStateOptimizing:
+		return true
+	case DeploymentGuideModelStateReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentGuideModelType.
+const (
+	DeploymentGuideModelTypeGeneral DeploymentGuideModelType = "general"
+	DeploymentGuideModelTypeLlm     DeploymentGuideModelType = "llm"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentGuideModelType enum.
+func (e DeploymentGuideModelType) Valid() bool {
+	switch e {
+	case DeploymentGuideModelTypeGeneral:
+		return true
+	case DeploymentGuideModelTypeLlm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentGuideResponseInferenceMode.
+const (
+	DeploymentGuideResponseInferenceModeAccuracy DeploymentGuideResponseInferenceMode = "accuracy"
+	DeploymentGuideResponseInferenceModeAuto     DeploymentGuideResponseInferenceMode = "auto"
+	DeploymentGuideResponseInferenceModeSpeed    DeploymentGuideResponseInferenceMode = "speed"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentGuideResponseInferenceMode enum.
+func (e DeploymentGuideResponseInferenceMode) Valid() bool {
+	switch e {
+	case DeploymentGuideResponseInferenceModeAccuracy:
+		return true
+	case DeploymentGuideResponseInferenceModeAuto:
+		return true
+	case DeploymentGuideResponseInferenceModeSpeed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentGuideResponseLanguage.
+const (
+	DeploymentGuideResponseLanguageAndroidJava   DeploymentGuideResponseLanguage = "android-java"
+	DeploymentGuideResponseLanguageAndroidKotlin DeploymentGuideResponseLanguage = "android-kotlin"
+	DeploymentGuideResponseLanguageFlutter       DeploymentGuideResponseLanguage = "flutter"
+	DeploymentGuideResponseLanguageIosSwift      DeploymentGuideResponseLanguage = "ios-swift"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentGuideResponseLanguage enum.
+func (e DeploymentGuideResponseLanguage) Valid() bool {
+	switch e {
+	case DeploymentGuideResponseLanguageAndroidJava:
+		return true
+	case DeploymentGuideResponseLanguageAndroidKotlin:
+		return true
+	case DeploymentGuideResponseLanguageFlutter:
+		return true
+	case DeploymentGuideResponseLanguageIosSwift:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentInferenceModeOptionId.
+const (
+	DeploymentInferenceModeOptionIdAccuracy DeploymentInferenceModeOptionId = "accuracy"
+	DeploymentInferenceModeOptionIdAuto     DeploymentInferenceModeOptionId = "auto"
+	DeploymentInferenceModeOptionIdSpeed    DeploymentInferenceModeOptionId = "speed"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentInferenceModeOptionId enum.
+func (e DeploymentInferenceModeOptionId) Valid() bool {
+	switch e {
+	case DeploymentInferenceModeOptionIdAccuracy:
+		return true
+	case DeploymentInferenceModeOptionIdAuto:
+		return true
+	case DeploymentInferenceModeOptionIdSpeed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentLanguageOptionId.
+const (
+	DeploymentLanguageOptionIdAndroidJava   DeploymentLanguageOptionId = "android-java"
+	DeploymentLanguageOptionIdAndroidKotlin DeploymentLanguageOptionId = "android-kotlin"
+	DeploymentLanguageOptionIdFlutter       DeploymentLanguageOptionId = "flutter"
+	DeploymentLanguageOptionIdIosSwift      DeploymentLanguageOptionId = "ios-swift"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentLanguageOptionId enum.
+func (e DeploymentLanguageOptionId) Valid() bool {
+	switch e {
+	case DeploymentLanguageOptionIdAndroidJava:
+		return true
+	case DeploymentLanguageOptionIdAndroidKotlin:
+		return true
+	case DeploymentLanguageOptionIdFlutter:
+		return true
+	case DeploymentLanguageOptionIdIosSwift:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentOptionsResponseDefaultInferenceMode.
+const (
+	DeploymentOptionsResponseDefaultInferenceModeAccuracy DeploymentOptionsResponseDefaultInferenceMode = "accuracy"
+	DeploymentOptionsResponseDefaultInferenceModeAuto     DeploymentOptionsResponseDefaultInferenceMode = "auto"
+	DeploymentOptionsResponseDefaultInferenceModeSpeed    DeploymentOptionsResponseDefaultInferenceMode = "speed"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentOptionsResponseDefaultInferenceMode enum.
+func (e DeploymentOptionsResponseDefaultInferenceMode) Valid() bool {
+	switch e {
+	case DeploymentOptionsResponseDefaultInferenceModeAccuracy:
+		return true
+	case DeploymentOptionsResponseDefaultInferenceModeAuto:
+		return true
+	case DeploymentOptionsResponseDefaultInferenceModeSpeed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeploymentOptionsResponseDefaultLanguage.
+const (
+	DeploymentOptionsResponseDefaultLanguageAndroidJava   DeploymentOptionsResponseDefaultLanguage = "android-java"
+	DeploymentOptionsResponseDefaultLanguageAndroidKotlin DeploymentOptionsResponseDefaultLanguage = "android-kotlin"
+	DeploymentOptionsResponseDefaultLanguageFlutter       DeploymentOptionsResponseDefaultLanguage = "flutter"
+	DeploymentOptionsResponseDefaultLanguageIosSwift      DeploymentOptionsResponseDefaultLanguage = "ios-swift"
+)
+
+// Valid indicates whether the value is a known member of the DeploymentOptionsResponseDefaultLanguage enum.
+func (e DeploymentOptionsResponseDefaultLanguage) Valid() bool {
+	switch e {
+	case DeploymentOptionsResponseDefaultLanguageAndroidJava:
+		return true
+	case DeploymentOptionsResponseDefaultLanguageAndroidKotlin:
+		return true
+	case DeploymentOptionsResponseDefaultLanguageFlutter:
+		return true
+	case DeploymentOptionsResponseDefaultLanguageIosSwift:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorEnvelopeErrorType.
 const (
 	ErrorEnvelopeErrorTypeApiError            ErrorEnvelopeErrorType = "api_error"
@@ -821,6 +998,51 @@ func (e ListLibraryModelsParamsTask) Valid() bool {
 	}
 }
 
+// Defines values for GetDeploymentGuideParamsLanguage.
+const (
+	GetDeploymentGuideParamsLanguageAndroidJava   GetDeploymentGuideParamsLanguage = "android-java"
+	GetDeploymentGuideParamsLanguageAndroidKotlin GetDeploymentGuideParamsLanguage = "android-kotlin"
+	GetDeploymentGuideParamsLanguageFlutter       GetDeploymentGuideParamsLanguage = "flutter"
+	GetDeploymentGuideParamsLanguageIosSwift      GetDeploymentGuideParamsLanguage = "ios-swift"
+)
+
+// Valid indicates whether the value is a known member of the GetDeploymentGuideParamsLanguage enum.
+func (e GetDeploymentGuideParamsLanguage) Valid() bool {
+	switch e {
+	case GetDeploymentGuideParamsLanguageAndroidJava:
+		return true
+	case GetDeploymentGuideParamsLanguageAndroidKotlin:
+		return true
+	case GetDeploymentGuideParamsLanguageFlutter:
+		return true
+	case GetDeploymentGuideParamsLanguageIosSwift:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetDeploymentGuideParamsInferenceMode.
+const (
+	GetDeploymentGuideParamsInferenceModeAccuracy GetDeploymentGuideParamsInferenceMode = "accuracy"
+	GetDeploymentGuideParamsInferenceModeAuto     GetDeploymentGuideParamsInferenceMode = "auto"
+	GetDeploymentGuideParamsInferenceModeSpeed    GetDeploymentGuideParamsInferenceMode = "speed"
+)
+
+// Valid indicates whether the value is a known member of the GetDeploymentGuideParamsInferenceMode enum.
+func (e GetDeploymentGuideParamsInferenceMode) Valid() bool {
+	switch e {
+	case GetDeploymentGuideParamsInferenceModeAccuracy:
+		return true
+	case GetDeploymentGuideParamsInferenceModeAuto:
+		return true
+	case GetDeploymentGuideParamsInferenceModeSpeed:
+		return true
+	default:
+		return false
+	}
+}
+
 // ActiveUpload defines model for ActiveUpload.
 type ActiveUpload struct {
 	ExpectedFiles []string `json:"expected_files"`
@@ -918,6 +1140,87 @@ type CreateUploadResponse struct {
 	Id        string         `json:"id"`
 	Status    string         `json:"status"`
 }
+
+// DeploymentGuideModel defines model for DeploymentGuideModel.
+type DeploymentGuideModel struct {
+	DownloadReady bool                      `json:"download_ready"`
+	Key           string                    `json:"key"`
+	Repository    string                    `json:"repository"`
+	State         DeploymentGuideModelState `json:"state"`
+	Type          DeploymentGuideModelType  `json:"type"`
+	Version       int                       `json:"version"`
+}
+
+// DeploymentGuideModelState defines model for DeploymentGuideModel.State.
+type DeploymentGuideModelState string
+
+// DeploymentGuideModelType defines model for DeploymentGuideModel.Type.
+type DeploymentGuideModelType string
+
+// DeploymentGuideResponse defines model for DeploymentGuideResponse.
+type DeploymentGuideResponse struct {
+	CredentialPlaceholder string                               `json:"credential_placeholder"`
+	GuideVersion          int                                  `json:"guide_version"`
+	InferenceMode         DeploymentGuideResponseInferenceMode `json:"inference_mode"`
+	Language              DeploymentGuideResponseLanguage      `json:"language"`
+	Model                 DeploymentGuideModel                 `json:"model"`
+	Sdk                   DeploymentGuideSDK                   `json:"sdk"`
+	Steps                 []DeploymentGuideStep                `json:"steps"`
+}
+
+// DeploymentGuideResponseInferenceMode defines model for DeploymentGuideResponse.InferenceMode.
+type DeploymentGuideResponseInferenceMode string
+
+// DeploymentGuideResponseLanguage defines model for DeploymentGuideResponse.Language.
+type DeploymentGuideResponseLanguage string
+
+// DeploymentGuideSDK defines model for DeploymentGuideSDK.
+type DeploymentGuideSDK struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// DeploymentGuideStep defines model for DeploymentGuideStep.
+type DeploymentGuideStep struct {
+	Code         string `json:"code"`
+	CodeLanguage string `json:"code_language"`
+	Title        string `json:"title"`
+}
+
+// DeploymentInferenceModeOption defines model for DeploymentInferenceModeOption.
+type DeploymentInferenceModeOption struct {
+	Description string                          `json:"description"`
+	Id          DeploymentInferenceModeOptionId `json:"id"`
+	Label       string                          `json:"label"`
+}
+
+// DeploymentInferenceModeOptionId defines model for DeploymentInferenceModeOption.Id.
+type DeploymentInferenceModeOptionId string
+
+// DeploymentLanguageOption defines model for DeploymentLanguageOption.
+type DeploymentLanguageOption struct {
+	CodeLanguage string                     `json:"code_language"`
+	Id           DeploymentLanguageOptionId `json:"id"`
+	Label        string                     `json:"label"`
+}
+
+// DeploymentLanguageOptionId defines model for DeploymentLanguageOption.Id.
+type DeploymentLanguageOptionId string
+
+// DeploymentOptionsResponse defines model for DeploymentOptionsResponse.
+type DeploymentOptionsResponse struct {
+	DefaultInferenceMode DeploymentOptionsResponseDefaultInferenceMode `json:"default_inference_mode"`
+	DefaultLanguage      DeploymentOptionsResponseDefaultLanguage      `json:"default_language"`
+	GuideVersion         int                                           `json:"guide_version"`
+	InferenceModes       []DeploymentInferenceModeOption               `json:"inference_modes"`
+	Languages            []DeploymentLanguageOption                    `json:"languages"`
+}
+
+// DeploymentOptionsResponseDefaultInferenceMode defines model for DeploymentOptionsResponse.DefaultInferenceMode.
+type DeploymentOptionsResponseDefaultInferenceMode string
+
+// DeploymentOptionsResponseDefaultLanguage defines model for DeploymentOptionsResponse.DefaultLanguage.
+type DeploymentOptionsResponseDefaultLanguage string
 
 // DownloadArtifact One downloadable file of an authorized target.
 //
@@ -1705,6 +2008,18 @@ type CompleteModelUploadParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// GetDeploymentGuideParams defines parameters for GetDeploymentGuide.
+type GetDeploymentGuideParams struct {
+	Language      *GetDeploymentGuideParamsLanguage      `form:"language,omitempty" json:"language,omitempty"`
+	InferenceMode *GetDeploymentGuideParamsInferenceMode `form:"inference_mode,omitempty" json:"inference_mode,omitempty"`
+}
+
+// GetDeploymentGuideParamsLanguage defines parameters for GetDeploymentGuide.
+type GetDeploymentGuideParamsLanguage string
+
+// GetDeploymentGuideParamsInferenceMode defines parameters for GetDeploymentGuide.
+type GetDeploymentGuideParamsInferenceMode string
+
 // CreateDownloadAuthorizationParams defines parameters for CreateDownloadAuthorization.
 type CreateDownloadAuthorizationParams struct {
 	// IdempotencyKey Optional client-generated key that makes the mutation safely retryable: replaying a request with the same key returns the original outcome instead of repeating the side effect. See each operation's description for its exact replay semantics.
@@ -1819,6 +2134,13 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// GetDeploymentOptions Get Deployment Options
+	//
+	// Supported deterministic guide selectors. React Native is excluded.
+	//
+	// Corresponds with GET /v1/deployment/options (the `GetDeploymentOptions` operationId).
+	GetDeploymentOptions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListLibraryModels List Library Models
 	//
@@ -2227,6 +2549,16 @@ type ClientInterface interface {
 	// Corresponds with PUT /v1/repos/{account_name}/{repo_name}/models/{model_key}/default (the `SetDefaultModel` operationId).
 	SetDefaultModel(ctx context.Context, accountName string, repoName string, modelKey string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetDeploymentGuide Get Deployment Guide
+	//
+	// Exact SDK install/use guide for one contained, visible model.
+	//
+	// The credential is always a fixed placeholder. The request PAT, internal
+	// debug tokens, storage paths, and producer metadata are never inputs.
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/deployment-guide (the `GetDeploymentGuide` operationId).
+	GetDeploymentGuide(ctx context.Context, accountName string, repoName string, modelKey string, params *GetDeploymentGuideParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetGeneralReport Get General Report
 	//
 	// Raw general benchmark measurements for a model, one record per
@@ -2310,6 +2642,23 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 	GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetDeploymentOptions Get Deployment Options
+//
+// Supported deterministic guide selectors. React Native is excluded.
+//
+// Corresponds with GET /v1/deployment/options (the `GetDeploymentOptions` operationId).
+func (c *Client) GetDeploymentOptions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeploymentOptionsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // ListLibraryModels List Library Models
@@ -3067,6 +3416,26 @@ func (c *Client) SetDefaultModel(ctx context.Context, accountName string, repoNa
 	return c.Client.Do(req)
 }
 
+// GetDeploymentGuide Get Deployment Guide
+//
+// Exact SDK install/use guide for one contained, visible model.
+//
+// The credential is always a fixed placeholder. The request PAT, internal
+// debug tokens, storage paths, and producer metadata are never inputs.
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/deployment-guide (the `GetDeploymentGuide` operationId).
+func (c *Client) GetDeploymentGuide(ctx context.Context, accountName string, repoName string, modelKey string, params *GetDeploymentGuideParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeploymentGuideRequest(c.Server, accountName, repoName, modelKey, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetGeneralReport Get General Report
 //
 // Raw general benchmark measurements for a model, one record per
@@ -3229,6 +3598,33 @@ func (c *Client) GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditor
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetDeploymentOptionsRequest constructs an http.Request for the GetDeploymentOptions method
+func NewGetDeploymentOptionsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/deployment/options")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewListLibraryModelsRequest constructs an http.Request for the ListLibraryModels method
@@ -4617,6 +5013,93 @@ func NewSetDefaultModelRequest(server string, accountName string, repoName strin
 	return req, nil
 }
 
+// NewGetDeploymentGuideRequest constructs an http.Request for the GetDeploymentGuide method
+func NewGetDeploymentGuideRequest(server string, accountName string, repoName string, modelKey string, params *GetDeploymentGuideParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "model_key", modelKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/%s/deployment-guide", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Language != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "language", *params.Language, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.InferenceMode != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "inference_mode", *params.InferenceMode, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetGeneralReportRequest constructs an http.Request for the GetGeneralReport method
 func NewGetGeneralReportRequest(server string, accountName string, repoName string, modelKey string) (*http.Request, error) {
 	var err error
@@ -5024,6 +5507,15 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+
+	// GetDeploymentOptionsWithResponse Get Deployment Options
+	//
+	// Supported deterministic guide selectors. React Native is excluded.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/deployment/options (the `GetDeploymentOptions` operationId).
+	GetDeploymentOptionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeploymentOptionsResult, error)
 
 	// ListLibraryModelsWithResponse List Library Models
 	//
@@ -5468,6 +5960,18 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /v1/repos/{account_name}/{repo_name}/models/{model_key}/default (the `SetDefaultModel` operationId).
 	SetDefaultModelWithResponse(ctx context.Context, accountName string, repoName string, modelKey string, reqEditors ...RequestEditorFn) (*SetDefaultModelResult, error)
 
+	// GetDeploymentGuideWithResponse Get Deployment Guide
+	//
+	// Exact SDK install/use guide for one contained, visible model.
+	//
+	// The credential is always a fixed placeholder. The request PAT, internal
+	// debug tokens, storage paths, and producer metadata are never inputs.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/deployment-guide (the `GetDeploymentGuide` operationId).
+	GetDeploymentGuideWithResponse(ctx context.Context, accountName string, repoName string, modelKey string, params *GetDeploymentGuideParams, reqEditors ...RequestEditorFn) (*GetDeploymentGuideResult, error)
+
 	// GetGeneralReportWithResponse Get General Report
 	//
 	// Raw general benchmark measurements for a model, one record per
@@ -5567,6 +6071,90 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 	GetUsageQuotasWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetUsageQuotasResult, error)
+}
+
+// GetDeploymentOptionsResult401Headers the declared response headers of an HTTP 401 response for GetDeploymentOptions
+type GetDeploymentOptionsResult401Headers struct {
+	WWWAuthenticate *string
+	XRequestID      *string
+}
+
+// GetDeploymentOptionsResult403Headers the declared response headers of an HTTP 403 response for GetDeploymentOptions
+type GetDeploymentOptionsResult403Headers struct {
+	XRequestID *string
+}
+
+// GetDeploymentOptionsResult500Headers the declared response headers of an HTTP 500 response for GetDeploymentOptions
+type GetDeploymentOptionsResult500Headers struct {
+	XRequestID *string
+}
+
+type GetDeploymentOptionsResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DeploymentOptionsResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *ServerError
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetDeploymentOptionsResult401Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *GetDeploymentOptionsResult403Headers
+	// Headers500 the parsed response headers for an HTTP 500 response
+	Headers500 *GetDeploymentOptionsResult500Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDeploymentOptionsResult) GetJSON200() *DeploymentOptionsResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetDeploymentOptionsResult) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetDeploymentOptionsResult) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r GetDeploymentOptionsResult) GetJSON500() *ServerError {
+	return r.JSON500
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDeploymentOptionsResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeploymentOptionsResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeploymentOptionsResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDeploymentOptionsResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 // ListLibraryModelsResult401Headers the declared response headers of an HTTP 401 response for ListLibraryModels
@@ -8706,6 +9294,139 @@ func (r SetDefaultModelResult) ContentType() string {
 	return ""
 }
 
+// GetDeploymentGuideResult200Headers the declared response headers of an HTTP 200 response for GetDeploymentGuide
+type GetDeploymentGuideResult200Headers struct {
+	CacheControl *string
+}
+
+// GetDeploymentGuideResult401Headers the declared response headers of an HTTP 401 response for GetDeploymentGuide
+type GetDeploymentGuideResult401Headers struct {
+	WWWAuthenticate *string
+	XRequestID      *string
+}
+
+// GetDeploymentGuideResult403Headers the declared response headers of an HTTP 403 response for GetDeploymentGuide
+type GetDeploymentGuideResult403Headers struct {
+	XRequestID *string
+}
+
+// GetDeploymentGuideResult404Headers the declared response headers of an HTTP 404 response for GetDeploymentGuide
+type GetDeploymentGuideResult404Headers struct {
+	XRequestID *string
+}
+
+// GetDeploymentGuideResult409Headers the declared response headers of an HTTP 409 response for GetDeploymentGuide
+type GetDeploymentGuideResult409Headers struct {
+	XRequestID *string
+}
+
+// GetDeploymentGuideResult422Headers the declared response headers of an HTTP 422 response for GetDeploymentGuide
+type GetDeploymentGuideResult422Headers struct {
+	XRequestID *string
+}
+
+// GetDeploymentGuideResult500Headers the declared response headers of an HTTP 500 response for GetDeploymentGuide
+type GetDeploymentGuideResult500Headers struct {
+	XRequestID *string
+}
+
+type GetDeploymentGuideResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DeploymentGuideResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ValidationError
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *ServerError
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetDeploymentGuideResult200Headers
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetDeploymentGuideResult401Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *GetDeploymentGuideResult403Headers
+	// Headers404 the parsed response headers for an HTTP 404 response
+	Headers404 *GetDeploymentGuideResult404Headers
+	// Headers409 the parsed response headers for an HTTP 409 response
+	Headers409 *GetDeploymentGuideResult409Headers
+	// Headers422 the parsed response headers for an HTTP 422 response
+	Headers422 *GetDeploymentGuideResult422Headers
+	// Headers500 the parsed response headers for an HTTP 500 response
+	Headers500 *GetDeploymentGuideResult500Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDeploymentGuideResult) GetJSON200() *DeploymentGuideResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetDeploymentGuideResult) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetDeploymentGuideResult) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetDeploymentGuideResult) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r GetDeploymentGuideResult) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r GetDeploymentGuideResult) GetJSON422() *ValidationError {
+	return r.JSON422
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r GetDeploymentGuideResult) GetJSON500() *ServerError {
+	return r.JSON500
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDeploymentGuideResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeploymentGuideResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeploymentGuideResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDeploymentGuideResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetGeneralReportResult401Headers the declared response headers of an HTTP 401 response for GetGeneralReport
 type GetGeneralReportResult401Headers struct {
 	WWWAuthenticate *string
@@ -9610,6 +10331,21 @@ func (r GetUsageQuotasResult) ContentType() string {
 	return ""
 }
 
+// GetDeploymentOptionsWithResponse Get Deployment Options
+//
+// Supported deterministic guide selectors. React Native is excluded.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/deployment/options (the `GetDeploymentOptions` operationId).
+func (c *ClientWithResponses) GetDeploymentOptionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeploymentOptionsResult, error) {
+	rsp, err := c.GetDeploymentOptions(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeploymentOptionsResult(rsp)
+}
+
 // ListLibraryModelsWithResponse List Library Models
 //
 // Browse the public model library, newest first.
@@ -10265,6 +11001,24 @@ func (c *ClientWithResponses) SetDefaultModelWithResponse(ctx context.Context, a
 	return ParseSetDefaultModelResult(rsp)
 }
 
+// GetDeploymentGuideWithResponse Get Deployment Guide
+//
+// Exact SDK install/use guide for one contained, visible model.
+//
+// The credential is always a fixed placeholder. The request PAT, internal
+// debug tokens, storage paths, and producer metadata are never inputs.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/{model_key}/deployment-guide (the `GetDeploymentGuide` operationId).
+func (c *ClientWithResponses) GetDeploymentGuideWithResponse(ctx context.Context, accountName string, repoName string, modelKey string, params *GetDeploymentGuideParams, reqEditors ...RequestEditorFn) (*GetDeploymentGuideResult, error) {
+	rsp, err := c.GetDeploymentGuide(ctx, accountName, repoName, modelKey, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeploymentGuideResult(rsp)
+}
+
 // GetGeneralReportWithResponse Get General Report
 //
 // Raw general benchmark measurements for a model, one record per
@@ -10411,6 +11165,93 @@ func (c *ClientWithResponses) GetUsageQuotasWithResponse(ctx context.Context, re
 		return nil, err
 	}
 	return ParseGetUsageQuotasResult(rsp)
+}
+
+// ParseGetDeploymentOptionsResult parses an HTTP response from a GetDeploymentOptionsWithResponse call
+func ParseGetDeploymentOptionsResult(rsp *http.Response) (*GetDeploymentOptionsResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeploymentOptionsResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeploymentOptionsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ServerError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetDeploymentOptionsResult401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 403:
+		var headers GetDeploymentOptionsResult403Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers403 = &headers
+	case rsp.StatusCode == 500:
+		var headers GetDeploymentOptionsResult500Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers500 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseListLibraryModelsResult parses an HTTP response from a ListLibraryModelsWithResponse call
@@ -13864,6 +14705,154 @@ func ParseSetDefaultModelResult(rsp *http.Response) (*SetDefaultModelResult, err
 		response.Headers404 = &headers
 	case rsp.StatusCode == 500:
 		var headers SetDefaultModelResult500Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers500 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetDeploymentGuideResult parses an HTTP response from a GetDeploymentGuideWithResponse call
+func ParseGetDeploymentGuideResult(rsp *http.Response) (*GetDeploymentGuideResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeploymentGuideResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeploymentGuideResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ServerError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetDeploymentGuideResult200Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		response.Headers200 = &headers
+	case rsp.StatusCode == 401:
+		var headers GetDeploymentGuideResult401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 403:
+		var headers GetDeploymentGuideResult403Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers403 = &headers
+	case rsp.StatusCode == 404:
+		var headers GetDeploymentGuideResult404Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers404 = &headers
+	case rsp.StatusCode == 409:
+		var headers GetDeploymentGuideResult409Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers409 = &headers
+	case rsp.StatusCode == 422:
+		var headers GetDeploymentGuideResult422Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers422 = &headers
+	case rsp.StatusCode == 500:
+		var headers GetDeploymentGuideResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

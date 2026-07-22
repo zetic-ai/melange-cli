@@ -1,0 +1,58 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/deployment/options"
+  },
+  "response": {
+    "body": {
+      "default_inference_mode": "auto",
+      "default_language": "android-kotlin",
+      "guide_version": 1,
+      "inference_modes": [
+        {
+          "description": "Balanced speed and accuracy; recommended for most deployments.",
+          "id": "auto",
+          "label": "Auto"
+        },
+        {
+          "description": "Prefer the fastest target.",
+          "id": "speed",
+          "label": "Speed"
+        },
+        {
+          "description": "Prefer the highest-accuracy target.",
+          "id": "accuracy",
+          "label": "Accuracy"
+        }
+      ],
+      "languages": [
+        {
+          "code_language": "kotlin",
+          "id": "android-kotlin",
+          "label": "Android (Kotlin)"
+        },
+        {
+          "code_language": "java",
+          "id": "android-java",
+          "label": "Android (Java)"
+        },
+        {
+          "code_language": "swift",
+          "id": "ios-swift",
+          "label": "iOS (Swift)"
+        },
+        {
+          "code_language": "dart",
+          "id": "flutter",
+          "label": "Flutter"
+        }
+      ]
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

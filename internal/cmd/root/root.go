@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	apicmd "github.com/zetic-ai/melange-cli/internal/cmd/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/auth"
+	"github.com/zetic-ai/melange-cli/internal/cmd/deploy"
 	"github.com/zetic-ai/melange-cli/internal/cmd/library"
 	"github.com/zetic-ai/melange-cli/internal/cmd/model"
 	"github.com/zetic-ai/melange-cli/internal/cmd/repo"
@@ -82,6 +83,7 @@ melange help formatting.`,
 	cmd.AddCommand(auth.NewCmdAuth(f))
 	cmd.AddCommand(repo.NewCmdRepo(f))
 	cmd.AddCommand(model.NewCmdModel(f))
+	cmd.AddCommand(deploy.NewCmdDeploy(f))
 	cmd.AddCommand(report.NewCmdReport(f))
 	cmd.AddCommand(library.NewCmdLibrary(f))
 	cmd.AddCommand(usage.NewCmdUsage(f))

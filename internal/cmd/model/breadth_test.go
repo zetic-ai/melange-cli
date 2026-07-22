@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -282,6 +283,7 @@ func TestModelViewTTY(t *testing.T) {
 	assert.Contains(t, out, "Default:         yes")
 	assert.Contains(t, out, "Source:          upload")
 	assert.Contains(t, out, "Download ready:  yes")
+	assert.Contains(t, out, "melange deploy guide m_ab12cd -R zetic/whisper")
 }
 
 func TestModelViewNonTTYKeyValueLines(t *testing.T) {
@@ -302,6 +304,17 @@ func TestModelViewNonTTYKeyValueLines(t *testing.T) {
 		fmt.Sprintf("created_at\t%s\n", ts(testNow.Add(-2*time.Hour))) +
 		fmt.Sprintf("updated_at\t%s\n", ts(testNow.Add(-time.Hour)))
 	assert.Equal(t, want, e.out.String())
+}
+
+func TestModelViewNonTTYEscapeEveryValue(t *testing.T) {
+	e := setup(t)
+	body := strings.Replace(detailJSON("failed", "conversion_error"),
+		`"failure_code":"conversion_error"`, `"failure_code":"line1\nline2\tC:\\models"`, 1)
+	e.reg.Register(httpmock.REST("GET", modelPath), jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "model", "view", "m_ab12cd", "-R", "zetic/whisper"))
+	assert.Contains(t, e.out.String(), "failure_code\t"+`line1\nline2\tC:\\models`+"\n")
+	assert.NotContains(t, e.out.String(), "line1\nline2", "one value must remain one physical TSV row")
 }
 
 func TestModelViewJSON(t *testing.T) {

@@ -137,6 +137,7 @@ Once a model exists you can inspect it and its converted targets:
 ```sh
 model_key=$(melange model list -R acme/whisper-tiny --jq '.results[] | select(.is_default) | .key')
 melange model view "$model_key" -R acme/whisper-tiny --jq .download_ready
+melange deploy guide "$model_key" -R acme/whisper-tiny --language android-kotlin --mode auto
 melange model targets "$model_key" -R acme/whisper-tiny --json      # converted targets
 melange model set-default "$model_key" -R acme/whisper-tiny         # pin the repo default
 melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait  # import an LLM (repo type llm)
@@ -213,11 +214,37 @@ path and needs no import or upload:
 
 ```sh
 repo=$(melange library list --search QUERY --jq '.results[0].full_name')
-key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default and .state=="ready")) + map(select(.state=="ready")))[0].key // empty')
+[ -n "$key" ] || { echo "No ready model is available in $repo" >&2; exit 1; }
 melange report view "$key" -R "$repo" --json
 ```
 
 Never import a library model solely to read its public benchmarks.
+
+## Get exact deployment code
+
+Use the selected model key—not a Hugging Face ID—to request deployment code.
+The supported languages are `android-kotlin`, `android-java`, `ios-swift`, and
+`flutter`; inference modes are `auto`, `speed`, and `accuracy`.
+
+```sh
+melange deploy options --json
+repo=shinilheo/LFM2.5_350M
+key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default and .state=="ready")) + map(select(.state=="ready")))[0].key // empty')
+[ -n "$key" ] || { echo "No ready model is available in $repo" >&2; exit 1; }
+melange deploy guide "$key" -R "$repo" --language android-kotlin --mode auto
+melange deploy guide "$key" -R "$repo" --language ios-swift --mode speed --json
+```
+
+The plain guide is ordered Markdown with copyable SDK 1.9.0 snippets. JSON is
+the structured public response. The model repository coordinate, version,
+family, selected mode, and SDK language are already resolved. General-model
+tensor creation remains an explicit TODO because shapes and preprocessing are
+model-specific—inspect tensor I/O metadata rather than inventing inputs.
+
+Every guide uses `YOUR_PERSONAL_KEY`. The command never interpolates, prints,
+or persists the active PAT. Do not replace the placeholder in chat, logs,
+generated JSON, or shell-history suggestions.
 
 ## Resume after interruption
 
@@ -226,7 +253,8 @@ the CLI prints the exact resume command on stderr. If that output is no longer
 available, derive the opaque ID from the session list:
 
 ```sh
-session_id=$(melange model upload --sessions -R acme/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id')
+session_id=$(melange model upload --sessions -R acme/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id // empty')
+[ -n "$session_id" ] || { echo "No resumable upload session found" >&2; exit 1; }
 melange model upload --resume "$session_id" -R acme/whisper-tiny
 ```
 
@@ -278,3 +306,5 @@ one-line summary on stderr; pagination and polling are your job here.
 - Successful `melange api` output is committed only after the complete body
   is read. Increase `MELANGE_API_TIMEOUT` for legitimately slow or large
   responses; a failed read leaves stdout empty instead of emitting partial data.
+- Deployment guides accept repository model keys only. Never pass a Hugging
+  Face ID to `melange deploy guide`, and never invent SDK fields or callbacks.

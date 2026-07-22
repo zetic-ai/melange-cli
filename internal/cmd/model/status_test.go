@@ -41,6 +41,17 @@ func TestStatusTabSeparatedNonTTY(t *testing.T) {
 	assert.Contains(t, out, "failure_code\tconvert_error\n")
 }
 
+func TestStatusTabSeparatedEscapesEveryValue(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", statusPathM1),
+		jsonStub(200, `{"state":"failed","terminal":true,"download_ready":false,
+			"failure_code":"line1\nline2\tC:\\models","created_at":"2026-07-20T10:00:00Z","updated_at":"2026-07-20T10:05:00Z"}`))
+
+	require.NoError(t, run(t, e, "status", "m_1", "-R", repoArg))
+	assert.Contains(t, e.out.String(), "failure_code\t"+`line1\nline2\tC:\\models`+"\n")
+	assert.NotContains(t, e.out.String(), "line1\nline2", "one value must remain one physical TSV row")
+}
+
 func TestStatusJSONRaw(t *testing.T) {
 	e := setup(t)
 	body := `{"state":"ready","terminal":true,"download_ready":true,"created_at":"2026-07-20T10:00:00Z","updated_at":"2026-07-20T10:05:00Z"}`

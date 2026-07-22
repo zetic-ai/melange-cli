@@ -74,7 +74,11 @@ melange model upload MODEL_FILE [flags]
     --bucket 1:1x3x384x384 --input image-384.npy --input mask-384.npy --wait
 
   # Resolve a resumable pre-completion session id
-  session_id=$(melange model upload --sessions -R zetic/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id')
+
+  session_id=$(melange model upload --sessions -R zetic/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id // empty')
+
+  # Do not accidentally send the literal JSON value null as an id
+  [ -n "$session_id" ] || { echo "No resumable upload session found" >&2; exit 1; }
 
   # Resume it
   melange model upload --resume "$session_id" -R zetic/whisper-tiny

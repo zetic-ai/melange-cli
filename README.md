@@ -65,6 +65,7 @@ melange auth status           # verify who you are
 melange repo create whisper-tiny --private
 melange model upload -R acme/whisper-tiny model.onnx --input audio.bin --wait
 melange model status m_ab12cd -R acme/whisper-tiny
+melange deploy guide m_ab12cd -R acme/whisper-tiny --language android-kotlin --mode auto
 melange api /v1/me --jq .account.name    # any /v1 endpoint
 ```
 
@@ -80,6 +81,7 @@ Inputs are grouped by bucket declaration order; preview the exact manifest with
 - Branch on stable exit codes: `0` ok, `1` failure (possibly transient), `2` usage error (fix the command), `4` auth, `130` interrupted (upload session preserved).
 - Load the usage skill at [`skills/melange-cli-usage/SKILL.md`](skills/melange-cli-usage/SKILL.md), or the compact surface reference in [`llms.txt`](llms.txt).
 - Built-in topics: `melange help environment`, `melange help exit-codes`, `melange help formatting`.
+- Get credential-safe SDK code with `melange deploy options` and `melange deploy guide`; guides use `YOUR_PERSONAL_KEY` and never interpolate the active PAT.
 
 ## Documentation
 

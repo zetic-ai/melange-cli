@@ -130,7 +130,7 @@ func printStatus(f *cmdutil.Factory, exporter *cmdutil.Exporter, s *gen.ModelSta
 
 	// Non-TTY contract: tab-separated key/value lines, stable keys.
 	var b strings.Builder
-	write := func(k, v string) { b.WriteString(k + "\t" + v + "\n") }
+	write := func(k, v string) { b.WriteString(k + "\t" + text.EscapeTSVCell(v) + "\n") }
 	write("state", string(s.State))
 	if s.Stage != nil {
 		write("stage", string(*s.Stage))

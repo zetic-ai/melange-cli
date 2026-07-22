@@ -35,6 +35,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -306,6 +307,13 @@ func assertRequest(t *testing.T, name string, fx fixture, got *http.Request) {
 		t.Fatalf("%s: request path = %s, want %s (placeholders wildcarded)",
 			name, got.URL.Path, fx.Request.Path)
 	}
+	wantURL, err := url.Parse(fx.Request.Path)
+	if err != nil {
+		t.Fatalf("%s: parsing fixture request URL: %v", name, err)
+	}
+	if wantURL.Query().Encode() != got.URL.Query().Encode() {
+		t.Fatalf("%s: request query = %q, want %q", name, got.URL.RawQuery, wantURL.RawQuery)
+	}
 	if len(fx.Request.Body) == 0 || string(fx.Request.Body) == "null" {
 		return
 	}
@@ -421,7 +429,18 @@ func cases() []contractCase {
 			name:         "list_repos",
 			responseBody: func() any { return &gen.PagedRepoResponse{} },
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				_, err := c.ListReposWithResponse(ctx, &gen.ListReposParams{})
+				limit, offset := 20, 0
+				_, err := c.ListReposWithResponse(ctx, &gen.ListReposParams{
+					Limit: &limit, Offset: &offset,
+				})
+				return err
+			},
+		},
+		{
+			name:         "get_deployment_options",
+			responseBody: func() any { return &gen.DeploymentOptionsResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				_, err := c.GetDeploymentOptionsWithResponse(ctx)
 				return err
 			},
 		},
@@ -483,6 +502,25 @@ func cases() []contractCase {
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
 				a, r := repoCoords(fx.Request.Path)
 				_, err := c.GetModelWithResponse(ctx, a, r, afterModels(fx.Request.Path))
+				return err
+			},
+		},
+		{
+			name:         "get_deployment_guide",
+			responseBody: func() any { return &gen.DeploymentGuideResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				a, r := repoCoords(fx.Request.Path)
+				query, err := url.Parse(fx.Request.Path)
+				if err != nil {
+					return err
+				}
+				language := gen.GetDeploymentGuideParamsLanguage(query.Query().Get("language"))
+				mode := gen.GetDeploymentGuideParamsInferenceMode(query.Query().Get("inference_mode"))
+				_, err = c.GetDeploymentGuideWithResponse(
+					ctx, a, r, afterModels(fx.Request.Path), &gen.GetDeploymentGuideParams{
+						Language: &language, InferenceMode: &mode,
+					},
+				)
 				return err
 			},
 		},
@@ -559,7 +597,10 @@ func cases() []contractCase {
 			name:         "list_library_models",
 			responseBody: func() any { return &gen.PagedLibraryModelItem{} },
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				_, err := c.ListLibraryModelsWithResponse(ctx, &gen.ListLibraryModelsParams{})
+				limit, offset := 20, 0
+				_, err := c.ListLibraryModelsWithResponse(ctx, &gen.ListLibraryModelsParams{
+					Limit: &limit, Offset: &offset,
+				})
 				return err
 			},
 		},

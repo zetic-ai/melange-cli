@@ -33,6 +33,17 @@ type options struct {
 	template  string
 }
 
+const (
+	// Keep ordinary API responses independent of the filesystem while bounding
+	// memory used by the transactional stdout contract. Larger bodies spill to
+	// a private temporary file before anything is committed to stdout.
+	responseMemoryLimit = 1 << 20
+	// Error bodies remain raw streams on stdout. Only this prefix is retained
+	// to derive the one-line stderr summary.
+	errorSummaryLimit     = 32 << 10
+	filteredResponseLimit = 16 << 20
+)
+
 // NewCmdAPI builds the `melange api` command.
 func NewCmdAPI(f *cmdutil.Factory) *cobra.Command {
 	var opts options
@@ -77,9 +88,11 @@ A 2xx response body is committed to stdout only after the complete body is read,
 so a timeout or connection reset cannot leave a partial success payload. The
 read remains bounded by the ordinary request budget; set MELANGE_API_TIMEOUT to
 a longer positive duration for a legitimately slow or large response. Use
--q/--jq or -t/--template to post-process JSON. Non-2xx bodies also pass through
-to stdout unfiltered while a one-line summary goes to stderr. Pagination,
-polling, and Idempotency-Key generation are the caller's responsibility.
+-q/--jq or -t/--template to post-process JSON responses up to 16 MiB; omit the
+filter or narrow the API query for larger bodies. Non-2xx bodies also pass
+through to stdout unfiltered while a one-line summary goes to stderr.
+Pagination, polling, and Idempotency-Key generation are the caller's
+responsibility.
 
 Exit codes: 0 success, 1 HTTP or transport error, 2 usage error,
 4 not authenticated (or the server rejected the token), 130 interrupted.`,
@@ -212,21 +225,23 @@ func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdu
 	}
 
 	// Non-2xx: pass the body through raw (filters only apply to successful
-	// responses so error diagnostics are never mangled), then summarize.
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
+	// responses so error diagnostics are never mangled). Retain only a bounded
+	// prefix for the summary; arbitrarily large error bodies must not be loaded
+	// into memory merely to preserve their stdout contract.
 	if include {
 		if err := writeHead(ios.Out, resp); err != nil {
 			return err
 		}
 	}
+	prefix := &prefixWriter{remaining: errorSummaryLimit}
+	destination := io.Writer(io.Discard)
 	if !silent {
-		if _, err := ios.Out.Write(data); err != nil {
-			return err
-		}
+		destination = ios.Out
 	}
+	if _, err := io.Copy(destination, io.TeeReader(resp.Body, prefix)); err != nil {
+		return err
+	}
+	data := prefix.Bytes()
 
 	summary := fmt.Sprintf("HTTP %d", resp.StatusCode)
 	var apiErr *api.Error
@@ -248,20 +263,14 @@ func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdu
 	return cmdutil.ErrSilent
 }
 
-// writeSuccessfulResponse stages stdout in a private temporary file and only
-// commits it after the response body has been read successfully. A connection
-// reset can therefore never leave agents with a syntactically plausible but
-// incomplete success payload.
+// writeSuccessfulResponse stages stdout in bounded memory, spilling only large
+// responses to a private temporary file, and commits it after the complete
+// body has been read. A connection reset or spill failure can therefore never
+// leave agents with a syntactically plausible but incomplete success payload.
 func writeSuccessfulResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdutil.Exporter, include, silent bool) error {
-	stage, err := os.CreateTemp("", "melange-api-response-*")
-	if err != nil {
-		return fmt.Errorf("creating response staging file: %w", err)
-	}
-	stageName := stage.Name()
-	defer func() {
-		_ = stage.Close()
-		_ = os.Remove(stageName)
-	}()
+	stage := newResponseStage(responseMemoryLimit)
+	defer stage.Close()
+	var err error
 
 	stagedStreams := *ios
 	stagedStreams.Out = stage
@@ -275,10 +284,19 @@ func writeSuccessfulResponse(ios *iostreams.IOStreams, resp *http.Response, expo
 	case silent:
 		_, err = io.Copy(io.Discard, resp.Body)
 	case exporter != nil:
-		var data []byte
-		data, err = io.ReadAll(resp.Body)
-		if err == nil && len(data) > 0 {
-			err = exporter.Write(&stagedStreams, json.RawMessage(data))
+		bodyStage := newResponseStage(responseMemoryLimit)
+		defer bodyStage.Close()
+		if _, err = io.Copy(bodyStage, resp.Body); err == nil {
+			if bodyStage.Size() > filteredResponseLimit {
+				err = fmt.Errorf(
+					"filtered response exceeds the 16 MiB processing limit; omit --jq/--template or narrow the API query")
+			} else {
+				var data []byte
+				data, err = bodyStage.ReadAll()
+				if err == nil && len(data) > 0 {
+					err = exporter.Write(&stagedStreams, json.RawMessage(data))
+				}
+			}
 		}
 	default:
 		_, err = io.Copy(stage, resp.Body)
@@ -286,13 +304,107 @@ func writeSuccessfulResponse(ios *iostreams.IOStreams, resp *http.Response, expo
 	if err != nil {
 		return err
 	}
-	if _, err := stage.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("rewinding response staging file: %w", err)
-	}
-	if _, err := io.Copy(ios.Out, stage); err != nil {
+	if err := stage.CopyTo(ios.Out); err != nil {
 		return fmt.Errorf("writing response: %w", err)
 	}
 	return nil
+}
+
+// responseStage is an append-only transactional buffer. It retains at most
+// memoryLimit bytes in RAM and migrates atomically to a private temp file when
+// the next write would exceed the limit.
+type responseStage struct {
+	memoryLimit int
+	memory      bytes.Buffer
+	file        *os.File
+	size        int64
+}
+
+func newResponseStage(memoryLimit int) *responseStage {
+	return &responseStage{memoryLimit: memoryLimit}
+}
+
+func (s *responseStage) Write(p []byte) (int, error) {
+	if s.file != nil {
+		n, err := s.file.Write(p)
+		s.size += int64(n)
+		return n, err
+	}
+	if s.memory.Len()+len(p) <= s.memoryLimit {
+		n, err := s.memory.Write(p)
+		s.size += int64(n)
+		return n, err
+	}
+
+	f, err := os.CreateTemp("", "melange-api-response-*")
+	if err != nil {
+		return 0, fmt.Errorf("staging response in temporary file: %w", err)
+	}
+	if _, err := f.Write(s.memory.Bytes()); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return 0, fmt.Errorf("staging response in temporary file: %w", err)
+	}
+	s.file = f
+	s.memory.Reset()
+	n, err := s.file.Write(p)
+	s.size += int64(n)
+	return n, err
+}
+
+func (s *responseStage) Size() int64 { return s.size }
+
+func (s *responseStage) reader() (io.Reader, error) {
+	if s.file == nil {
+		return bytes.NewReader(s.memory.Bytes()), nil
+	}
+	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("rewinding response staging file: %w", err)
+	}
+	return s.file, nil
+}
+
+func (s *responseStage) CopyTo(w io.Writer) error {
+	r, err := s.reader()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, r)
+	return err
+}
+
+func (s *responseStage) ReadAll() ([]byte, error) {
+	r, err := s.reader()
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(r)
+}
+
+func (s *responseStage) Close() {
+	if s.file == nil {
+		return
+	}
+	name := s.file.Name()
+	_ = s.file.Close()
+	_ = os.Remove(name)
+}
+
+// prefixWriter accepts the complete stream while retaining only its first
+// remaining bytes.
+type prefixWriter struct {
+	bytes.Buffer
+	remaining int
+}
+
+func (w *prefixWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	if w.remaining > 0 {
+		keep := min(w.remaining, len(p))
+		_, _ = w.Buffer.Write(p[:keep])
+		w.remaining -= keep
+	}
+	return n, nil
 }
 
 // writeHead prints the status line and response headers (sorted, like
