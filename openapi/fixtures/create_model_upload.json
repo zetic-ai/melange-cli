@@ -1,0 +1,69 @@
+{
+  "request": {
+    "body": {
+      "files": [
+        {
+          "client_file_id": "f-model",
+          "crc32c": "AAAAAA==",
+          "filename": "model.onnx",
+          "role": "model",
+          "size": 10
+        },
+        {
+          "client_file_id": "f-in0",
+          "crc32c": "AAAAAA==",
+          "filename": "input0.bin",
+          "input_index": 0,
+          "role": "input",
+          "size": 4
+        },
+        {
+          "client_file_id": "f-in1",
+          "crc32c": "AAAAAA==",
+          "filename": "input1.bin",
+          "input_index": 1,
+          "role": "input",
+          "size": 4
+        }
+      ],
+      "manifest_version": 2
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "method": "POST",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models"
+  },
+  "response": {
+    "body": {
+      "expires_at": "<datetime>",
+      "files": [
+        {
+          "canonical_path": "<uuid>/model.onnx",
+          "client_file_id": "f-model",
+          "resumable": true,
+          "upload_url": "<signed-url>"
+        },
+        {
+          "canonical_path": "<uuid>/inputs/00_input0.bin",
+          "client_file_id": "f-in0",
+          "resumable": true,
+          "upload_url": "<signed-url>"
+        },
+        {
+          "canonical_path": "<uuid>/inputs/01_input1.bin",
+          "client_file_id": "f-in1",
+          "resumable": true,
+          "upload_url": "<signed-url>"
+        }
+      ],
+      "id": "<id>",
+      "state": "UPLOADING",
+      "tag": "<uuid>"
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 201
+  }
+}

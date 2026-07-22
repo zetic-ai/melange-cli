@@ -1,0 +1,113 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/reports/general"
+  },
+  "response": {
+    "body": {
+      "derivation_version": 1,
+      "model": {
+        "key": "<uuid>",
+        "version": 1
+      },
+      "records": [
+        {
+          "ap_type": "cpu",
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "latency_ms",
+          "precision": "fp32",
+          "run": 0,
+          "target": "tflite_fp32",
+          "unit": "ms",
+          "value": 12.34
+        },
+        {
+          "ap_type": "cpu",
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "tensor_copy_latency_ms",
+          "precision": "fp32",
+          "run": 0,
+          "target": "tflite_fp32",
+          "unit": "ms",
+          "value": 1.0
+        },
+        {
+          "ap_type": "cpu",
+          "device": {
+            "brand": "Samsung",
+            "hardware": "QTI",
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os_version": "15",
+            "real_device": "real-device-code",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "snr_db",
+          "precision": "fp32",
+          "run": 0,
+          "target": "tflite_fp32",
+          "unit": "db",
+          "value": 35.5
+        }
+      ],
+      "summary": {
+        "latency_ms": {
+          "all": {
+            "avg": 12.34,
+            "max": 12.34,
+            "median": 12.34,
+            "min": 12.34
+          },
+          "fp16": null,
+          "fp32": {
+            "avg": 12.34,
+            "max": 12.34,
+            "median": 12.34,
+            "min": 12.34
+          },
+          "int8": null
+        },
+        "memory_mb": {
+          "all": null,
+          "fp16": null,
+          "fp32": null,
+          "int8": null
+        },
+        "snr_db": {
+          "all": {
+            "max": 35.5,
+            "min": 35.5
+          },
+          "fp16": null,
+          "fp32": {
+            "max": 35.5,
+            "min": 35.5
+          },
+          "int8": null
+        }
+      }
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

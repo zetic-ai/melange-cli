@@ -16,7 +16,7 @@ LDFLAGS := -s -w \
 # tool directive, so `make gen` is reproducible.
 DOWN_CONVERT := npx --yes @apiture/openapi-down-convert@0.14.2
 
-.PHONY: build test lint fmt gen gen-check docs docs-check
+.PHONY: build test lint fmt gen gen-check docs docs-check fixtures-check
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) ./cmd/melange
@@ -44,3 +44,16 @@ docs:
 docs-check:
 	$(MAKE) docs
 	git diff --exit-code -- docs/reference
+
+# Local-dev sync check for the shared contract fixtures: re-copy the backend's
+# committed fixtures and fail if the local copy drifted. The backend
+# (../zetic_backend) is the generator (`make fixtures` there); CI does NOT run
+# this copy step — CI just runs the Go tests (internal/contract) on the
+# committed openapi/fixtures/, so a stale copy is caught by a failing test.
+# See openapi/FIXTURES_SOURCE for the source commit.
+BACKEND ?= ../zetic_backend
+fixtures-check:
+	@test -d "$(BACKEND)/openapi/fixtures" || { \
+		echo "backend fixtures not found at $(BACKEND)/openapi/fixtures"; exit 1; }
+	cp "$(BACKEND)"/openapi/fixtures/*.json openapi/fixtures/
+	git diff --exit-code -- openapi/fixtures

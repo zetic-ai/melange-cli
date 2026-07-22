@@ -1,0 +1,36 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/targets"
+  },
+  "response": {
+    "body": {
+      "count": 1,
+      "results": [
+        {
+          "compatibility": {
+            "ap_types": [
+              "cpu",
+              "npu"
+            ],
+            "os": "android",
+            "soc_manufacturer": "Qualcomm",
+            "soc_model": "SM8650"
+          },
+          "created_at": "<datetime>",
+          "download_size": 1234,
+          "kind": "general",
+          "quant_type": null,
+          "target": "qnn",
+          "target_id": "<target_id>"
+        }
+      ]
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

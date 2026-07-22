@@ -1,0 +1,26 @@
+{
+  "request": {
+    "body": null,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "method": "POST",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/uploads/<uuid>/complete"
+  },
+  "response": {
+    "body": {
+      "failure_code": null,
+      "id": "<id>",
+      "model": {
+        "key": "<uuid>",
+        "version": 1
+      },
+      "state": "DISPATCH_PENDING",
+      "terminal": false
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

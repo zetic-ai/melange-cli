@@ -1,0 +1,20 @@
+{
+  "request": {
+    "body": null,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "method": "DELETE",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/uploads/<uuid>"
+  },
+  "response": {
+    "body": {
+      "id": "<id>",
+      "state": "CANCELED"
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

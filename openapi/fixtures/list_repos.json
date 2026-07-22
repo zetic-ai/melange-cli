@@ -1,0 +1,31 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/repos?limit=20&offset=0"
+  },
+  "response": {
+    "body": {
+      "count": 1,
+      "results": [
+        {
+          "account": "verifiedusertestaccount2",
+          "created_at": "<datetime>",
+          "description": null,
+          "full_name": "verifiedusertestaccount2/fixturerepo",
+          "is_private": true,
+          "model_type": "general",
+          "name": "fixturerepo",
+          "tags": [],
+          "updated_at": "<datetime>",
+          "use_case": "other"
+        }
+      ]
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}
