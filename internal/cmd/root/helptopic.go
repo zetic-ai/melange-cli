@@ -94,7 +94,9 @@ quotes.
 
 Human output adapts to the terminal: on a TTY, tables print aligned
 columns under an uppercase header row; when stdout is not a TTY, rows
-are tab-separated values with no header — stable for scripts.
+are tab-separated values with no header — stable for scripts. Backslash
+and control characters inside cells use reversible backslash escapes:
+\\, \t, \r, and \n respectively.
 
 List commands emit the page envelope {"results": [...], "count": N}
 exactly as the API returned it. --paginate fetches every page and

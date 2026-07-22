@@ -51,8 +51,9 @@ func newCmdList(f *cmdutil.Factory) *cobra.Command {
 provider.
 
 --task may be repeated; a model matching ANY given task is included
-(vision, llm, nlp, speech, other). --search is a case-insensitive
-substring match on the model name. --provider is an exact provider name.
+(vision, llm, nlp, speech, other). --search is a case- and separator-insensitive
+substring match on name or full_name (hyphens, underscores, slashes, and spaces
+are ignored). --provider is an exact provider name.
 
 On a terminal this prints a table (MODEL, PROVIDER, TASK, TYPE, CREATED).
 When stdout is not a terminal it prints one model per line as tab-separated
@@ -79,8 +80,10 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 			if paginate && cmd.Flags().Changed("limit") {
 				return cmdutil.FlagError{Err: errors.New("cannot use --limit with --paginate")}
 			}
-			if !paginate && limit < 1 {
-				return cmdutil.FlagError{Err: errors.New("--limit must be at least 1")}
+			if !paginate {
+				if err := cmdutil.ValidatePageLimit(limit); err != nil {
+					return err
+				}
 			}
 			taskParams, err := parseTasks(tasks)
 			if err != nil {
@@ -193,9 +196,9 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 	}
 
 	cmd.Flags().StringArrayVar(&tasks, "task", nil, "Filter by use-case `task` (repeatable): vision, llm, nlp, speech, other")
-	cmd.Flags().StringVar(&search, "search", "", "Case-insensitive substring match on the model `name`")
+	cmd.Flags().StringVar(&search, "search", "", "Case- and separator-insensitive substring match on `name or full_name`")
 	cmd.Flags().StringVar(&provider, "provider", "", "Exact provider `name`")
-	cmd.Flags().IntVar(&limit, "limit", 30, "Maximum number of models to fetch")
+	cmd.Flags().IntVar(&limit, "limit", 30, "Maximum number of models to fetch (1-100)")
 	cmd.Flags().BoolVar(&paginate, "paginate", false, "Fetch all pages of results")
 	cmd.Flags().BoolVar(&all, "all", false, "Alias for --paginate")
 	cmdutil.AddJSONFlags(cmd, &exporter)

@@ -128,15 +128,18 @@ if you genuinely need raw signed URLs.
 Exit codes: 0 success, 1 API/download/verification error (including
 quota exhaustion), 2 usage error or missing confirmation, 4 not
 authenticated, 130 interrupted.`,
-		Example: `  # Pick a target, then download it into a directory
-  melange model targets m_ab12cd -R zetic/whisper-tiny
-  melange model download m_ab12cd -R zetic/whisper-tiny --target tm_71 --output ./models
+		Example: `  # Resolve a model and one of its converted targets
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+  target_id=$(melange model targets "$model_key" -R zetic/whisper-tiny --jq '.results[0].target_id')
+
+  # Download the target into a directory
+  melange model download "$model_key" -R zetic/whisper-tiny --target "$target_id" --output ./models
 
   # Agent pattern: non-interactive download (the billable step needs --yes)
-  melange model download m_ab12cd -R zetic/whisper-tiny --target tm_71 --yes
+  melange model download "$model_key" -R zetic/whisper-tiny --target "$target_id" --yes
 
   # Agent pattern: capture the authorization id (URLs are redacted)
-  melange model download m_ab12cd -R zetic/whisper-tiny --target tm_71 --yes --json --jq .authorization_id`,
+  melange model download "$model_key" -R zetic/whisper-tiny --target "$target_id" --yes --json --jq .authorization_id`,
 		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			account, name, err := splitRepoFlag(opts.repo)

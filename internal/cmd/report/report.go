@@ -13,6 +13,8 @@ func NewCmdReport(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "report <command>",
 		Short: "Read model benchmark reports",
+		Args:  cmdutil.CommandGroupArgs,
+		RunE:  cmdutil.ShowCommandGroupHelp,
 		Long: `Read the benchmark reports of a converted model: general (per-device
 latency/SNR/memory), LLM (per-quant tokens/sec and accuracy), and
 package (ZTC per-mode metrics).
@@ -26,14 +28,17 @@ tab-separated values — scripts get the measurements, not the derived
 table. With --json the API response is emitted byte-for-byte.
 
 Data is written to stdout; progress and messages go to stderr.`,
-		Example: `  # The dashboard table for a model's general report
-  melange report view m_ab12cd -R zetic/whisper-tiny
+		Example: `  # Prefer the public repository's default model; fall back to a ready model
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+
+  # The dashboard table for that model's general report
+  melange report view "$model_key" -R zetic/whisper-tiny
 
   # Fill the table with the accuracy-mode pick instead of auto
-  melange report view m_ab12cd -R zetic/whisper-tiny --mode accuracy
+  melange report view "$model_key" -R zetic/whisper-tiny --mode accuracy
 
   # Agent pattern: best NPU latency per device, from the raw records
-  melange report view m_ab12cd -R zetic/whisper-tiny --json \
+  melange report view "$model_key" -R zetic/whisper-tiny --json \
     --jq '[.records[] | select(.ap_type=="npu" and .metric=="latency_ms")]
           | group_by(.device.marketing_name)[]
           | {device: .[0].device.marketing_name, best: (map(.value) | min)}'`,

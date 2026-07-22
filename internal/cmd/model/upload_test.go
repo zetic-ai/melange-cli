@@ -509,24 +509,76 @@ func TestUploadCompleteReportsFailureAsExit1(t *testing.T) {
 	require.ErrorIs(t, lerr, os.ErrNotExist, "state file must be removed for a terminal FAILED session")
 }
 
-func TestUploadActiveSessionConflict(t *testing.T) {
-	e := setup(t)
-	_, model, input := modelDir(t)
+func TestUploadOldServerActiveSessionConflictRecognizesEverySlotState(t *testing.T) {
+	for _, state := range []string{"CREATED", "UPLOADING", "VERIFYING", "DISPATCH_PENDING"} {
+		t.Run(state, func(t *testing.T) {
+			e := setup(t)
+			_, model, input := modelDir(t)
 
-	e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models"),
-		jsonStub(409,
-			`{"type":"error","error":{"type":"invalid_request_error","message":"an upload session is already active"},"request_id":"req_1"}`))
-	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads"),
-		jsonStub(200,
-			`{"count":1,"results":[{"id":"up_9","state":"UPLOADING","created_at":"2026-07-20T10:00:00Z","expires_at":"2026-07-22T10:00:00Z","file_count":2}]}`))
+			e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models"),
+				jsonStub(409,
+					`{"type":"error","error":{"type":"invalid_request_error","message":"an upload session is already active"},"request_id":"req_1"}`))
+			e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads"),
+				jsonStub(200, fmt.Sprintf(
+					`{"count":1,"results":[{"id":"up_9","state":%q,"created_at":"2026-07-20T10:00:00Z","expires_at":"2026-07-22T10:00:00Z","file_count":2}]}`,
+					state)))
 
-	err := run(t, e, "upload", "-R", repoArg, model, "--input", input)
-	require.Error(t, err)
-	assert.Equal(t, 1, cmdutil.ExitCode(err))
-	errText := e.errOut.String()
-	assert.Contains(t, errText, "up_9")
-	assert.Contains(t, errText, "melange model upload --resume up_9 -R zetic/whisper")
-	assert.Contains(t, errText, "melange model upload --cancel up_9 -R zetic/whisper")
+			err := run(t, e, "upload", "-R", repoArg, model, "--input", input)
+			require.Error(t, err)
+			assert.Equal(t, 1, cmdutil.ExitCode(err))
+			assert.ErrorIs(t, err, cmdutil.ErrSilent)
+			assertActiveConflictGuidance(t, e.errOut.String(), "up_9", state)
+			e.reg.Verify(t)
+		})
+	}
+}
+
+func TestUploadStructuredActiveSessionConflictUsesResolvedState(t *testing.T) {
+	for _, state := range []string{"CREATED", "UPLOADING", "VERIFYING", "DISPATCH_PENDING"} {
+		t.Run(state, func(t *testing.T) {
+			e := setup(t)
+			_, model, input := modelDir(t)
+			activeID := "0123456789abcdef0123456789abcdef"
+
+			e.reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper/models"),
+				jsonStub(409,
+					fmt.Sprintf(`{"type":"error","error":{"type":"conflict_error","message":"an upload session is already active","active_upload_id":%q},"request_id":"req_1"}`, activeID)))
+			e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/uploads/"+activeID),
+				jsonStub(200, fmt.Sprintf(
+					`{"id":%q,"state":%q,"tag":"zt_x","expires_at":"2026-07-22T10:00:00Z","files":[]}`,
+					activeID, state)))
+
+			err := run(t, e, "upload", "-R", repoArg, model, "--input", input)
+			require.Error(t, err)
+			assert.Equal(t, 1, cmdutil.ExitCode(err))
+			assert.ErrorIs(t, err, cmdutil.ErrSilent)
+			assertActiveConflictGuidance(t, e.errOut.String(), activeID, state)
+			e.reg.Verify(t)
+			require.Len(t, e.reg.Requests, 2, "a structured conflict must resolve the exact session without listing all sessions")
+		})
+	}
+}
+
+func assertActiveConflictGuidance(t *testing.T, stderr, sessionID, state string) {
+	t.Helper()
+	assert.Contains(t, stderr, sessionID)
+	assert.Contains(t, stderr, state)
+	assert.Contains(t, stderr,
+		"melange api /v1/repos/zetic/whisper/models/uploads/"+sessionID+" --jq .state")
+	switch state {
+	case "CREATED", "UPLOADING":
+		assert.Contains(t, stderr, "melange model upload --resume "+sessionID+" -R zetic/whisper")
+		assert.Contains(t, stderr, "melange model upload --cancel "+sessionID+" -R zetic/whisper")
+	case "VERIFYING":
+		assert.Contains(t, stderr, "wait for verification to finish")
+		assert.NotContains(t, stderr, "--resume")
+		assert.NotContains(t, stderr, "--cancel")
+	case "DISPATCH_PENDING":
+		assert.Contains(t, stderr,
+			"melange api -X POST /v1/repos/zetic/whisper/models/uploads/"+sessionID+"/complete --jq .state")
+		assert.NotContains(t, stderr, "--resume")
+		assert.NotContains(t, stderr, "--cancel")
+	}
 }
 
 // ---------------------------------------------------------------------------

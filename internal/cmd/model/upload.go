@@ -25,9 +25,14 @@ import (
 // is printed to stderr during manifest digesting.
 const hashNoteThreshold = 100 * 1024 * 1024
 
-// sessionStateUploading is the active-session state (ADR-5 vocabulary,
-// compared case-insensitively).
-const sessionStateUploading = "UPLOADING"
+// Upload-session states that retain the repository's single active slot
+// (ADR-5 vocabulary, compared case-insensitively).
+const (
+	sessionStateCreated         = "CREATED"
+	sessionStateUploading       = "UPLOADING"
+	sessionStateVerifying       = "VERIFYING"
+	sessionStateDispatchPending = "DISPATCH_PENDING"
+)
 
 type uploadOptions struct {
 	f *cmdutil.Factory
@@ -118,12 +123,14 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
     --bucket 0:1x3x224x224 --input image-224.npy --input mask-224.npy \
     --bucket 1:1x3x384x384 --input image-384.npy --input mask-384.npy --wait
 
-  # Resume an interrupted upload
-  melange model upload --resume up_ab12cd -R zetic/whisper-tiny
+  # Resolve a resumable pre-completion session id
+  session_id=$(melange model upload --sessions -R zetic/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id')
 
-  # List and clean up sessions
-  melange model upload --sessions -R zetic/whisper-tiny
-  melange model upload --cancel up_ab12cd -R zetic/whisper-tiny`,
+  # Resume it
+  melange model upload --resume "$session_id" -R zetic/whisper-tiny
+
+  # Or cancel it instead
+  melange model upload --cancel "$session_id" -R zetic/whisper-tiny`,
 		Args: cmdutil.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateWaitOptions(opts.doWait, opts.timeout, cmd.Flags().Changed("timeout")); err != nil {
@@ -466,27 +473,81 @@ func stateFromSession(session *gen.ModelUploadResponse, specs []upload.FileSpec,
 	return st, nil
 }
 
-// activeSessionConflict turns a 409 on create into actionable remediation:
-// it names the active session and the exact resume/cancel commands.
+// activeSessionConflict turns a 409 on create into state-aware remediation.
+// Only pre-completion sessions are offered resume/cancel commands.
 func activeSessionConflict(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, orig error) error {
-	sessionID := ""
-	if resp, err := g.ListModelUploadsWithResponse(ctx, opts.account, opts.name); err == nil &&
-		api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) == nil && resp.JSON200 != nil {
-		for _, s := range resp.JSON200.Results {
-			if strings.EqualFold(string(s.State), sessionStateUploading) {
-				sessionID = s.Id
-				break
-			}
-		}
+	preferredID := ""
+	var apiErr *api.Error
+	if errors.As(orig, &apiErr) {
+		preferredID = apiErr.ActiveUploadID
 	}
+	sessionID, state := resolveActiveSession(ctx, opts, g, preferredID)
 	if sessionID == "" {
 		return fmt.Errorf("%w\nList sessions with: melange model upload --sessions -R %s", orig, opts.repo)
 	}
-	errOut := opts.f.IOStreams.ErrOut
-	fmt.Fprintf(errOut, "✗ An upload session is already active for %s: %s\n", opts.repo, sessionID)
-	fmt.Fprintf(errOut, "\nResume it:  melange model upload --resume %s -R %s\n", sessionID, opts.repo)
-	fmt.Fprintf(errOut, "Cancel it:  melange model upload --cancel %s -R %s\n", sessionID, opts.repo)
+	printActiveSessionGuidance(opts, sessionID, state)
 	return cmdutil.ErrSilent
+}
+
+// resolveActiveSession prefers the structured conflict ID. Its detail endpoint
+// provides the authoritative state; the list endpoint is a compatibility
+// fallback for older servers and for a transient detail lookup failure.
+func resolveActiveSession(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, preferredID string) (string, string) {
+	if preferredID != "" {
+		if resp, err := g.GetModelUploadWithResponse(ctx, opts.account, opts.name, preferredID); err == nil &&
+			api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) == nil && resp.JSON200 != nil {
+			return preferredID, string(resp.JSON200.State)
+		}
+	}
+
+	resp, err := g.ListModelUploadsWithResponse(ctx, opts.account, opts.name)
+	if err != nil || api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) != nil || resp.JSON200 == nil {
+		return preferredID, ""
+	}
+	for _, session := range resp.JSON200.Results {
+		if preferredID != "" && session.Id != preferredID {
+			continue
+		}
+		state := string(session.State)
+		if activeUploadSessionState(state) {
+			return session.Id, state
+		}
+	}
+	return preferredID, ""
+}
+
+func activeUploadSessionState(state string) bool {
+	switch strings.ToUpper(state) {
+	case sessionStateCreated, sessionStateUploading, sessionStateVerifying, sessionStateDispatchPending:
+		return true
+	default:
+		return false
+	}
+}
+
+func printActiveSessionGuidance(opts *uploadOptions, sessionID, state string) {
+	errOut := opts.f.IOStreams.ErrOut
+	normalizedState := strings.ToUpper(state)
+	fmt.Fprintf(errOut, "✗ An upload session is already active for %s: %s", opts.repo, sessionID)
+	if normalizedState != "" {
+		fmt.Fprintf(errOut, " (%s)", normalizedState)
+	}
+	fmt.Fprintln(errOut)
+
+	detailPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s", opts.account, opts.name, sessionID)
+	fmt.Fprintf(errOut, "\nInspect it:  melange api %s --jq .state\n", detailPath)
+	switch normalizedState {
+	case sessionStateCreated, sessionStateUploading:
+		fmt.Fprintf(errOut, "Resume it:   melange model upload --resume %s -R %s\n", sessionID, opts.repo)
+		fmt.Fprintf(errOut, "Cancel it:   melange model upload --cancel %s -R %s\n", sessionID, opts.repo)
+	case sessionStateVerifying:
+		fmt.Fprintln(errOut, "Verification is in progress; wait for verification to finish, then retry the original upload.")
+	case sessionStateDispatchPending:
+		fmt.Fprintln(errOut, "Conversion dispatch is pending. Resolve any quota or transient dispatch issue, then retry dispatch:")
+		fmt.Fprintf(errOut, "  melange api -X POST %s/complete --jq .state\n", detailPath)
+	default:
+		fmt.Fprintln(errOut, "Inspect the session state before deciding whether to resume, cancel, wait, or retry.")
+	}
 }
 
 // transferAndComplete uploads all pending files then completes the session.

@@ -942,6 +942,9 @@ type DownloadAuthorizationResponse struct {
 // ErrorEnvelope Standard error envelope returned by every non-2xx response of the public API.
 type ErrorEnvelope struct {
 	Error struct {
+		// ActiveUploadId Blocking upload-session id on the create-model-upload active-session conflict (409 only).
+		ActiveUploadId *string `json:"active_upload_id,omitempty"`
+
 		// Fields Per-field validation details (422 only).
 		Fields *[]struct {
 			Field   string `json:"field"`
@@ -1417,12 +1420,12 @@ type PackageReportResponse struct {
 	Model             ReportModelRef        `json:"model"`
 	Records           []PackageReportRecord `json:"records"`
 
-	// Summary `auto` and `speed` are the same selection in v1 (packages carry no
+	// Summary `auto` and `speed` are the same selection in v2 (packages carry no
 	// accuracy signal); there is no `accuracy` mode.
 	Summary PackageReportSummary `json:"summary"`
 }
 
-// PackageReportSummary `auto` and `speed` are the same selection in v1 (packages carry no
+// PackageReportSummary `auto` and `speed` are the same selection in v2 (packages carry no
 // accuracy signal); there is no `accuracy` mode.
 type PackageReportSummary struct {
 	Auto  *PackageModeAggregates `json:"auto"`
@@ -1648,7 +1651,7 @@ type ListLibraryModelsParams struct {
 	// Task Repeatable use-case filter; items matching ANY given task are included.
 	Task *[]ListLibraryModelsParamsTask `form:"task,omitempty" json:"task,omitempty"`
 
-	// Search Case-insensitive substring match on the model name.
+	// Search Case- and separator-insensitive substring match on name or full_name.
 	Search *string `form:"search,omitempty" json:"search,omitempty"`
 
 	// Provider Exact provider (company) name.
@@ -2123,8 +2126,11 @@ type ClientInterface interface {
 
 	// ListModelUploads List Model Uploads
 	//
-	// Active + recent (last 10) upload sessions for the repo. Fixed small
-	// window, so no pagination on purpose.
+	// Active + recent (last 10) upload sessions for the repo.
+	//
+	// Requires repository owner or JOINED WRITE-collaborator access even though
+	// the PAT scope is READ; upload metadata is not public-repo browse data.
+	// Fixed small window, so no pagination on purpose.
 	//
 	// Results are ordered by created_at descending, then id descending.
 	//
@@ -2145,6 +2151,9 @@ type ClientInterface interface {
 	// GetModelUpload Get Model Upload
 	//
 	// Session detail with per-file staging arrival (one storage list call).
+	//
+	// Requires repository owner or JOINED WRITE-collaborator access even though
+	// the PAT scope is READ; private-repo visibility failures remain 404.
 	//
 	// Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `GetModelUpload` operationId).
 	GetModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2877,8 +2886,11 @@ func (c *Client) ImportModel(ctx context.Context, accountName string, repoName s
 
 // ListModelUploads List Model Uploads
 //
-// Active + recent (last 10) upload sessions for the repo. Fixed small
-// window, so no pagination on purpose.
+// Active + recent (last 10) upload sessions for the repo.
+//
+// Requires repository owner or JOINED WRITE-collaborator access even though
+// the PAT scope is READ; upload metadata is not public-repo browse data.
+// Fixed small window, so no pagination on purpose.
 //
 // Results are ordered by created_at descending, then id descending.
 //
@@ -2919,6 +2931,9 @@ func (c *Client) CancelModelUpload(ctx context.Context, accountName string, repo
 // GetModelUpload Get Model Upload
 //
 // Session detail with per-file staging arrival (one storage list call).
+//
+// Requires repository owner or JOINED WRITE-collaborator access even though
+// the PAT scope is READ; private-repo visibility failures remain 404.
 //
 // Corresponds with GET /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id} (the `GetModelUpload` operationId).
 func (c *Client) GetModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5340,8 +5355,11 @@ type ClientWithResponsesInterface interface {
 
 	// ListModelUploadsWithResponse List Model Uploads
 	//
-	// Active + recent (last 10) upload sessions for the repo. Fixed small
-	// window, so no pagination on purpose.
+	// Active + recent (last 10) upload sessions for the repo.
+	//
+	// Requires repository owner or JOINED WRITE-collaborator access even though
+	// the PAT scope is READ; upload metadata is not public-repo browse data.
+	// Fixed small window, so no pagination on purpose.
 	//
 	// Results are ordered by created_at descending, then id descending.
 	//
@@ -5366,6 +5384,9 @@ type ClientWithResponsesInterface interface {
 	// GetModelUploadWithResponse Get Model Upload
 	//
 	// Session detail with per-file staging arrival (one storage list call).
+	//
+	// Requires repository owner or JOINED WRITE-collaborator access even though
+	// the PAT scope is READ; private-repo visibility failures remain 404.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -10083,8 +10104,11 @@ func (c *ClientWithResponses) ImportModelWithResponse(ctx context.Context, accou
 
 // ListModelUploadsWithResponse List Model Uploads
 //
-// Active + recent (last 10) upload sessions for the repo. Fixed small
-// window, so no pagination on purpose.
+// Active + recent (last 10) upload sessions for the repo.
+//
+// Requires repository owner or JOINED WRITE-collaborator access even though
+// the PAT scope is READ; upload metadata is not public-repo browse data.
+// Fixed small window, so no pagination on purpose.
 //
 // Results are ordered by created_at descending, then id descending.
 //
@@ -10121,6 +10145,9 @@ func (c *ClientWithResponses) CancelModelUploadWithResponse(ctx context.Context,
 // GetModelUploadWithResponse Get Model Upload
 //
 // Session detail with per-file staging arrival (one storage list call).
+//
+// Requires repository owner or JOINED WRITE-collaborator access even though
+// the PAT scope is READ; private-repo visibility failures remain 404.
 //
 // Returns a wrapper object for the known response body format(s).
 //

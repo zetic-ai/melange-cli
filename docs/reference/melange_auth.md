@@ -10,6 +10,10 @@ Credentials are personal access tokens (prefix ztp_) created at
 Settings → Personal Access Tokens. Tokens are resolved in this order:
 MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring > config file.
 
+```
+melange auth <command> [flags]
+```
+
 ### Examples
 
 ```

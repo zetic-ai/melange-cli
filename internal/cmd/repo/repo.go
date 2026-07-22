@@ -13,6 +13,8 @@ func NewCmdRepo(f *cmdutil.Factory) *cobra.Command {
 		Use:     "repo <command>",
 		Aliases: []string{"project"},
 		Short:   "Manage model repositories",
+		Args:    cmdutil.CommandGroupArgs,
+		RunE:    cmdutil.ShowCommandGroupHelp,
 		Long: `Work with Melange model repositories: list the repositories your token
 can see, inspect a single repository, create new ones, edit their
 metadata, and delete them.

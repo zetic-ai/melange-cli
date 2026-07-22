@@ -7,7 +7,7 @@
   },
   "response": {
     "body": {
-      "derivation_version": 1,
+      "derivation_version": 2,
       "model": {
         "key": "<uuid>",
         "version": 1
@@ -23,7 +23,7 @@
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "tps",
-          "quant_type": "Q4_K_M",
+          "quant_type": "q4_k_m",
           "run": 0,
           "target": "llama_cpp",
           "unit": "tokens_per_s",
@@ -39,7 +39,7 @@
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "ttft_ms",
-          "quant_type": "Q4_K_M",
+          "quant_type": "q4_k_m",
           "run": 0,
           "target": "llama_cpp",
           "unit": "ms",
@@ -55,7 +55,7 @@
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "prompt_tokens",
-          "quant_type": "Q4_K_M",
+          "quant_type": "q4_k_m",
           "run": 0,
           "target": "llama_cpp",
           "unit": "count",
@@ -71,7 +71,7 @@
             "soc": "Snapdragon 8 Elite"
           },
           "metric": "generated_tokens",
-          "quant_type": "Q4_K_M",
+          "quant_type": "q4_k_m",
           "run": 0,
           "target": "llama_cpp",
           "unit": "count",
@@ -82,7 +82,7 @@
           "dataset": "mmlu",
           "device": null,
           "metric": "accuracy_score",
-          "quant_type": "Q4_K_M",
+          "quant_type": "q4_k_m",
           "run": 0,
           "target": "llama_cpp",
           "unit": "score",
@@ -93,7 +93,7 @@
           "dataset": null,
           "device": null,
           "metric": "model_size_bytes",
-          "quant_type": "Q4_K_M",
+          "quant_type": "q4_k_m",
           "run": 0,
           "target": "llama_cpp",
           "unit": "bytes",
@@ -104,13 +104,13 @@
         "accuracy": [
           {
             "dataset": "mmlu",
-            "quant_type": "Q4_K_M",
+            "quant_type": "q4_k_m",
             "score": 0.69,
             "target": "llama_cpp"
           }
         ],
         "quants": {
-          "Q4_K_M": {
+          "q4_k_m": {
             "best_accuracy": 0.69,
             "best_memory_mb": null,
             "best_tps": 42.5,

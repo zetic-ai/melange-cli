@@ -613,6 +613,12 @@ func cases() []contractCase {
 			name:         "error_422_enum",
 			responseBody: func() any { return &gen.ErrorEnvelope{} },
 		},
+		{
+			// An in-progress upload conflict carries the resumable session ID
+			// through the same public error envelope.
+			name:         "create_model_upload_conflict",
+			responseBody: func() any { return &gen.ErrorEnvelope{} },
+		},
 	}
 }
 

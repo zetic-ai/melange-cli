@@ -73,9 +73,12 @@ Content-Type: application/json):
 --input FILE sends a request body as-is (no fields, no implied
 Content-Type; add one with -H if needed). Use "-" to read from stdin.
 
-A 2xx response body is written to stdout verbatim; use -q/--jq or
--t/--template to post-process JSON. Non-2xx bodies also pass through to
-stdout unfiltered while a one-line summary goes to stderr. Pagination,
+A 2xx response body is committed to stdout only after the complete body is read,
+so a timeout or connection reset cannot leave a partial success payload. The
+read remains bounded by the ordinary request budget; set MELANGE_API_TIMEOUT to
+a longer positive duration for a legitimately slow or large response. Use
+-q/--jq or -t/--template to post-process JSON. Non-2xx bodies also pass through
+to stdout unfiltered while a one-line summary goes to stderr. Pagination,
 polling, and Idempotency-Key generation are the caller's responsibility.
 
 Exit codes: 0 success, 1 HTTP or transport error, 2 usage error,
@@ -200,30 +203,12 @@ func runAPI(f *cmdutil.Factory, cmd *cobra.Command, opts *options, pathArg strin
 // (2xx and non-2xx alike), summaries go to stderr, and the exit code follows
 // the response status.
 func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdutil.Exporter, include, silent bool) error {
-	if include {
-		if err := writeHead(ios.Out, resp); err != nil {
-			return err
-		}
-	}
-
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		switch {
-		case silent:
+		if silent && !include {
 			_, err := io.Copy(io.Discard, resp.Body)
 			return err
-		case exporter != nil:
-			data, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return err
-			}
-			if len(data) == 0 {
-				return nil
-			}
-			return exporter.Write(ios, json.RawMessage(data))
-		default:
-			_, err := io.Copy(ios.Out, resp.Body)
-			return err
 		}
+		return writeSuccessfulResponse(ios, resp, exporter, include, silent)
 	}
 
 	// Non-2xx: pass the body through raw (filters only apply to successful
@@ -231,6 +216,11 @@ func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdu
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
+	}
+	if include {
+		if err := writeHead(ios.Out, resp); err != nil {
+			return err
+		}
 	}
 	if !silent {
 		if _, err := ios.Out.Write(data); err != nil {
@@ -256,6 +246,53 @@ func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdu
 		return cmdutil.AuthError{Err: cmdutil.ErrSilent}
 	}
 	return cmdutil.ErrSilent
+}
+
+// writeSuccessfulResponse stages stdout in a private temporary file and only
+// commits it after the response body has been read successfully. A connection
+// reset can therefore never leave agents with a syntactically plausible but
+// incomplete success payload.
+func writeSuccessfulResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdutil.Exporter, include, silent bool) error {
+	stage, err := os.CreateTemp("", "melange-api-response-*")
+	if err != nil {
+		return fmt.Errorf("creating response staging file: %w", err)
+	}
+	stageName := stage.Name()
+	defer func() {
+		_ = stage.Close()
+		_ = os.Remove(stageName)
+	}()
+
+	stagedStreams := *ios
+	stagedStreams.Out = stage
+	if include {
+		if err := writeHead(stage, resp); err != nil {
+			return err
+		}
+	}
+
+	switch {
+	case silent:
+		_, err = io.Copy(io.Discard, resp.Body)
+	case exporter != nil:
+		var data []byte
+		data, err = io.ReadAll(resp.Body)
+		if err == nil && len(data) > 0 {
+			err = exporter.Write(&stagedStreams, json.RawMessage(data))
+		}
+	default:
+		_, err = io.Copy(stage, resp.Body)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := stage.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("rewinding response staging file: %w", err)
+	}
+	if _, err := io.Copy(ios.Out, stage); err != nil {
+		return fmt.Errorf("writing response: %w", err)
+	}
+	return nil
 }
 
 // writeHead prints the status line and response headers (sorted, like

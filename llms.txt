@@ -11,7 +11,9 @@ Full docs: docs/reference/melange.md; live topics: `melange help environment`,
 Global flags: --no-color (disable color), --no-input (disable prompts).
 Structured-output flags on data commands: --json, --jq EXPR (implies --json;
 re-marshals with sorted keys), --template TMPL (Go template; tablerow/timeago/
-json functions). Non-TTY human output is headerless tab-separated values.
+json functions). Non-TTY human output is headerless tab-separated values;
+backslash, tab, carriage return, and newline inside cells are escaped as
+\\, \t, \r, and \n.
 List envelope: {"results": [...], "count": N}; --paginate (alias --all)
 merges all pages into one envelope.
 
@@ -63,7 +65,7 @@ melange auth logout
 Manage model repositories, addressed as ACCOUNT/NAME (account defaults to the
 account behind your token).
 
-melange repo list [--search QUERY] [--limit N] [--paginate|--all] [--json|--jq]
+melange repo list [--search QUERY] [--limit 1..100] [--paginate|--all] [--json|--jq]
   List repositories. TTY: table (REPO, VISIBILITY, TYPE, UPDATED); non-TTY:
   TSV full_name/visibility/model_type/updated_at. Empty result exits 0.
   Example: melange repo list --search whisper --jq '.results[].full_name'
@@ -79,6 +81,18 @@ melange repo create <name> [--private] [--model-type general|llm]
   goes to stderr; --json prints the created resource. 409 name conflict and
   403 missing scope surface as exit 1.
   Example: melange repo create whisper-tiny --private --json --jq .full_name
+
+melange repo edit <[account/]name> [--description S] [--visibility public|private]
+    [--use-case vision|nlp|llm|speech|other] [--tag T ...] [--json|--jq]
+  Patch only the fields passed. --description "" clears it; repeated --tag
+  replaces the complete tag set. Visibility changes are owner-only.
+  Example: melange repo edit acme/whisper-tiny --tag asr --tag tiny --json
+
+melange repo delete <account/name> [--confirm ACCOUNT/NAME]
+  Irreversibly delete a repository. The full name is always required. Agents
+  and other non-interactive callers must repeat it exactly with --confirm;
+  interactive terminals prompt for the full name.
+  Example: melange repo delete acme/obsolete --confirm acme/obsolete
 
 ## melange model
 
@@ -116,13 +130,17 @@ melange model upload MODEL_FILE -R ACCOUNT/REPO [--input FILE ...]
   input_index defaults by input order. Bucketed documents add options.buckets
   ({"index":0,"dims":[1,3,224,224]}) and bucket_index on each input.
 
+Resolve opaque model and target IDs from API results; never invent them:
+  model_key=$(melange model list -R acme/whisper --jq '.results[]|select(.is_default)|.key')
+  target_id=$(melange model targets "$model_key" -R acme/whisper --jq '.results[0].target_id')
+
 melange model status MODEL_KEY -R ACCOUNT/REPO [--wait] [--timeout 30m] [--json]
   Conversion status: state (converting/optimizing/ready/failed), stage,
   downloadable, sanitized failure code. Plain read always exits 0; with --wait
   exit 0 = ready, 1 = failed or timeout.
-  Example: melange model status m_ab12cd -R acme/whisper --jq .state
+  Example: melange model status "$model_key" -R acme/whisper --jq .state
 
-melange model list -R ACCOUNT/REPO [--limit N] [--paginate|--all] [--json|--jq]
+melange model list -R ACCOUNT/REPO [--limit 1..100] [--paginate|--all] [--json|--jq]
   List a repository's models, newest first. TTY: table (KEY, VERSION, TYPE,
   STATE, DEFAULT, CREATED); non-TTY: TSV; --json: the page envelope.
   Example: melange model list -R acme/whisper --jq '.results[]|select(.is_default)|.key'
@@ -130,14 +148,14 @@ melange model list -R ACCOUNT/REPO [--limit N] [--paginate|--all] [--json|--jq]
 melange model view MODEL_KEY -R ACCOUNT/REPO [--json|--jq|--template]
   Show one model (version, type, state, default, source, terminal/download-ready
   flags, failure code, timestamps). Exit 1 includes not-found.
-  Example: melange model view m_ab12cd -R acme/whisper --jq .download_ready
+  Example: melange model view "$model_key" -R acme/whisper --jq .download_ready
 
 melange model targets MODEL_KEY -R ACCOUNT/REPO [--json|--jq]
   List a model's converted targets. TTY table; non-TTY TSV; --json passthrough.
-  Example: melange model targets m_ab12cd -R acme/whisper --json
+  Example: melange model targets "$model_key" -R acme/whisper --json
 
 melange model set-default MODEL_KEY -R ACCOUNT/REPO [--json]
-  Pin the repository's default model. Example: melange model set-default m_ab12cd -R acme/whisper
+  Pin the repository's default model. Example: melange model set-default "$model_key" -R acme/whisper
 
 melange model import HF_REPO -R ACCOUNT/REPO [--wait] [--timeout 30m] [--json]
   Import an LLM from a public HuggingFace repo (repo must be model type llm) and
@@ -158,7 +176,7 @@ melange model download MODEL_KEY -R ACCOUNT/REPO --target TARGET_ID --yes [--out
   Agents/non-TTY runs must pass --yes. --output - supports one artifact and
   writes fully staged, verified bytes; it cannot combine with structured output.
   Download --json redacts signed URLs and is therefore not byte-exact.
-  Example: melange model download m_ab12cd -R acme/whisper --target tm_71 --output ./models --yes
+  Example: melange model download "$model_key" -R acme/whisper --target "$target_id" --output ./models --yes
 
 ## melange report
 
@@ -177,7 +195,7 @@ melange report view MODEL_KEY -R ACCOUNT/REPO [--type general|llm|package]
   cells=tps, plus a per-dataset accuracy section. Package: a mode x metric table.
   Non-TTY: one raw record per line (flat measurement fields) — scripts get the
   measurements, not the derived table. --json is the response byte-for-byte.
-  Example: melange report view m_ab12cd -R acme/whisper --json \
+  Example: melange report view "$model_key" -R acme/whisper --json \
     --jq '[.records[]|select(.ap_type=="npu" and .metric=="latency_ms")]|min_by(.value)'
 
 ## melange library
@@ -185,16 +203,24 @@ melange report view MODEL_KEY -R ACCOUNT/REPO [--type general|llm|package]
 Browse the public model library.
 
 melange library list [--task vision|llm|nlp|speech|other ...] [--search S]
-    [--provider P] [--limit N] [--paginate|--all] [--json|--jq]
+    [--provider P] [--limit 1..100] [--paginate|--all] [--json|--jq]
   List library models. --task repeats (a model matching ANY task is included);
-  --search is a case-insensitive name substring; --provider is exact. TTY: table
-  (MODEL, PROVIDER, TASK, TYPE, CREATED); non-TTY: TSV; --json: the page envelope.
+  --search is case- and separator-insensitive across name and full_name
+  (hyphens, underscores, slashes, and spaces are ignored); --provider is exact.
+  TTY: table (MODEL, PROVIDER, TASK, TYPE, CREATED); non-TTY: TSV; --json: the page envelope.
   Example: melange library list --task vision --provider Zetic --jq '.results[].full_name'
 
 melange library view ACCOUNT/NAME [--json|--jq|--template]
   Show one library model with a readme excerpt (first 10 lines on a TTY). TSV
   omits the readme; --json includes the full text.
   Example: melange library view zetic/whisper-tiny --jq .readme
+
+  ACCOUNT/NAME identifies a public repository, not a converted MODEL_KEY. Read
+  its existing default model and report directly, without importing/uploading:
+    repo=$(melange library list --search QUERY --jq '.results[0].full_name')
+    key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+    melange report view "$key" -R "$repo" --json
+  Never import a library model solely to read its public benchmarks.
 
 melange library providers [--json|--jq]
   List providers (companies) with model counts. TTY: table (NAME, MODELS);

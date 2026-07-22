@@ -10,6 +10,10 @@ inspect a single model (with its readme), and list the providers.
 Data is written to stdout; progress and messages go to stderr. All
 subcommands support --json, --jq, and --template for structured output.
 
+```
+melange library <command> [flags]
+```
+
 ### Examples
 
 ```

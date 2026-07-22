@@ -35,14 +35,17 @@ response is emitted exactly as the API returned it (including the full
 compatibility object).
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
-		Example: `  # List a model's targets
-  melange model targets m_ab12cd -R zetic/whisper-tiny
+		Example: `  # Resolve the default model key
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+
+  # List that model's targets
+  melange model targets "$model_key" -R zetic/whisper-tiny
 
   # Full detail including the compatibility object
-  melange model targets m_ab12cd -R zetic/whisper-tiny --json
+  melange model targets "$model_key" -R zetic/whisper-tiny --json
 
   # Agent pattern: pick the target id for a quant type
-  melange model targets m_ab12cd -R zetic/whisper-tiny --jq '.results[] | select(.quant_type == "q4_k_m") | .target_id'`,
+  melange model targets "$model_key" -R zetic/whisper-tiny --jq '.results[] | select(.quant_type == "q4_k_m") | .target_id'`,
 		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			account, name, err := splitRepoFlag(repo)

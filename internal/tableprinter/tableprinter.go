@@ -110,7 +110,7 @@ func (t *TablePrinter) renderTSV() error {
 	for _, row := range t.rows {
 		cells := make([]string, len(row))
 		for i, f := range row {
-			cells[i] = f.text
+			cells[i] = text.EscapeTSVCell(f.text)
 		}
 		if _, err := fmt.Fprintln(t.ios.Out, strings.Join(cells, "\t")); err != nil {
 			return err

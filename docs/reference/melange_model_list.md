@@ -44,7 +44,7 @@ melange model list [flags]
   -h, --help                help for list
       --jq expression       Filter JSON output using a jq expression (implies --json)
       --json                Output the full result as JSON
-      --limit int           Maximum number of models to fetch (default 30)
+      --limit int           Maximum number of models to fetch (1-100) (default 30)
       --paginate            Fetch all pages of results
   -R, --repo ACCOUNT/REPO   Repository as ACCOUNT/REPO (required)
       --template string     Format JSON output using a Go template (implies --json)

@@ -25,6 +25,24 @@ func NoArgs(cmd *cobra.Command, args []string) error {
 	return wrapPositionalArgs(cobra.NoArgs)(cmd, args)
 }
 
+// CommandGroupArgs rejects unmatched tokens as unknown subcommands. Cobra
+// otherwise treats arguments to a non-runnable parent as a request for help,
+// which can make a typo look like a successful command invocation.
+func CommandGroupArgs(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	return FlagError{Err: fmt.Errorf(
+		"unknown command %q for %q\nRun '%s --help' for usage",
+		args[0], cmd.CommandPath(), cmd.CommandPath())}
+}
+
+// ShowCommandGroupHelp keeps a bare command group useful while making it
+// runnable so CommandGroupArgs is evaluated for unmatched subcommands.
+func ShowCommandGroupHelp(cmd *cobra.Command, _ []string) error {
+	return cmd.Help()
+}
+
 // wrapPositionalArgs converts a validator's errors into FlagError, adding the
 // same usage hint the root command's FlagErrorFunc adds to flag errors.
 func wrapPositionalArgs(validate cobra.PositionalArgs) cobra.PositionalArgs {

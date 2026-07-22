@@ -12,6 +12,8 @@ func NewCmdAuth(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth <command>",
 		Short: "Authenticate melange with the Melange platform",
+		Args:  cmdutil.CommandGroupArgs,
+		RunE:  cmdutil.ShowCommandGroupHelp,
 		Long: `Manage authentication for the Melange API.
 
 Credentials are personal access tokens (prefix ztp_) created at

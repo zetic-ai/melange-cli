@@ -37,9 +37,12 @@ Content-Type: application/json):
 --input FILE sends a request body as-is (no fields, no implied
 Content-Type; add one with -H if needed). Use "-" to read from stdin.
 
-A 2xx response body is written to stdout verbatim; use -q/--jq or
--t/--template to post-process JSON. Non-2xx bodies also pass through to
-stdout unfiltered while a one-line summary goes to stderr. Pagination,
+A 2xx response body is committed to stdout only after the complete body is read,
+so a timeout or connection reset cannot leave a partial success payload. The
+read remains bounded by the ordinary request budget; set MELANGE_API_TIMEOUT to
+a longer positive duration for a legitimately slow or large response. Use
+-q/--jq or -t/--template to post-process JSON. Non-2xx bodies also pass through
+to stdout unfiltered while a one-line summary goes to stderr. Pagination,
 polling, and Idempotency-Key generation are the caller's responsibility.
 
 Exit codes: 0 success, 1 HTTP or transport error, 2 usage error,

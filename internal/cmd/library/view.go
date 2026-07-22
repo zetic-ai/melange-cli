@@ -33,6 +33,15 @@ description, RFC 3339 created_at; readme omitted). With --json the
 resource object — including the full readme — is emitted exactly as the
 API returned it.
 
+Library entries are repository coordinates, not converted model keys. Public
+library repositories can be inspected directly, without importing or uploading:
+
+repo=$(melange library list --search QUERY --jq '.results[0].full_name')
+key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+melange report view "$key" -R "$repo" --json
+
+Never import a library model solely to read its public benchmarks.
+
 Exit codes: 0 success, 1 API error (including not found), 2 usage error,
 4 not authenticated.`,
 		Example: `  # View a library model
@@ -129,7 +138,7 @@ func readmeExcerpt(readme string) (excerpt string, truncated bool) {
 // lines. The readme is omitted (use --json for the full text).
 func printModelTSV(f *cmdutil.Factory, m *gen.LibraryModelDetailResponse) error {
 	var b strings.Builder
-	write := func(k, v string) { b.WriteString(k + "\t" + v + "\n") }
+	write := func(k, v string) { b.WriteString(k + "\t" + text.EscapeTSVCell(v) + "\n") }
 	write("full_name", m.FullName)
 	write("account", m.Account)
 	write("name", m.Name)

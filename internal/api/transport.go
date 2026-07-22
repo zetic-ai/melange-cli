@@ -220,6 +220,12 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if attempt == retryMaxAttempts-1 || req.Context().Err() != nil {
 			return resp, err
 		}
+		if !retryDelayFitsBudget(req.Context(), delay) {
+			// Preserve the actionable HTTP response (especially a 429 with
+			// Retry-After) instead of sleeping until the outer request timeout
+			// replaces it with a generic context deadline error.
+			return resp, err
+		}
 		if resp != nil {
 			// Drain so the connection can be reused, then discard.
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBodyBytes))
@@ -229,6 +235,14 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, sleepErr
 		}
 	}
+}
+
+// retryDelayFitsBudget reports whether the request context can reach another
+// attempt after the proposed delay. A transport without a deadline retains
+// the normal retry policy.
+func retryDelayFitsBudget(ctx context.Context, delay time.Duration) bool {
+	deadline, ok := ctx.Deadline()
+	return !ok || time.Until(deadline) > delay
 }
 
 // isRetryableTransportErr reports whether a transport-level error is worth

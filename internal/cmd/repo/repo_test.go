@@ -216,11 +216,16 @@ func TestRepoListSearchAndLimitFlags(t *testing.T) {
 }
 
 func TestRepoListInvalidLimitExits2(t *testing.T) {
-	e := setup(t)
-	err := run(t, e, "repo", "list", "--limit", "0")
-	require.Error(t, err)
-	assert.Equal(t, 2, cmdutil.ExitCode(err))
-	assert.Empty(t, e.reg.Requests)
+	for _, limit := range []string{"0", "101"} {
+		t.Run(limit, func(t *testing.T) {
+			e := setup(t)
+			err := run(t, e, "repo", "list", "--limit", limit)
+			require.Error(t, err)
+			assert.Equal(t, 2, cmdutil.ExitCode(err))
+			assert.Contains(t, err.Error(), "--limit must be between 1 and 100")
+			assert.Empty(t, e.reg.Requests)
+		})
+	}
 }
 
 func TestRepoListEmptyTTY(t *testing.T) {
@@ -392,6 +397,20 @@ func TestRepoViewNonTTYKeyValueLines(t *testing.T) {
 		"created_at\t2026-02-01T09:00:00Z\n" +
 		fmt.Sprintf("updated_at\t%s\n", testNow.Add(-3*time.Hour).Format(time.RFC3339))
 	assert.Equal(t, want, e.out.String())
+}
+
+func TestRepoViewNonTTYEscapesDescriptionControlCharacters(t *testing.T) {
+	e := setup(t)
+	r := whisperRepo()
+	r.Description = strPtr("first line\nsecond\tcell\\tail\r")
+	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper-tiny"),
+		jsonStub(200, marshal(t, r)))
+
+	require.NoError(t, run(t, e, "repo", "view", "zetic/whisper-tiny"))
+
+	assert.Contains(t, e.out.String(), "description\tfirst line\\nsecond\\tcell\\\\tail\\r\n")
+	assert.Len(t, bytes.Split(bytes.TrimSuffix(e.out.Bytes(), []byte("\n")), []byte("\n")), 8,
+		"each key/value field must occupy exactly one physical line")
 }
 
 func TestRepoViewJSON(t *testing.T) {

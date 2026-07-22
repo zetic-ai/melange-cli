@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -26,6 +27,10 @@ type testEnv struct {
 	out    *bytes.Buffer
 	errOut *bytes.Buffer
 }
+
+type failingReader struct{ err error }
+
+func (r failingReader) Read([]byte) (int, error) { return 0, r.err }
 
 func setup(t *testing.T) *testEnv {
 	t.Helper()
@@ -442,6 +447,35 @@ func TestAPISilentNon2xxStillFails(t *testing.T) {
 	assert.Equal(t, "melange: HTTP 404: missing\n", e.errOut.String())
 }
 
+func TestAPIPartialSuccessfulBodyNeverLeaksToStdout(t *testing.T) {
+	for _, include := range []bool{false, true} {
+		t.Run(fmt.Sprintf("include=%t", include), func(t *testing.T) {
+			e := setup(t)
+			e.reg.Register(httpmock.REST("GET", "/v1/partial"), func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Proto:      "HTTP/1.1",
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(io.MultiReader(
+						bytes.NewBufferString(`{"partial":`),
+						failingReader{err: io.ErrUnexpectedEOF},
+					)),
+					Request: req,
+				}, nil
+			})
+
+			args := []string{"api", "/v1/partial"}
+			if include {
+				args = append(args, "--include")
+			}
+			err := run(t, e, args...)
+			require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+			assert.Empty(t, e.out.String(), "failed response reads must leave the data stream transactional")
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // credential safety
 // ---------------------------------------------------------------------------
@@ -477,4 +511,6 @@ func TestAPIHelpDocumentsContract(t *testing.T) {
 	assert.Contains(t, help, "Exit codes")
 	assert.Contains(t, help, "melange api /v1/me --jq .account.name")
 	assert.Contains(t, help, "--input -")
+	assert.Contains(t, help, "committed to stdout only after the complete body is read")
+	assert.Contains(t, help, "MELANGE_API_TIMEOUT")
 }

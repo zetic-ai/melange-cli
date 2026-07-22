@@ -36,14 +36,17 @@ melange report view MODEL_KEY [flags]
 ### Examples
 
 ```
+  # Resolve the public repository's default model key
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+
   # The dashboard table (auto-derived mode picks)
-  melange report view m_ab12cd -R zetic/whisper-tiny
+  melange report view "$model_key" -R zetic/whisper-tiny
 
   # Force the LLM report (mode selection applies only to general reports)
-  melange report view m_ab12cd -R zetic/whisper-tiny --type llm
+  melange report view "$model_key" -R zetic/whisper-tiny --type llm
 
   # Agent pattern: best NPU latency per device, from the raw records
-  melange report view m_ab12cd -R zetic/whisper-tiny --json \
+  melange report view "$model_key" -R zetic/whisper-tiny --json \
     --jq '[.records[] | select(.ap_type=="npu" and .metric=="latency_ms")]
           | group_by(.device.marketing_name)[]
           | {device: .[0].device.marketing_name, best: (map(.value) | min)}'

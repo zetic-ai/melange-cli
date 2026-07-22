@@ -3,6 +3,7 @@ package root_test
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,6 +88,8 @@ func TestHelpFormattingTopic(t *testing.T) {
 		"timeago",
 		"json (marshal a value)",
 		"tab-separated values with no header",
+		"reversible backslash escapes",
+		`\\, \t, \r, and \n`,
 		`{"results": [...], "count": N}`,
 		"--paginate",
 		"carried through from the\nlast page",
@@ -109,4 +112,49 @@ func TestHelpTopicsHiddenFromRootHelp(t *testing.T) {
 	assert.NotContains(t, out, "Exit codes returned by melange",
 		"help topics must not be listed as commands")
 	assert.Contains(t, out, "melange help environment", "root help must point at the reference topics")
+}
+
+func TestCommandGroupsRejectUnknownSubcommands(t *testing.T) {
+	for _, group := range []string{"auth", "repo", "model", "report", "library"} {
+		t.Run(group, func(t *testing.T) {
+			out, _, err := runRoot(t, group, "typoo")
+			require.Error(t, err)
+			assert.Equal(t, 2, cmdutil.ExitCode(err))
+			assert.Contains(t, err.Error(), "unknown command \"typoo\"")
+			assert.Empty(t, out, "usage errors must not write help to the data stream")
+		})
+	}
+}
+
+func TestCommandGroupsWithoutSubcommandStillShowHelp(t *testing.T) {
+	for _, group := range []string{"auth", "repo", "model", "report", "library"} {
+		t.Run(group, func(t *testing.T) {
+			out, _, err := runRoot(t, group)
+			require.NoError(t, err)
+			assert.Contains(t, out, "Usage:")
+		})
+	}
+}
+
+func TestUserFacingHelpDoesNotPresentCompactFakeIDsAsRunnableExamples(t *testing.T) {
+	commands := [][]string{
+		{"model", "--help"},
+		{"model", "view", "--help"},
+		{"model", "targets", "--help"},
+		{"model", "set-default", "--help"},
+		{"model", "status", "--help"},
+		{"model", "download", "--help"},
+		{"model", "upload", "--help"},
+		{"report", "--help"},
+		{"report", "view", "--help"},
+	}
+	for _, args := range commands {
+		t.Run(strings.Join(args[:len(args)-1], "_"), func(t *testing.T) {
+			out, _, err := runRoot(t, args...)
+			require.NoError(t, err)
+			for _, fictional := range []string{"m_ab12cd", "tm_71", "up_ab12cd"} {
+				assert.NotContains(t, out, fictional)
+			}
+		})
+	}
 }

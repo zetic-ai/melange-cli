@@ -43,7 +43,7 @@ melange repo list [flags]
   -h, --help              help for list
       --jq expression     Filter JSON output using a jq expression (implies --json)
       --json              Output the full result as JSON
-      --limit int         Maximum number of repositories to fetch (default 30)
+      --limit int         Maximum number of repositories to fetch (1-100) (default 30)
       --paginate          Fetch all pages of results
       --search query      Filter repositories by a search query
       --template string   Format JSON output using a Go template (implies --json)

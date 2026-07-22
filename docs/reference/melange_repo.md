@@ -15,6 +15,10 @@ destructive commands always require the full ACCOUNT/NAME.
 Data is written to stdout; progress and messages go to stderr. All
 subcommands support --json, --jq, and --template for structured output.
 
+```
+melange repo <command> [flags]
+```
+
 ### Examples
 
 ```

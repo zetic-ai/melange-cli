@@ -8,8 +8,9 @@ List models in the public library, filtered by task, search text, or
 provider.
 
 --task may be repeated; a model matching ANY given task is included
-(vision, llm, nlp, speech, other). --search is a case-insensitive
-substring match on the model name. --provider is an exact provider name.
+(vision, llm, nlp, speech, other). --search is a case- and separator-insensitive
+substring match on name or full_name (hyphens, underscores, slashes, and spaces
+are ignored). --provider is an exact provider name.
 
 On a terminal this prints a table (MODEL, PROVIDER, TASK, TYPE, CREATED).
 When stdout is not a terminal it prints one model per line as tab-separated
@@ -43,16 +44,16 @@ melange library list [flags]
 ### Options
 
 ```
-      --all               Alias for --paginate
-  -h, --help              help for list
-      --jq expression     Filter JSON output using a jq expression (implies --json)
-      --json              Output the full result as JSON
-      --limit int         Maximum number of models to fetch (default 30)
-      --paginate          Fetch all pages of results
-      --provider name     Exact provider name
-      --search name       Case-insensitive substring match on the model name
-      --task task         Filter by use-case task (repeatable): vision, llm, nlp, speech, other
-      --template string   Format JSON output using a Go template (implies --json)
+      --all                        Alias for --paginate
+  -h, --help                       help for list
+      --jq expression              Filter JSON output using a jq expression (implies --json)
+      --json                       Output the full result as JSON
+      --limit int                  Maximum number of models to fetch (1-100) (default 30)
+      --paginate                   Fetch all pages of results
+      --provider name              Exact provider name
+      --search name or full_name   Case- and separator-insensitive substring match on name or full_name
+      --task task                  Filter by use-case task (repeatable): vision, llm, nlp, speech, other
+      --template string            Format JSON output using a Go template (implies --json)
 ```
 
 ### Options inherited from parent commands

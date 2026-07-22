@@ -128,7 +128,7 @@ func printRepoTSV(ios *iostreams.IOStreams, r *gen.RepoResponse) error {
 	}
 	var b strings.Builder
 	for _, row := range rows {
-		fmt.Fprintf(&b, "%s\t%s\n", row[0], row[1])
+		fmt.Fprintf(&b, "%s\t%s\n", row[0], text.EscapeTSVCell(row[1]))
 	}
 	_, err := fmt.Fprint(ios.Out, b.String())
 	return err

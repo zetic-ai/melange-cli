@@ -4,10 +4,25 @@ package text
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
 const ellipsis = "..."
+
+var tsvEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	"\t", `\t`,
+	"\r", `\r`,
+	"\n", `\n`,
+)
+
+// EscapeTSVCell makes one value safe for the CLI's line-oriented TSV
+// contract. Printable content is unchanged; backslashes and record/column
+// control characters use reversible backslash escapes.
+func EscapeTSVCell(s string) string {
+	return tsvEscaper.Replace(s)
+}
 
 // Truncate shortens s to at most max runes, appending "..." when content is
 // cut. It never splits a multibyte rune. A max at or below the width of the

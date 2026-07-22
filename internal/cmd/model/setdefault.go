@@ -28,14 +28,17 @@ On success a confirmation goes to stderr and stdout stays empty; with
 API returned it.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
-		Example: `  # Set the default model
-  melange model set-default m_ab12cd -R zetic/whisper-tiny
+		Example: `  # Select a model key from the repository
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[0].key')
+
+  # Set that model as the default
+  melange model set-default "$model_key" -R zetic/whisper-tiny
 
   # Machine-readable result
-  melange model set-default m_ab12cd -R zetic/whisper-tiny --json
+  melange model set-default "$model_key" -R zetic/whisper-tiny --json
 
   # Agent pattern: confirm the default flag stuck
-  melange model set-default m_ab12cd -R zetic/whisper-tiny --json --jq .is_default`,
+  melange model set-default "$model_key" -R zetic/whisper-tiny --json --jq .is_default`,
 		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			account, name, err := splitRepoFlag(repo)

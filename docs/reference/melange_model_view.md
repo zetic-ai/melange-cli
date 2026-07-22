@@ -26,14 +26,17 @@ melange model view MODEL_KEY [flags]
 ### Examples
 
 ```
-  # View a model
-  melange model view m_ab12cd -R zetic/whisper-tiny
+  # Resolve the default model key
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+
+  # View that model
+  melange model view "$model_key" -R zetic/whisper-tiny
 
   # Machine-readable detail
-  melange model view m_ab12cd -R zetic/whisper-tiny --json
+  melange model view "$model_key" -R zetic/whisper-tiny --json
 
   # Agent pattern: is the model downloadable yet?
-  melange model view m_ab12cd -R zetic/whisper-tiny --jq .download_ready
+  melange model view "$model_key" -R zetic/whisper-tiny --jq .download_ready
 ```
 
 ### Options

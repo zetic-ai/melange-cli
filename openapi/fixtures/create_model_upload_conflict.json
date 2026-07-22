@@ -1,0 +1,53 @@
+{
+  "request": {
+    "body": {
+      "files": [
+        {
+          "client_file_id": "f-model",
+          "crc32c": "AAAAAA==",
+          "filename": "model.onnx",
+          "role": "model",
+          "size": 10
+        },
+        {
+          "client_file_id": "f-in0",
+          "crc32c": "AAAAAA==",
+          "filename": "input0.bin",
+          "input_index": 0,
+          "role": "input",
+          "size": 4
+        },
+        {
+          "client_file_id": "f-in1",
+          "crc32c": "AAAAAA==",
+          "filename": "input1.bin",
+          "input_index": 1,
+          "role": "input",
+          "size": 4
+        }
+      ],
+      "manifest_version": 2
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "method": "POST",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models"
+  },
+  "response": {
+    "body": {
+      "error": {
+        "active_upload_id": "<id>",
+        "message": "an active upload session already exists for this repository: <uuid>",
+        "type": "conflict_error"
+      },
+      "request_id": "<request_id>",
+      "type": "error"
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Request-ID": "<request_id>"
+    },
+    "status": 409
+  }
+}

@@ -121,6 +121,28 @@ func TestLibraryListInvalidTaskExits2(t *testing.T) {
 	assert.Empty(t, e.reg.Requests)
 }
 
+func TestLibraryListHelpDocumentsSeparatorInsensitiveSearch(t *testing.T) {
+	e := setup(t)
+	require.NoError(t, run(t, e, "library", "list", "--help"))
+
+	help := e.out.String()
+	assert.Contains(t, help, "Case- and separator-insensitive")
+	assert.Contains(t, help, "name or full_name")
+}
+
+func TestLibraryListInvalidLimitExits2(t *testing.T) {
+	for _, limit := range []string{"0", "101"} {
+		t.Run(limit, func(t *testing.T) {
+			e := setup(t)
+			err := run(t, e, "library", "list", "--limit", limit)
+			require.Error(t, err)
+			assert.Equal(t, 2, cmdutil.ExitCode(err))
+			assert.Contains(t, err.Error(), "--limit must be between 1 and 100")
+			assert.Empty(t, e.reg.Requests)
+		})
+	}
+}
+
 func TestLibraryListNonTTYTabSeparated(t *testing.T) {
 	e := setup(t)
 	e.reg.Register(httpmock.REST("GET", modelsPath), jsonStub(200, modelPage(1,
@@ -230,6 +252,24 @@ func TestLibraryViewNonTTYOmitsReadme(t *testing.T) {
 	assert.NotContains(t, out, "secret readme", "TSV omits the readme")
 }
 
+func TestLibraryViewNonTTYEscapesDescriptionControlCharacters(t *testing.T) {
+	e := setup(t)
+	body := strings.Replace(
+		libModelDetail("secret readme"),
+		`"description":"A tiny model"`,
+		`"description":"first line\nsecond\tcell\\tail\r"`,
+		1,
+	)
+	e.reg.Register(httpmock.REST("GET", "/v1/library/models/zetic/whisper-tiny"),
+		jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "library", "view", "zetic/whisper-tiny"))
+
+	assert.Contains(t, e.out.String(), "description\tfirst line\\nsecond\\tcell\\\\tail\\r\n")
+	assert.Len(t, strings.Split(strings.TrimSuffix(e.out.String(), "\n"), "\n"), 9,
+		"each key/value field must occupy exactly one physical line")
+}
+
 func TestLibraryViewJSONByteExact(t *testing.T) {
 	e := setup(t)
 	body := libModelDetail("full readme text")
@@ -253,6 +293,19 @@ func TestLibraryViewBadArgExits2(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 2, cmdutil.ExitCode(err))
 	assert.Empty(t, e.reg.Requests)
+}
+
+func TestLibraryViewHelpBridgesDiscoveryToReportsWithoutConflatingIDs(t *testing.T) {
+	e := setup(t)
+	require.NoError(t, run(t, e, "library", "view", "--help"))
+
+	help := e.out.String()
+	assert.Contains(t, help, "Library entries are repository coordinates, not converted model keys")
+	assert.Contains(t, help, `repo=$(melange library list --search QUERY --jq '.results[0].full_name')`)
+	assert.Contains(t, help, `key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')`)
+	assert.Contains(t, help, `melange report view "$key" -R "$repo" --json`)
+	assert.NotContains(t, help, `melange report view "$key" -R "$repo" --type llm`)
+	assert.Contains(t, help, "Never import a library model solely to read its public benchmarks")
 }
 
 // ---------------------------------------------------------------------------

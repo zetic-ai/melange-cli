@@ -122,6 +122,20 @@ func TestNonTTYTabSeparatedNoHeadersNoTruncationNoColor(t *testing.T) {
 	assert.Equal(t, "zetic/whisper-tiny-but-quite-long\tprivate\n", out.String())
 }
 
+func TestNonTTYEscapesControlCharactersWithinCells(t *testing.T) {
+	ios, _, out, _ := iostreams.Test()
+
+	tp := tableprinter.New(ios)
+	tp.AddField("line1\nline2")
+	tp.AddField("tab\tcarriage\rslash\\")
+	tp.EndRow()
+	require.NoError(t, tp.Render())
+
+	assert.Equal(t, "line1\\nline2\ttab\\tcarriage\\rslash\\\\\n", out.String())
+	assert.Len(t, strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n"), 1,
+		"one logical row must always occupy one physical line")
+}
+
 func TestRenderEmptyTableWritesNothing(t *testing.T) {
 	ios, _, out, _ := iostreams.Test()
 	tp := tableprinter.New(ios)

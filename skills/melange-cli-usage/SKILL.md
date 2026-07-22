@@ -52,8 +52,9 @@ interactive prompts.
 - `--template TMPL` (implies `--json`): Go template with `tablerow`,
   `timeago`, `json` functions.
 - Never parse TTY tables. On a TTY humans get aligned tables; when
-  stdout is not a TTY you get headerless tab-separated values — but for
-  agents, always prefer `--json`/`--jq`.
+  stdout is not a TTY you get headerless tab-separated values. Backslash,
+  tab, carriage return, and newline inside cells are escaped as `\\`, `\t`,
+  `\r`, and `\n`; for agents, always prefer `--json`/`--jq`.
 - List commands emit the page envelope `{"results": [...], "count": N}`
   exactly as returned. `--paginate` (alias `--all`) merges all pages
   into one envelope (top-level keys then re-marshaled in sorted order).
@@ -134,12 +135,13 @@ melange model upload -R acme/whisper-tiny \
 Once a model exists you can inspect it and its converted targets:
 
 ```sh
-melange model list -R acme/whisper-tiny --jq '.results[] | select(.is_default) | .key'
-melange model view m_ab12cd -R acme/whisper-tiny --jq .download_ready
-melange model targets m_ab12cd -R acme/whisper-tiny --json      # converted targets
-melange model set-default m_ab12cd -R acme/whisper-tiny         # pin the repo default
+model_key=$(melange model list -R acme/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+melange model view "$model_key" -R acme/whisper-tiny --jq .download_ready
+melange model targets "$model_key" -R acme/whisper-tiny --json      # converted targets
+melange model set-default "$model_key" -R acme/whisper-tiny         # pin the repo default
 melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait  # import an LLM (repo type llm)
-melange model download m_ab12cd -R acme/whisper-tiny --target tm_71 --output ./models --yes
+target_id=$(melange model targets "$model_key" -R acme/whisper-tiny --jq '.results[0].target_id')
+melange model download "$model_key" -R acme/whisper-tiny --target "$target_id" --output ./models --yes
 ```
 
 Waited upload and import output has one stable shape:
@@ -169,11 +171,13 @@ general → llm → package and shows the first that exists (exit 1 "no report
 available" when none do).
 
 ```sh
+model_key=$(melange model list -R acme/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+
 # The dashboard table on a TTY; --mode auto|speed|accuracy picks the cell value
-melange report view m_ab12cd -R acme/whisper-tiny --mode accuracy
+melange report view "$model_key" -R acme/whisper-tiny --mode accuracy
 
 # Agents: take the raw records, not the derived table
-melange report view m_ab12cd -R acme/whisper-tiny --json \
+melange report view "$model_key" -R acme/whisper-tiny --json \
   --jq '[.records[] | select(.ap_type=="npu" and .metric=="latency_ms")]
         | group_by(.device.marketing_name)[]
         | {device: .[0].device.marketing_name, best: (map(.value)|min)}'
@@ -198,20 +202,36 @@ melange usage quotas --jq .prompts.limit           # limit is null when unlimite
 ```
 
 `library list` filters map to query params (`--task` repeats; a model
-matching ANY task is included). `usage quotas` renders each quota as
-`used/limit (pct%)`, or `unlimited` when the limit is null.
+matching ANY task is included). Its `--search` is case- and
+separator-insensitive across both `name` and `full_name`; hyphens,
+underscores, slashes, and spaces are ignored. `usage quotas` renders each
+quota as `used/limit (pct%)`, or `unlimited` when the limit is null.
+
+Library `ACCOUNT/NAME` values identify public repositories, not converted model
+keys. Inspect their existing models and reports directly; this is a read-only
+path and needs no import or upload:
+
+```sh
+repo=$(melange library list --search QUERY --jq '.results[0].full_name')
+key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default)) + map(select(.state=="ready")) + .)[0].key')
+melange report view "$key" -R "$repo" --json
+```
+
+Never import a library model solely to read its public benchmarks.
 
 ## Resume after interruption
 
 Interrupting an upload (exit 130) preserves the session server-side, and
-the CLI prints the exact resume command on stderr, e.g.:
+the CLI prints the exact resume command on stderr. If that output is no longer
+available, derive the opaque ID from the session list:
 
-```
-Resume with: melange model upload --resume up_ab12cd -R acme/whisper-tiny
+```sh
+session_id=$(melange model upload --sessions -R acme/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id')
+melange model upload --resume "$session_id" -R acme/whisper-tiny
 ```
 
-Run that printed line verbatim — already-uploaded bytes are never
-re-sent. Housekeeping: `melange model upload --sessions -R acme/repo`
+Prefer the exact line printed at interruption time — already-uploaded bytes are
+never re-sent. Housekeeping: `melange model upload --sessions -R acme/repo`
 lists sessions; `--cancel SESSION_ID` discards one.
 
 ## Escape hatch: `melange api`
@@ -255,3 +275,6 @@ one-line summary on stderr; pagination and polling are your job here.
   headers are never logged).
 - `MELANGE_API_TIMEOUT` bounds ordinary API requests (default `30s`);
   upload inactivity and conversion `--wait` have separate timeout flags.
+- Successful `melange api` output is committed only after the complete body
+  is read. Increase `MELANGE_API_TIMEOUT` for legitimately slow or large
+  responses; a failed read leaves stdout empty instead of emitting partial data.

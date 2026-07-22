@@ -17,6 +17,8 @@ func NewCmdLibrary(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "library <command>",
 		Short: "Browse the public model library",
+		Args:  cmdutil.CommandGroupArgs,
+		RunE:  cmdutil.ShowCommandGroupHelp,
 		Long: `Browse the public Melange model library: list and filter models,
 inspect a single model (with its readme), and list the providers.
 

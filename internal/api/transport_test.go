@@ -86,6 +86,27 @@ func TestRetryRetryAfterCappedAt30s(t *testing.T) {
 	assert.Equal(t, 30*time.Second, (*sleeps)[0])
 }
 
+func TestRetryAfterLongerThanRemainingRequestBudgetSurfaces429(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(
+		httpmock.REST("GET", "/v1/me"),
+		httpmock.WithHeader(httpmock.StatusStringResponse(429, "slow down"), "Retry-After", "3"),
+	)
+
+	rt, sleeps := newTestRetry(reg)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://api.zetic.ai/v1/me", nil)
+
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	assert.Len(t, reg.Requests, 1, "an impossible retry must not hide the original 429 behind a deadline")
+	assert.Empty(t, *sleeps, "the retry transport must not sleep past the request budget")
+}
+
 func TestRetryPOSTNotRetried(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("POST", "/v1/models"), httpmock.StatusStringResponse(502, "bad gateway"))

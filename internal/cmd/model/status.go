@@ -39,14 +39,17 @@ key/value lines. --json emits the response exactly as the API returned it.
 
 Exit codes: 0 success, 1 failed outcome under --wait or API error, 2 usage
 error, 4 not authenticated.`,
-		Example: `  # Check status once
-  melange model status m_ab12cd -R zetic/whisper-tiny
+		Example: `  # Resolve the default model key
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+
+  # Check status once
+  melange model status "$model_key" -R zetic/whisper-tiny
 
   # Block until conversion finishes (up to --timeout)
-  melange model status m_ab12cd -R zetic/whisper-tiny --wait
+  melange model status "$model_key" -R zetic/whisper-tiny --wait
 
   # Agent pattern: just the state
-  melange model status m_ab12cd -R zetic/whisper-tiny --jq .state`,
+  melange model status "$model_key" -R zetic/whisper-tiny --jq .state`,
 		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateWaitOptions(doWait, timeout, cmd.Flags().Changed("timeout")); err != nil {

@@ -575,6 +575,10 @@
         "properties": {
           "error": {
             "properties": {
+              "active_upload_id": {
+                "description": "Blocking upload-session id on the create-model-upload active-session conflict (409 only).",
+                "type": "string"
+              },
               "fields": {
                 "description": "Per-field validation details (422 only).",
                 "items": {
@@ -2266,7 +2270,7 @@
         "type": "object"
       },
       "PackageReportSummary": {
-        "description": "`auto` and `speed` are the same selection in v1 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
+        "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
         "properties": {
           "auto": {
             "allOf": [
@@ -2932,12 +2936,12 @@
             }
           },
           {
-            "description": "Case-insensitive substring match on the model name.",
+            "description": "Case- and separator-insensitive substring match on name or full_name.",
             "in": "query",
             "name": "search",
             "required": false,
             "schema": {
-              "description": "Case-insensitive substring match on the model name.",
+              "description": "Case- and separator-insensitive substring match on name or full_name.",
               "nullable": true,
               "title": "Search",
               "type": "string"
@@ -4272,7 +4276,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads": {
       "get": {
-        "description": "Active + recent (last 10) upload sessions for the repo. Fixed small\nwindow, so no pagination on purpose.\n\nResults are ordered by created_at descending, then id descending.",
+        "description": "Active + recent (last 10) upload sessions for the repo.\n\nRequires repository owner or JOINED WRITE-collaborator access even though\nthe PAT scope is READ; upload metadata is not public-repo browse data.\nFixed small window, so no pagination on purpose.\n\nResults are ordered by created_at descending, then id descending.",
         "operationId": "list_model_uploads",
         "parameters": [
           {
@@ -4406,7 +4410,7 @@
         ]
       },
       "get": {
-        "description": "Session detail with per-file staging arrival (one storage list call).",
+        "description": "Session detail with per-file staging arrival (one storage list call).\n\nRequires repository owner or JOINED WRITE-collaborator access even though\nthe PAT scope is READ; private-repo visibility failures remain 404.",
         "operationId": "get_model_upload",
         "parameters": [
           {

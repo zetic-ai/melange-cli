@@ -65,8 +65,10 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 			if paginate && cmd.Flags().Changed("limit") {
 				return cmdutil.FlagError{Err: errors.New("cannot use --limit with --paginate")}
 			}
-			if !paginate && limit < 1 {
-				return cmdutil.FlagError{Err: errors.New("--limit must be at least 1")}
+			if !paginate {
+				if err := cmdutil.ValidatePageLimit(limit); err != nil {
+					return err
+				}
 			}
 
 			g, _, err := genClient(f)
@@ -177,7 +179,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 		},
 	}
 
-	cmd.Flags().IntVar(&limit, "limit", 30, "Maximum number of repositories to fetch")
+	cmd.Flags().IntVar(&limit, "limit", 30, "Maximum number of repositories to fetch (1-100)")
 	cmd.Flags().StringVar(&search, "search", "", "Filter repositories by a search `query`")
 	cmd.Flags().BoolVar(&paginate, "paginate", false, "Fetch all pages of results")
 	cmd.Flags().BoolVar(&all, "all", false, "Alias for --paginate")

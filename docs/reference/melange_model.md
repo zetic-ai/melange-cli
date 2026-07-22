@@ -18,22 +18,26 @@ resume without re-sending acknowledged bytes.
 Model commands always require an explicit -R ACCOUNT/REPO. Data is
 written to stdout; progress and messages go to stderr.
 
+```
+melange model <command> [flags]
+```
+
 ### Examples
 
 ```
   # Upload a model and wait until it is ready
   melange model upload -R zetic/whisper-tiny model.onnx --wait
 
-  # List models and inspect one
-  melange model list -R zetic/whisper-tiny
-  melange model view m_ab12cd -R zetic/whisper-tiny
+  # Resolve the default model key, then inspect it
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+  melange model view "$model_key" -R zetic/whisper-tiny
 
   # Download a converted target (billable)
-  melange model targets m_ab12cd -R zetic/whisper-tiny
-  melange model download m_ab12cd -R zetic/whisper-tiny --target tm_71
+  target_id=$(melange model targets "$model_key" -R zetic/whisper-tiny --jq '.results[0].target_id')
+  melange model download "$model_key" -R zetic/whisper-tiny --target "$target_id"
 
   # Check conversion status
-  melange model status m_ab12cd -R zetic/whisper-tiny
+  melange model status "$model_key" -R zetic/whisper-tiny
 ```
 
 ### Options

@@ -30,8 +30,12 @@ type Error struct {
 	Type       string // e.g. authentication_error, rate_limit_error, invalid_request_error
 	Message    string
 	Fields     []FieldError
-	RequestID  string        // top-level request_id, or X-Request-ID header fallback
-	RetryAfter time.Duration // parsed Retry-After header, 0 if absent
+	// ActiveUploadID is populated by upload-session conflict responses. It is
+	// optional so clients remain compatible with servers that predate the
+	// structured conflict field.
+	ActiveUploadID string
+	RequestID      string        // top-level request_id, or X-Request-ID header fallback
+	RetryAfter     time.Duration // parsed Retry-After header, 0 if absent
 }
 
 // Error implements the error interface.
@@ -61,9 +65,10 @@ func (e *Error) Retryable() bool {
 type errorEnvelope struct {
 	Type  string `json:"type"`
 	Error struct {
-		Type    string       `json:"type"`
-		Message string       `json:"message"`
-		Fields  []FieldError `json:"fields"`
+		Type           string       `json:"type"`
+		Message        string       `json:"message"`
+		Fields         []FieldError `json:"fields"`
+		ActiveUploadID string       `json:"active_upload_id"`
 	} `json:"error"`
 	RequestID string `json:"request_id"`
 }
@@ -104,6 +109,7 @@ func ErrorFrom(status int, header http.Header, body []byte) error {
 		apiErr.Type = env.Error.Type
 		apiErr.Message = env.Error.Message
 		apiErr.Fields = env.Error.Fields
+		apiErr.ActiveUploadID = env.Error.ActiveUploadID
 		if env.RequestID != "" {
 			apiErr.RequestID = env.RequestID
 		}

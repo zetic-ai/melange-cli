@@ -73,12 +73,14 @@ melange model upload MODEL_FILE [flags]
     --bucket 0:1x3x224x224 --input image-224.npy --input mask-224.npy \
     --bucket 1:1x3x384x384 --input image-384.npy --input mask-384.npy --wait
 
-  # Resume an interrupted upload
-  melange model upload --resume up_ab12cd -R zetic/whisper-tiny
+  # Resolve a resumable pre-completion session id
+  session_id=$(melange model upload --sessions -R zetic/whisper-tiny --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id')
 
-  # List and clean up sessions
-  melange model upload --sessions -R zetic/whisper-tiny
-  melange model upload --cancel up_ab12cd -R zetic/whisper-tiny
+  # Resume it
+  melange model upload --resume "$session_id" -R zetic/whisper-tiny
+
+  # Or cancel it instead
+  melange model upload --cancel "$session_id" -R zetic/whisper-tiny
 ```
 
 ### Options

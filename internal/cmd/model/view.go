@@ -37,14 +37,17 @@ API returned it.
 
 Exit codes: 0 success, 1 API error (including not found), 2 usage
 error, 4 not authenticated.`,
-		Example: `  # View a model
-  melange model view m_ab12cd -R zetic/whisper-tiny
+		Example: `  # Resolve the default model key
+  model_key=$(melange model list -R zetic/whisper-tiny --jq '.results[] | select(.is_default) | .key')
+
+  # View that model
+  melange model view "$model_key" -R zetic/whisper-tiny
 
   # Machine-readable detail
-  melange model view m_ab12cd -R zetic/whisper-tiny --json
+  melange model view "$model_key" -R zetic/whisper-tiny --json
 
   # Agent pattern: is the model downloadable yet?
-  melange model view m_ab12cd -R zetic/whisper-tiny --jq .download_ready`,
+  melange model view "$model_key" -R zetic/whisper-tiny --jq .download_ready`,
 		Args: cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			account, name, err := splitRepoFlag(repo)

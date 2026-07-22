@@ -209,6 +209,19 @@ func TestModelListPaginateWithLimitExits2(t *testing.T) {
 	assert.Empty(t, e.reg.Requests)
 }
 
+func TestModelListInvalidLimitExits2(t *testing.T) {
+	for _, limit := range []string{"0", "101"} {
+		t.Run(limit, func(t *testing.T) {
+			e := setup(t)
+			err := run(t, e, "model", "list", "-R", "zetic/whisper", "--limit", limit)
+			require.Error(t, err)
+			assert.Equal(t, 2, cmdutil.ExitCode(err))
+			assert.Contains(t, err.Error(), "--limit must be between 1 and 100")
+			assert.Empty(t, e.reg.Requests)
+		})
+	}
+}
+
 func TestModelListRequiresRepoExits2(t *testing.T) {
 	e := setup(t)
 	err := run(t, e, "model", "list")
