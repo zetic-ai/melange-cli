@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	apicmd "github.com/zetic-ai/melange-cli/internal/cmd/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/auth"
+	"github.com/zetic-ai/melange-cli/internal/cmd/library"
 	"github.com/zetic-ai/melange-cli/internal/cmd/model"
 	"github.com/zetic-ai/melange-cli/internal/cmd/repo"
 	"github.com/zetic-ai/melange-cli/internal/cmd/report"
@@ -81,6 +82,7 @@ melange help formatting.`,
 	cmd.AddCommand(repo.NewCmdRepo(f))
 	cmd.AddCommand(model.NewCmdModel(f))
 	cmd.AddCommand(report.NewCmdReport(f))
+	cmd.AddCommand(library.NewCmdLibrary(f))
 	cmd.AddCommand(apicmd.NewCmdAPI(f))
 
 	// Additional help topics (gh-style): hidden, non-runnable commands that
