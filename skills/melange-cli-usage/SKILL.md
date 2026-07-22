@@ -94,7 +94,7 @@ melange model download m_ab12cd -R acme/whisper-tiny --target tm_71 --output ./m
 
 `model download` is **billable** and idempotent: it authorizes once, then
 streams the artifact; `--output` defaults to the current directory, is
-validated before the charge, and never overwrites an existing file.
+validated before the charge, and never overwrites an existing file without --force.
 
 ## Read benchmark reports: `melange report view`
 
