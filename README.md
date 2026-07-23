@@ -31,13 +31,13 @@ user scope with the open Agent Skills installer:
 
 ```sh
 # Install the skill (user scope recommended; select an agent when prompted)
-npx skills add zetic-ai/melange-cli --skill melange-cli-usage --global
+npx skills add zetic-ai/melange-cli --skill melange-cli --global
 
 # Or install non-interactively for Claude Code
-npx skills add zetic-ai/melange-cli --skill melange-cli-usage --agent claude-code --global --yes
+npx skills add zetic-ai/melange-cli --skill melange-cli --agent claude-code --global --yes
 
 # Update the installed skill after a melange-cli release
-npx skills update melange-cli-usage --global
+npx skills update melange-cli --global
 ```
 
 Installing the `melange` binary does not install or update the agent skill.
@@ -78,7 +78,7 @@ Inputs are grouped by bucket declaration order; preview the exact manifest with
 - Always use `--json` or `--jq` — never parse TTY tables. Plain `--json` preserves the API response bytes except for normalizing the terminator to exactly one trailing newline; waited upload/import commands instead compose `{"model": ..., "status": ...}`, and `model download` redacts signed artifact URLs. Data is on stdout; progress/diagnostics on stderr.
 - Billable `model download` commands keep a host/repository/model/target-bound authorization key in per-user application state and serialize concurrent processes. Output corrections, failed followers, and directory collisions retain the key; follow the reported directory/`--force` remediation without another charge.
 - Branch on stable exit codes: `0` ok, `1` failure (possibly transient), `2` usage error (fix the command), `4` auth, `130` interrupted (upload session preserved).
-- Load the usage skill at [`skills/melange-cli-usage/SKILL.md`](skills/melange-cli-usage/SKILL.md), or the compact surface reference in [`llms.txt`](llms.txt).
+- Load the Melange CLI skill at [`skills/melange-cli/SKILL.md`](skills/melange-cli/SKILL.md), or the compact surface reference in [`llms.txt`](llms.txt).
 - Built-in topics: `melange help environment`, `melange help exit-codes`, `melange help formatting`.
 - Get credential-safe SDK code with `melange deploy options` and `melange deploy guide`; guides use `YOUR_PERSONAL_KEY` and never interpolate the active PAT.
 

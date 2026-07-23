@@ -147,7 +147,10 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 	assert.NotContains(t, readmeQuickStart, "acme/")
 	assert.NotRegexp(t, regexp.MustCompile(`\bm_[[:alnum:]]+\b`), readmeQuickStart)
 
-	skill := readRepoFile(t, "skills/melange-cli-usage/SKILL.md")
+	skill := readRepoFile(t, "skills/melange-cli/SKILL.md")
+	assert.Contains(t, skill, "name: melange-cli\n")
+	assert.Contains(t, skill, "\n# Melange CLI\n")
+	assert.NotContains(t, readme, "melange-cli-usage")
 	skillWorkflow := section(t, skill, "```sh\n# 1. Create a repository", "\n```\n")
 	assert.Contains(t, skillWorkflow,
 		`repo="$(melange repo create whisper-tiny --private --jq .full_name)"`)
@@ -158,9 +161,9 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 
 	llms := readRepoFile(t, "llms.txt")
 	for name, contents := range map[string]string{
-		"README.md":                         readme,
-		"skills/melange-cli-usage/SKILL.md": skill,
-		"llms.txt":                          llms,
+		"README.md":                   readme,
+		"skills/melange-cli/SKILL.md": skill,
+		"llms.txt":                    llms,
 	} {
 		assert.NotContains(t, contents, "byte-for-byte", name)
 		assert.NotContains(t, contents, "byte-exact", name)

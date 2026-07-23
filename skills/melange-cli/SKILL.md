@@ -1,9 +1,9 @@
 ---
-name: melange-cli-usage
+name: melange-cli
 description: "Use when interacting with zetic.ai Melange: uploading/deploying on-device AI models, browsing repos/reports via the melange CLI. Covers auth, JSON output contract, exit-code branching, upload/resume workflows, and the raw API escape hatch."
 ---
 
-# Using the melange CLI
+# Melange CLI
 
 `melange` is the CLI for the Zetic.ai Melange platform (on-device AI model
 deployment and benchmarking). It is agent-first: data goes to stdout,
