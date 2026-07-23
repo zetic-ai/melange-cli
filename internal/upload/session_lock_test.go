@@ -60,6 +60,7 @@ func lockHelperCommand(t *testing.T, stateHome, sessionID, ready, release string
 	cmd.Env = append(os.Environ(),
 		"MELANGE_UPLOAD_LOCK_HELPER=1",
 		"XDG_STATE_HOME="+stateHome,
+		"LOCALAPPDATA="+stateHome,
 		"MELANGE_UPLOAD_LOCK_SESSION="+sessionID,
 		"MELANGE_UPLOAD_LOCK_READY="+ready,
 		"MELANGE_UPLOAD_LOCK_RELEASE="+release,

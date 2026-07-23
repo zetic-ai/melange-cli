@@ -136,6 +136,10 @@ func TestInstallerAcceptsStrictVSemVer(t *testing.T) {
 }
 
 func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
+	attributes := readRepoFile(t, ".gitattributes")
+	assert.Contains(t, attributes, "* text=auto eol=lf",
+		"Windows checkouts must preserve byte-exact OpenAPI and skill artifacts")
+
 	readme := readRepoFile(t, "README.md")
 	readmeQuickStart := section(t, readme, "## Quick start", "## For agents")
 	assert.Contains(t, readmeQuickStart,

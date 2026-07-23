@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -134,6 +135,7 @@ func TestResolveTokenWith(t *testing.T) {
 func TestSetAndDeleteHostAPIKey(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 
 	cfg := &config.Config{}
 	require.NoError(t, cfg.SetHostAPIKey("api.zetic.ai", "ztp_secret"))
@@ -142,7 +144,9 @@ func TestSetAndDeleteHostAPIKey(t *testing.T) {
 	path := filepath.Join(dir, "melange", "config.yml")
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	}
 
 	loaded, err := config.LoadFrom(path)
 	require.NoError(t, err)
@@ -159,6 +163,7 @@ func TestSetAndDeleteHostAPIKey(t *testing.T) {
 func TestDeleteHostAPIKeyMissingIsNoError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 
 	cfg := &config.Config{}
 	assert.NoError(t, cfg.DeleteHostAPIKey("absent.example.com"))

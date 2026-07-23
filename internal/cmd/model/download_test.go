@@ -45,6 +45,9 @@ func TestMain(m *testing.M) {
 	if err := os.Setenv("XDG_STATE_HOME", stateHome); err != nil {
 		panic(err)
 	}
+	if err := os.Setenv("LOCALAPPDATA", stateHome); err != nil {
+		panic(err)
+	}
 	code := m.Run()
 	_ = os.RemoveAll(stateHome)
 	os.Exit(code)
@@ -317,6 +320,7 @@ func TestDownloadReusesPersistedKeyAfterFailureInAnotherProcess(t *testing.T) {
 			"MELANGE_HOST="+srv.URL,
 			"MELANGE_API_KEY=ztp_process_test",
 			"XDG_STATE_HOME="+stateHome,
+			"LOCALAPPDATA="+stateHome,
 			"MELANGE_DEBUG=",
 			"NO_COLOR=1",
 		)
@@ -461,6 +465,9 @@ func buildMelangeBinary(t *testing.T) string {
 	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
 	require.NoError(t, err)
 	bin := filepath.Join(t.TempDir(), "melange")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	build := exec.Command("go", "build", "-o", bin, "./cmd/melange")
 	build.Dir = repoRoot
 	buildOutput, err := build.CombinedOutput()
@@ -473,6 +480,7 @@ func downloadProcessEnv(host, stateHome string) []string {
 		"MELANGE_HOST="+host,
 		"MELANGE_API_KEY=ztp_process_test",
 		"XDG_STATE_HOME="+stateHome,
+		"LOCALAPPDATA="+stateHome,
 		"MELANGE_DEBUG=",
 		"NO_COLOR=1",
 	)

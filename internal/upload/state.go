@@ -62,11 +62,17 @@ func stateDirFor(goos string) (string, error) {
 	}
 	base := os.Getenv("XDG_STATE_HOME")
 	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolving state directory: %w", err)
+		if goos != "windows" {
+			base = os.Getenv("HOME")
 		}
-		base = filepath.Join(home, ".local", "state")
+		if base == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("resolving state directory: %w", err)
+			}
+			base = home
+		}
+		base = filepath.Join(base, ".local", "state")
 	}
 	return filepath.Join(base, "melange", "uploads"), nil
 }

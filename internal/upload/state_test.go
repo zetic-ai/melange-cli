@@ -16,6 +16,7 @@ func stateEnv(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
+	t.Setenv("LOCALAPPDATA", dir)
 	return dir
 }
 

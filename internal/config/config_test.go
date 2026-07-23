@@ -237,7 +237,9 @@ func TestLoadAndSave(t *testing.T) {
 	// Verify file permissions
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	}
 
 	// Load and verify round-trip
 	loaded, err := config.LoadFrom(path)

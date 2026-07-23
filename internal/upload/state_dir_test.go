@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// White-box tests for the GOOS-parameterized state directory choice: there is
-// no Windows CI leg, so the Windows branch is exercised by injecting the GOOS.
+// White-box tests inject GOOS so each platform's directory precedence is
+// deterministic even when the suite runs on a different host.
 
 func TestStateDirForWindowsUsesLocalAppData(t *testing.T) {
 	t.Setenv("LOCALAPPDATA", filepath.Join("C:", "Users", "dev", "AppData", "Local"))

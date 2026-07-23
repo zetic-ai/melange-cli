@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -496,7 +497,7 @@ func TestAPIPartialSuccessfulBodyNeverLeaksToStdout(t *testing.T) {
 
 func TestAPISmallSuccessfulBodyDoesNotRequireTempDirectory(t *testing.T) {
 	e := setup(t)
-	t.Setenv("TMPDIR", t.TempDir()+"/does-not-exist")
+	setUnavailableTempDir(t)
 	e.reg.Register(httpmock.REST("GET", "/v1/me"),
 		httpmock.StatusStringResponse(200, `{"account":{"name":"zetic"}}`))
 
@@ -506,7 +507,7 @@ func TestAPISmallSuccessfulBodyDoesNotRequireTempDirectory(t *testing.T) {
 
 func TestAPILargeSuccessfulBodySpillFailureLeavesStdoutEmpty(t *testing.T) {
 	e := setup(t)
-	t.Setenv("TMPDIR", t.TempDir()+"/does-not-exist")
+	setUnavailableTempDir(t)
 	body := strings.Repeat("x", 2<<20)
 	e.reg.Register(httpmock.REST("GET", "/v1/large"), httpmock.StatusStringResponse(200, body))
 
@@ -514,6 +515,14 @@ func TestAPILargeSuccessfulBodySpillFailureLeavesStdoutEmpty(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "staging response")
 	assert.Empty(t, e.out.String(), "a spill failure must not commit a partial success body")
+}
+
+func setUnavailableTempDir(t *testing.T) {
+	t.Helper()
+	unavailable := filepath.Join(t.TempDir(), "does-not-exist")
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, unavailable)
+	}
 }
 
 func TestAPIFilteredSuccessfulBodyHasActionableMemoryLimit(t *testing.T) {

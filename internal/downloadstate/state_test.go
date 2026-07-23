@@ -30,8 +30,14 @@ func testOutput(path string) downloadstate.Output {
 	return downloadstate.Output{Mode: "directory", Path: path}
 }
 
+func setStateHome(t *testing.T, path string) {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", path)
+	t.Setenv("LOCALAPPDATA", path)
+}
+
 func TestAcquirePersistsOneKeyForAnExactLogicalDownload(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setStateHome(t, t.TempDir())
 	id := testIdentity()
 	output := testOutput(filepath.Join(t.TempDir(), "models"))
 
@@ -52,7 +58,7 @@ func TestStateIsAtomicPrivateAndContainsNoTransferCredentials(t *testing.T) {
 		t.Skip("unix permissions")
 	}
 	base := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", base)
+	setStateHome(t, base)
 	id := testIdentity()
 
 	lease, err := downloadstate.Acquire(context.Background(), id, testOutput(filepath.Join(t.TempDir(), "models")), func() string { return "idem-safe" })
@@ -80,7 +86,7 @@ func TestStateIsAtomicPrivateAndContainsNoTransferCredentials(t *testing.T) {
 }
 
 func TestStateBindsServerTargetToDistinctRecords(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setStateHome(t, t.TempDir())
 	firstID := testIdentity()
 	secondID := testIdentity()
 	secondID.Target = "tm_other"
@@ -96,7 +102,7 @@ func TestStateBindsServerTargetToDistinctRecords(t *testing.T) {
 }
 
 func TestEveryIdentityFieldSelectsADistinctReplayRecord(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setStateHome(t, t.TempDir())
 	base := testIdentity()
 	mutations := map[string]func(*downloadstate.Identity){
 		"host":    func(id *downloadstate.Identity) { id.Host = "https://staging.zetic.ai" },
@@ -116,7 +122,7 @@ func TestEveryIdentityFieldSelectsADistinctReplayRecord(t *testing.T) {
 }
 
 func TestCorruptOrMismatchedStateNeverSilentlyCreatesAChargeableKey(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setStateHome(t, t.TempDir())
 	id := testIdentity()
 	path := mustPath(t, id)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
@@ -147,7 +153,7 @@ func TestCorruptOrMismatchedStateNeverSilentlyCreatesAChargeableKey(t *testing.T
 }
 
 func TestOldValidStateIsReusedInsteadOfRotatingAChargedKey(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setStateHome(t, t.TempDir())
 	id := testIdentity()
 	lease, err := downloadstate.Acquire(context.Background(), id, testOutput("/tmp/models"), func() string { return "old-but-charged-key" })
 	require.NoError(t, err)
@@ -166,7 +172,7 @@ func TestOldValidStateIsReusedInsteadOfRotatingAChargedKey(t *testing.T) {
 }
 
 func TestLeaseReusesPendingKeyAcrossOutputShapeCorrections(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setStateHome(t, t.TempDir())
 	id := testIdentity()
 
 	first, err := downloadstate.Acquire(context.Background(), id, downloadstate.Output{Mode: "stdout", Path: "-"}, func() string { return "charged-key" })
@@ -182,7 +188,7 @@ func TestLeaseReusesPendingKeyAcrossOutputShapeCorrections(t *testing.T) {
 }
 
 func TestCompletedRecoveryTombstoneKeepsKeyButUnrelatedAttemptRotates(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	setStateHome(t, t.TempDir())
 	id := testIdentity()
 	output := downloadstate.Output{Mode: "directory", Path: "/tmp/models"}
 
@@ -206,7 +212,7 @@ func TestCompletedRecoveryTombstoneKeepsKeyButUnrelatedAttemptRotates(t *testing
 
 func TestCompletionTombstoneOwnsProcessesRegisteredBeforeSettlement(t *testing.T) {
 	stateHome := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", stateHome)
+	setStateHome(t, stateHome)
 	id := testIdentity()
 
 	leader, err := downloadstate.Acquire(context.Background(), id, testOutput("/tmp/leader"), func() string { return "shared-key" })

@@ -21,6 +21,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
+	"github.com/zetic-ai/melange-cli/internal/text"
 	"github.com/zetic-ai/melange-cli/internal/upload"
 )
 
@@ -34,7 +35,9 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("LOCALAPPDATA", stateHome)
 	t.Setenv("MELANGE_DEBUG", "")
 	t.Setenv("CLICOLOR_FORCE", "")
 	t.Setenv("NO_COLOR", "")
@@ -286,7 +289,7 @@ func TestUploadDryRunAllowsModelOnly(t *testing.T) {
 	fields := strings.Split(lines[0], "\t")
 	require.Len(t, fields, 5)
 	assert.Equal(t, "model", fields[0])
-	assert.Equal(t, model, fields[1])
+	assert.Equal(t, text.EscapeTSVCell(model), fields[1])
 	assert.Equal(t, "{tag}/model.onnx", fields[4])
 }
 
@@ -309,7 +312,8 @@ func TestUploadDryRunMakesNoRequests(t *testing.T) {
 	// Non-TTY: stable tab-separated rows on stdout.
 	lines := strings.Split(strings.TrimRight(e.out.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
-	assert.Equal(t, fmt.Sprintf("model\t%s\t1000\typ32Ag==\t{tag}/model.onnx", model), lines[0])
+	assert.Equal(t, fmt.Sprintf("model\t%s\t1000\typ32Ag==\t{tag}/model.onnx",
+		text.EscapeTSVCell(model)), lines[0])
 	f1 := strings.Split(lines[1], "\t")
 	require.Len(t, f1, 5)
 	assert.Equal(t, "input", f1[0])
@@ -433,11 +437,14 @@ func TestUploadPersistsSessionURIBeforeSendingBytes(t *testing.T) {
 				issuedFile("f1", "zt_x/inputs/00_audio.bin", sigF1))))
 	e.reg.Register(gcsStart("/sig-f0"), func(req *http.Request) (*http.Response, error) {
 		// Initial state persistence has succeeded. Break the state directory
-		// exactly before the new bearer session URI must be saved.
+		// entry exactly before the new bearer session URI must be saved. Do
+		// not remove the parent because the session lock remains open on
+		// Windows.
 		stateDir, err := upload.StateDir()
 		require.NoError(t, err)
-		require.NoError(t, os.RemoveAll(stateDir))
-		require.NoError(t, os.WriteFile(stateDir, []byte("not a directory"), 0o600))
+		statePath := filepath.Join(stateDir, "up_1.json")
+		require.NoError(t, os.Remove(statePath))
+		require.NoError(t, os.Mkdir(statePath, 0o700))
 		return locationResponse(201, sessF0)(req)
 	})
 
