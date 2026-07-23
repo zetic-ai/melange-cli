@@ -7,8 +7,8 @@ Create a repository
 Create a repository in your account (the account behind your token).
 
 On success a confirmation goes to stderr and stdout stays empty; with
---json the created resource object is written to stdout exactly as the
-API returned it.
+--json, API fields and order are preserved and output ends with exactly one
+trailing newline.
 
 Creating repositories requires a token with the write scope.
 
@@ -56,4 +56,3 @@ melange repo create <name> [flags]
 ### SEE ALSO
 
 * [melange repo](melange_repo.md)	 - Manage model repositories
-

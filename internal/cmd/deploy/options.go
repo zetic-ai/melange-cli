@@ -9,6 +9,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func newCmdOptions(f *cmdutil.Factory) *cobra.Command {
@@ -62,6 +63,6 @@ func printOptions(f *cmdutil.Factory, options *gen.DeploymentOptionsResponse) er
 		}
 		fmt.Fprintf(&b, "  %-10s %s%s — %s\n", mode.Id, mode.Label, marker, mode.Description)
 	}
-	_, err := fmt.Fprint(f.IOStreams.Out, b.String())
+	_, err := fmt.Fprint(f.IOStreams.Out, text.SanitizeTerminal(b.String()))
 	return err
 }

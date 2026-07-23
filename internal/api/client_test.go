@@ -224,7 +224,8 @@ func TestDebugOutputNeverContainsToken(t *testing.T) {
 
 	debug := &bytes.Buffer{}
 	client := newTestClient(t, "https://api.zetic.ai", "ztp_supersecret", reg, debug)
-	resp, err := client.Do(context.Background(), "GET", "/v1/me", nil, nil)
+	resp, err := client.Do(context.Background(), "GET",
+		"/v1/me?access_token=ztp_querysecret#fragment-secret", nil, nil)
 	require.NoError(t, err)
 	defer resp.Body.Close() //nolint:errcheck
 
@@ -232,6 +233,9 @@ func TestDebugOutputNeverContainsToken(t *testing.T) {
 	assert.Contains(t, out, "> GET https://api.zetic.ai/v1/me")
 	assert.Contains(t, out, "< 200")
 	assert.NotContains(t, out, "ztp_supersecret", "token must never appear in debug output")
+	assert.NotContains(t, out, "ztp_querysecret", "query secrets must never appear in debug output")
+	assert.NotContains(t, out, "fragment-secret", "URL fragments must never appear in debug output")
+	assert.NotContains(t, out, "access_token", "debug request lines omit the query entirely")
 	assert.NotContains(t, out, "Authorization", "headers must not be dumped unredacted")
 }
 

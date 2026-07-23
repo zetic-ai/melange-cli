@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +27,17 @@ const meBody = `{
 	"account": {"name": "Zetic", "type": "org"},
 	"token": {
 		"name": "ci-token",
+		"scopes": ["repo:read", "model:write"],
+		"expires_at": "2027-01-01T00:00:00Z",
+		"last_used_at": null
+	}
+}`
+
+const maliciousMeBody = `{
+	"user": {"email": "dev\u001b]52;c;VVNFUl9TRUNSRVQ=\u0007@zetic.ai", "nickname": "dev"},
+	"account": {"name": "Ze\u001b]52;c;QUNDT1VOVF9TRUNSRVQ=\u0007tic", "type": "org"},
+	"token": {
+		"name": "ci\u001b]52;c;VE9LRU5fU0VDUkVU\u0007-token",
 		"scopes": ["repo:read", "model:write"],
 		"expires_at": "2027-01-01T00:00:00Z",
 		"last_used_at": null
@@ -99,6 +113,25 @@ func TestLoginWithTokenHappyPath(t *testing.T) {
 	// The verify request used the pasted token.
 	require.Len(t, e.reg.Requests, 1)
 	assert.Equal(t, "Bearer ztp_abc123", e.reg.Requests[0].Header.Get("Authorization"))
+}
+
+func TestLoginHumanOutputSanitizesServerControlledIdentity(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", "/v1/me"),
+		httpmock.StatusStringResponse(200, maliciousMeBody))
+	e.in.WriteString("ztp_abc123\n")
+
+	require.NoError(t, run(t, e, "auth", "login", "--with-token"))
+
+	output := e.errOut.String()
+	assert.Contains(t, output, "as Zetic")
+	assert.Contains(t, output, "token: ci-token")
+	assert.NotContains(t, output, "\x1b")
+	for _, payload := range []string{
+		"VVNFUl9TRUNSRVQ", "QUNDT1VOVF9TRUNSRVQ", "VE9LRU5fU0VDUkVU",
+	} {
+		assert.NotContains(t, output, payload)
+	}
 }
 
 func TestLoginJSON(t *testing.T) {
@@ -179,16 +212,62 @@ func TestLoginPromptsOnTTY(t *testing.T) {
 	e := setup(t)
 	e.f.IOStreams.SetStdinTTY(true)
 	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
-	e.in.WriteString("ztp_pasted\n")
+	read := false
+	e.f.IOStreams.SetPasswordReader(func(fd int) ([]byte, error) {
+		read = true
+		assert.Equal(t, -1, fd)
+		return []byte("ztp_hidden"), nil
+	})
 
 	err := run(t, e, "auth", "login")
 	require.NoError(t, err)
 
+	assert.True(t, read, "interactive login must use the hidden password reader")
 	assert.Contains(t, e.errOut.String(),
 		"Paste your personal access token (create one at Settings → Personal Access Tokens):")
 	stored, err := keyring.Get("api.zetic.ai")
 	require.NoError(t, err)
-	assert.Equal(t, "ztp_pasted", stored)
+	assert.Equal(t, "ztp_hidden", stored)
+}
+
+func TestLoginHiddenPromptHonorsContextCancellation(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdinTTY(true)
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	defer close(release)
+	e.f.IOStreams.SetPasswordReader(func(int) ([]byte, error) {
+		entered <- struct{}{}
+		<-release
+		return nil, io.EOF
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := root.NewCmdRoot(e.f)
+	cmd.SetIn(e.in)
+	cmd.SetOut(e.out)
+	cmd.SetErr(e.errOut)
+	cmd.SetArgs([]string{"auth", "login"})
+	result := make(chan error, 1)
+	go func() { result <- cmd.ExecuteContext(ctx) }()
+
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("hidden reader was not entered")
+	}
+	cancel()
+	var err error
+	select {
+	case err = <-result:
+	case <-time.After(time.Second):
+		t.Fatal("hidden read did not stop after cancellation")
+	}
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 130, cmdutil.ExitCode(err))
+	assert.Empty(t, e.reg.Requests, "canceled credentials must never be verified or stored")
+	_, keyErr := keyring.Get("api.zetic.ai")
+	assert.ErrorIs(t, keyErr, keyring.ErrNotFound)
 }
 
 func TestLoginKeyringFailureWithoutInsecureStorage(t *testing.T) {
@@ -223,6 +302,36 @@ func TestLoginKeyringFailureWithInsecureStorage(t *testing.T) {
 	cfg, cfgErr := config.Load()
 	require.NoError(t, cfgErr)
 	assert.Equal(t, "ztp_abc123", cfg.Hosts["api.zetic.ai"].APIKey)
+	assert.Equal(t, config.CredentialStorageConfig, cfg.Hosts["api.zetic.ai"].Storage)
+
+	// The next command must use the explicitly selected config credential
+	// without touching the still-unavailable keyring.
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	err = run(t, e, "auth", "status")
+	require.NoError(t, err)
+	require.Len(t, e.reg.Requests, 2)
+	assert.Equal(t, "Bearer ztp_abc123", e.reg.Requests[1].Header.Get("Authorization"))
+}
+
+func TestSuccessfulKeyringLoginClearsPriorConfigStorageSelection(t *testing.T) {
+	e := setup(t)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	require.NoError(t, cfg.SetHostAPIKey("api.zetic.ai", "ztp_old_config"))
+
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	e.in.WriteString("ztp_new_keyring\n")
+	require.NoError(t, run(t, e, "auth", "login", "--with-token"))
+
+	loaded, err := config.Load()
+	require.NoError(t, err)
+	_, exists := loaded.Hosts["api.zetic.ai"]
+	assert.False(t, exists, "a keyring login must clear the prior config selection")
+
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	require.NoError(t, run(t, e, "auth", "status"))
+	require.Len(t, e.reg.Requests, 2)
+	assert.Equal(t, "Bearer ztp_new_keyring", e.reg.Requests[1].Header.Get("Authorization"))
 }
 
 func TestLoginWarnsWhenEnvTokenSet(t *testing.T) {
@@ -235,6 +344,31 @@ func TestLoginWarnsWhenEnvTokenSet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, e.errOut.String(), "MELANGE_API_KEY")
 	assert.Contains(t, e.errOut.String(), "precedence")
+	assert.NotContains(t, e.errOut.String(), "ztp_env")
+	assert.NotContains(t, e.errOut.String(), "ztp_abc123")
+}
+
+func TestLoginWarnsWhenEnvTokenFileSet(t *testing.T) {
+	e := setup(t)
+	keyFile := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(keyFile, []byte("ztp_file_secret\n"), 0600))
+	t.Setenv(config.EnvAPIKeyFile, keyFile)
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	e.in.WriteString("ztp_abc123\n")
+
+	err := run(t, e, "auth", "login", "--with-token", "--json")
+	require.NoError(t, err)
+	assert.Contains(t, e.errOut.String(), config.EnvAPIKeyFile)
+	assert.Contains(t, e.errOut.String(), "takes precedence")
+	assert.NotContains(t, e.errOut.String(), keyFile)
+	assert.NotContains(t, e.errOut.String(), "ztp_file_secret")
+	assert.NotContains(t, e.errOut.String(), "ztp_abc123")
+
+	var got struct {
+		Storage string `json:"storage"`
+	}
+	require.NoError(t, json.Unmarshal(e.out.Bytes(), &got))
+	assert.Equal(t, "keyring", got.Storage)
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +402,35 @@ func TestStatusHappyFromKeyring(t *testing.T) {
 
 	require.Len(t, e.reg.Requests, 1)
 	assert.Equal(t, "Bearer ztp_stored", e.reg.Requests[0].Header.Get("Authorization"))
+}
+
+func TestStatusHumanSanitizesServerControlledIdentityButJSONPreservesValues(t *testing.T) {
+	e := setup(t)
+	require.NoError(t, keyring.Set("api.zetic.ai", "ztp_stored"))
+	e.reg.Register(httpmock.REST("GET", "/v1/me"),
+		httpmock.StatusStringResponse(200, maliciousMeBody))
+
+	require.NoError(t, run(t, e, "auth", "status"))
+	human := e.out.String()
+	assert.Contains(t, human, "Account: Zetic")
+	assert.Contains(t, human, "Token: ci-token")
+	assert.NotContains(t, human, "\x1b")
+	for _, payload := range []string{
+		"VVNFUl9TRUNSRVQ", "QUNDT1VOVF9TRUNSRVQ", "VE9LRU5fU0VDUkVU",
+	} {
+		assert.NotContains(t, human, payload)
+	}
+
+	e.out.Reset()
+	e.reg.Register(httpmock.REST("GET", "/v1/me"),
+		httpmock.StatusStringResponse(200, maliciousMeBody))
+	require.NoError(t, run(t, e, "auth", "status", "--json"))
+	var structured struct {
+		Account string `json:"account"`
+	}
+	require.NoError(t, json.Unmarshal(e.out.Bytes(), &structured))
+	assert.Contains(t, structured.Account, "\x1b]52;")
+	assert.Contains(t, structured.Account, "QUNDT1VOVF9TRUNSRVQ")
 }
 
 func TestStatusInvalidTokenExits4NamingSource(t *testing.T) {
@@ -398,6 +561,26 @@ func TestLogoutNotesEnvStillWins(t *testing.T) {
 	err := run(t, e, "auth", "logout")
 	require.NoError(t, err)
 	assert.Contains(t, e.errOut.String(), "MELANGE_API_KEY")
+}
+
+func TestLogoutRemovesExplicitConfigCredentialWhenKeyringIsLocked(t *testing.T) {
+	e := setup(t)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	require.NoError(t, cfg.SetHostAPIKey("api.zetic.ai", "ztp_config"))
+
+	locked := errors.New("keychain locked")
+	gokeyring.MockInitWithError(locked)
+
+	err = run(t, e, "auth", "logout")
+	require.ErrorIs(t, err, locked)
+	assert.NotContains(t, e.errOut.String(), "✓ Logged out",
+		"a partial storage failure must not be reported as complete success")
+
+	reloaded, loadErr := config.LoadFrom(filepath.Join(config.ConfigDir(), "config.yml"))
+	require.NoError(t, loadErr)
+	_, ok := reloaded.Hosts["api.zetic.ai"]
+	assert.False(t, ok, "the explicitly selected config credential must still be removed")
 }
 
 func TestLogoutExampleDoesNotUseHiddenHostFlag(t *testing.T) {

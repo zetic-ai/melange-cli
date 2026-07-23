@@ -10,6 +10,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 const metricTps = "tps"
@@ -46,7 +47,7 @@ func llmTSV(ios *iostreams.IOStreams, records []gen.LlmReportRecord) error {
 		tp.AddField(deref(r.Dataset))
 		tp.AddField(strconv.Itoa(r.Run))
 		tp.AddField(string(r.Metric))
-		tp.AddField(formatFloat(r.Value))
+		tp.AddField(formatRawFloat(r.Value))
 		tp.AddField(string(r.Unit))
 		tp.EndRow()
 	}
@@ -151,6 +152,6 @@ func llmAccuracy(ios *iostreams.IOStreams, entries []gen.LlmAccuracyEntry) error
 		fmt.Fprintf(&b, "  %-12s %-10s %s\n",
 			orDash(deref(e.Dataset)), orDash(deref(e.QuantType)), formatFloat(e.Score))
 	}
-	_, err := fmt.Fprint(ios.Out, b.String())
+	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
 	return err
 }

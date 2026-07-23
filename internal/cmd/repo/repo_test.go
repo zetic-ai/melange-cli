@@ -489,6 +489,20 @@ func TestRepoCreateHappy(t *testing.T) {
 	assert.Empty(t, e.out.String(), "stdout stays clean without --json")
 }
 
+func TestRepoCreateSanitizesServerControlledConfirmation(t *testing.T) {
+	e := setup(t)
+	created := whisperRepo()
+	created.FullName = "zetic/\x1b]52;c;Q0xJUEJPQVJEX1NFQ1JFVA==\awhisper-tiny"
+	e.reg.Register(httpmock.REST("POST", "/v1/repos"),
+		jsonStub(201, marshal(t, created)))
+
+	require.NoError(t, run(t, e, "repo", "create", "whisper-tiny"))
+
+	assert.Contains(t, e.errOut.String(), "✓ Created repository zetic/whisper-tiny")
+	assert.NotContains(t, e.errOut.String(), "\x1b")
+	assert.NotContains(t, e.errOut.String(), "Q0xJUEJPQVJEX1NFQ1JFVA")
+}
+
 func TestRepoCreateWithFlagsAndJSON(t *testing.T) {
 	e := setup(t)
 	body := marshal(t, whisperRepo())

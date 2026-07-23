@@ -1,13 +1,14 @@
 package repo
 
 import (
-	"bufio"
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func newCmdDelete(f *cmdutil.Factory) *cobra.Command {
@@ -49,7 +50,7 @@ error (including missing/mismatched --confirm), 4 not authenticated.`,
 			}
 			full := account + "/" + name
 
-			if err := confirmDeletion(f, full, confirm); err != nil {
+			if err := confirmDeletion(cmd.Context(), f, full, confirm); err != nil {
 				return err
 			}
 
@@ -65,7 +66,8 @@ error (including missing/mismatched --confirm), 4 not authenticated.`,
 				return aerr
 			}
 
-			fmt.Fprintf(f.IOStreams.ErrOut, "✓ Deleted repository %s\n", full)
+			fmt.Fprintf(f.IOStreams.ErrOut, "✓ Deleted repository %s\n",
+				text.SanitizeTerminalInline(full))
 			return nil
 		},
 	}
@@ -78,7 +80,7 @@ error (including missing/mismatched --confirm), 4 not authenticated.`,
 
 // confirmDeletion gates the destructive call: an exact --confirm value, or an
 // interactive typed-name prompt. Anything else never reaches the API.
-func confirmDeletion(f *cmdutil.Factory, full, confirm string) error {
+func confirmDeletion(ctx context.Context, f *cmdutil.Factory, full, confirm string) error {
 	if confirm != "" {
 		if confirm != full {
 			return cmdutil.FlagError{Err: fmt.Errorf(
@@ -93,8 +95,10 @@ func confirmDeletion(f *cmdutil.Factory, full, confirm string) error {
 			"deleting %s requires confirmation; re-run with --confirm %s", full, full)}
 	}
 
-	fmt.Fprintf(ios.ErrOut, "Deleting %s cannot be undone.\nType %s to confirm: ", full, full)
-	line, err := bufio.NewReader(ios.In).ReadString('\n')
+	safeFull := text.SanitizeTerminalInline(full)
+	fmt.Fprintf(ios.ErrOut, "Deleting %s cannot be undone.\nType %s to confirm: ",
+		safeFull, safeFull)
+	line, err := ios.ReadLine(ctx)
 	if err != nil && strings.TrimSpace(line) == "" {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}

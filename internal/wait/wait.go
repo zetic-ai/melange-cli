@@ -61,6 +61,13 @@ func Poll(ctx context.Context, opts Options, fn func(ctx context.Context) (done 
 		now = time.Now
 	}
 
+	pollCtx := ctx
+	cancel := func() {}
+	if opts.Timeout > 0 {
+		pollCtx, cancel = context.WithTimeoutCause(ctx, opts.Timeout, ErrTimeout)
+	}
+	defer cancel()
+
 	var deadline time.Time
 	if opts.Timeout > 0 {
 		deadline = now().Add(opts.Timeout)
@@ -68,10 +75,13 @@ func Poll(ctx context.Context, opts Options, fn func(ctx context.Context) (done 
 
 	delay := initial
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := pollContextError(ctx, pollCtx); err != nil {
 			return err
 		}
-		done, err := fn(ctx)
+		done, err := fn(pollCtx)
+		if ctxErr := pollContextError(ctx, pollCtx); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			return err
 		}
@@ -88,7 +98,10 @@ func Poll(ctx context.Context, opts Options, fn func(ctx context.Context) (done 
 				d = remaining
 			}
 		}
-		if err := sleep(ctx, d); err != nil {
+		if err := sleep(pollCtx, d); err != nil {
+			if ctxErr := pollContextError(ctx, pollCtx); ctxErr != nil {
+				return ctxErr
+			}
 			return err
 		}
 		delay = time.Duration(float64(delay) * factor)
@@ -96,6 +109,23 @@ func Poll(ctx context.Context, opts Options, fn func(ctx context.Context) (done 
 			delay = ceiling
 		}
 	}
+}
+
+// pollContextError distinguishes Poll's own timeout from cancellation or a
+// deadline inherited from the caller. Context APIs surface both timeout kinds
+// as context.DeadlineExceeded, while callers of Poll need the former mapped to
+// ErrTimeout and the latter preserved.
+func pollContextError(parent, pollCtx context.Context) error {
+	if pollCtx.Err() == nil {
+		return nil
+	}
+	if errors.Is(context.Cause(pollCtx), ErrTimeout) {
+		return ErrTimeout
+	}
+	if err := parent.Err(); err != nil {
+		return err
+	}
+	return pollCtx.Err()
 }
 
 // fullJitter draws uniformly from (0, d].

@@ -2,9 +2,14 @@ package iostreams_test
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
 
@@ -175,4 +180,100 @@ func TestTestReturnsBuffers(t *testing.T) {
 	assert.IsType(t, &bytes.Buffer{}, in)
 	assert.IsType(t, &bytes.Buffer{}, out)
 	assert.IsType(t, &bytes.Buffer{}, errOut)
+}
+
+func TestReadPasswordUsesInjectedHiddenReader(t *testing.T) {
+	streams, _, _, _ := iostreams.Test()
+	streams.SetStdinTTY(true)
+	called := false
+	streams.SetPasswordReader(func(fd int) ([]byte, error) {
+		called = true
+		assert.Equal(t, -1, fd, "in-memory test input has no terminal descriptor")
+		return []byte("ztp_hidden"), nil
+	})
+
+	got, err := streams.ReadPassword(context.Background())
+	require.NoError(t, err)
+	assert.True(t, called)
+	assert.Equal(t, []byte("ztp_hidden"), got)
+}
+
+type blockingReader struct {
+	entered chan<- struct{}
+	release <-chan struct{}
+}
+
+func (r blockingReader) Read([]byte) (int, error) {
+	r.entered <- struct{}{}
+	<-r.release
+	return 0, io.EOF
+}
+
+func TestReadLineReturnsContextCancellationWhileInputIsBlocked(t *testing.T) {
+	streams, _, _, _ := iostreams.Test()
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	defer close(release)
+	streams.In = blockingReader{entered: entered, release: release}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, err := streams.ReadLine(ctx)
+		result <- err
+	}()
+
+	requireReceive(t, entered, "reader was not entered")
+	cancel()
+	require.ErrorIs(t, requireReceive(t, result, "read did not stop after cancellation"), context.Canceled)
+}
+
+func TestReadPasswordReturnsContextCancellationWhileHiddenInputIsBlocked(t *testing.T) {
+	streams, _, _, _ := iostreams.Test()
+	streams.SetStdinTTY(true)
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	defer close(release)
+	streams.SetPasswordReader(func(int) ([]byte, error) {
+		entered <- struct{}{}
+		<-release
+		return nil, io.EOF
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, err := streams.ReadPassword(ctx)
+		result <- err
+	}()
+
+	requireReceive(t, entered, "hidden reader was not entered")
+	cancel()
+	require.ErrorIs(t, requireReceive(t, result, "hidden read did not stop after cancellation"), context.Canceled)
+}
+
+func TestCanceledReadDoesNotStartInput(t *testing.T) {
+	streams, _, _, _ := iostreams.Test()
+	streams.SetPasswordReader(func(int) ([]byte, error) {
+		return nil, errors.New("must not be called")
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, lineErr := streams.ReadLine(ctx)
+	require.ErrorIs(t, lineErr, context.Canceled)
+	_, passwordErr := streams.ReadPassword(ctx)
+	require.ErrorIs(t, passwordErr, context.Canceled)
+}
+
+func requireReceive[T any](t *testing.T, ch <-chan T, message string) T {
+	t.Helper()
+	select {
+	case value := <-ch:
+		return value
+	case <-time.After(time.Second):
+		t.Fatal(message)
+		var zero T
+		return zero
+	}
 }

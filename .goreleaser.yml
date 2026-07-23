@@ -1,13 +1,12 @@
 # GoReleaser configuration (v2 schema) for the melange CLI.
 #
 # Local dry run (no publishing, no secrets needed):
-#   goreleaser release --snapshot --clean
+#   make snapshot
 #
-# Repository secrets required for a real (tag-triggered) release:
-#   GITHUB_TOKEN      provided automatically by GitHub Actions; needs
-#                     `contents: write` to create the GitHub release.
-#   TAP_GITHUB_TOKEN  a PAT with push access to zetic-ai/homebrew-tap,
-#                     used to publish the Homebrew cask.
+# A real tag-triggered release uses the GitHub-provided GITHUB_TOKEN with
+# `contents: write` to create the release. Package-manager publication can be
+# added after a maintained tap exists; the initial release has no external
+# repository dependency.
 version: 2
 
 project_name: melange
@@ -66,22 +65,6 @@ signs:
 # installs it via anchore/sbom-action/download-syft).
 sboms:
   - artifacts: archive
-
-homebrew_casks:
-  - name: melange
-    repository:
-      owner: zetic-ai
-      name: homebrew-tap
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    directory: Casks
-    homepage: https://melange.zetic.ai
-    description: CLI for Melange, zetic.ai's on-device AI model deployment platform
-    license: Apache-2.0
-    # auto: never push the formula for snapshots or prereleases.
-    skip_upload: auto
-    commit_author:
-      name: zetic-release-bot
-      email: bot@zetic.ai
 
 release:
   draft: false

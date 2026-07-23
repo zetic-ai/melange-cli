@@ -19,7 +19,8 @@ func NewCmdDeploy(f *cmdutil.Factory) *cobra.Command {
 		Long: `Inspect the supported SDK stacks and render deterministic deployment
 code for a specific model version. Guides use the public credential placeholder
 YOUR_PERSONAL_KEY; melange never writes the active PAT into code or output.`,
-		Args: cmdutil.NoArgs,
+		Args: cmdutil.CommandGroupArgs,
+		RunE: cmdutil.ShowCommandGroupHelp,
 	}
 	cmd.AddCommand(newCmdOptions(f))
 	cmd.AddCommand(newCmdGuide(f))

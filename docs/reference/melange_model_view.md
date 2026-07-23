@@ -13,8 +13,8 @@ On a terminal this prints a human-readable block. When stdout is not a
 terminal it prints stable tab-separated key/value lines (key, version,
 type, state, is_default, source_type, terminal, download_ready,
 failure_code when present, created_at, updated_at; timestamps in
-RFC 3339). With --json the resource object is emitted exactly as the
-API returned it.
+RFC 3339). With --json, API fields and order are preserved and output ends
+with exactly one trailing newline.
 
 Exit codes: 0 success, 1 API error (including not found), 2 usage
 error, 4 not authenticated.
@@ -59,4 +59,3 @@ melange model view MODEL_KEY [flags]
 ### SEE ALSO
 
 * [melange model](melange_model.md)	 - Upload, browse, and download models
-

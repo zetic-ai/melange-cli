@@ -17,6 +17,10 @@ the model is ready.
 repository. Interrupting an upload (Ctrl-C) preserves the session; resume
 it with --resume SESSION_ID (already-uploaded bytes are never re-sent) or
 discard it with --cancel SESSION_ID. --sessions lists sessions.
+Once the server reports VERIFYING, DISPATCH_PENDING, or CONVERTING,
+--resume replays completion and no longer needs the original local files.
+Cancellation prompts for the exact session ID on a terminal; agents,
+non-interactive runs, and --no-input must pass --yes explicitly.
 
 When a signed upload URL expires, reissue intentionally mints a fresh URL
 and carries no Idempotency-Key; create, complete, and cancel retain their
@@ -83,8 +87,8 @@ melange model upload MODEL_FILE [flags]
   # Resume it
   melange model upload --resume "$session_id" -R zetic/whisper-tiny
 
-  # Or cancel it instead
-  melange model upload --cancel "$session_id" -R zetic/whisper-tiny
+  # Or cancel it instead (scripts must opt in explicitly)
+  melange model upload --cancel "$session_id" -R zetic/whisper-tiny --yes
 ```
 
 ### Options
@@ -106,6 +110,7 @@ melange model upload MODEL_FILE [flags]
       --template string               Format JSON output using a Go template (implies --json)
       --timeout duration              Maximum time to wait with --wait (default 30m0s)
       --wait                          After upload, wait until conversion reaches a terminal state
+  -y, --yes                           Confirm upload-session cancellation without prompting
 ```
 
 ### Options inherited from parent commands
@@ -118,4 +123,3 @@ melange model upload MODEL_FILE [flags]
 ### SEE ALSO
 
 * [melange model](melange_model.md)	 - Upload, browse, and download models
-

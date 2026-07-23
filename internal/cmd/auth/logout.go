@@ -9,6 +9,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/keyring"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func newCmdLogout(f *cmdutil.Factory) *cobra.Command {
@@ -33,10 +34,14 @@ Exit codes: 0 success, 1 storage error.`,
 				return err
 			}
 
+			var deleteErrs []error
 			if err := keyring.Delete(host.hostKey); err != nil && !errors.Is(err, keyring.ErrNotFound) {
-				return err
+				deleteErrs = append(deleteErrs, err)
 			}
 			if err := host.cfg.DeleteHostAPIKey(host.hostKey); err != nil {
+				deleteErrs = append(deleteErrs, err)
+			}
+			if err := errors.Join(deleteErrs...); err != nil {
 				return err
 			}
 
@@ -46,7 +51,8 @@ Exit codes: 0 success, 1 storage error.`,
 					fmt.Fprintf(errOut, "! %s is still set and takes precedence over stored credentials\n", env)
 				}
 			}
-			fmt.Fprintf(errOut, "✓ Logged out of %s\n", host.hostKey)
+			fmt.Fprintf(errOut, "✓ Logged out of %s\n",
+				text.SanitizeTerminalInline(host.hostKey))
 			return nil
 		},
 	}

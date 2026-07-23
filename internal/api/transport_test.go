@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -28,6 +29,25 @@ func newTestRetry(base http.RoundTripper) (*retryTransport, *[]time.Duration) {
 		return nil
 	}
 	return rt, sleeps
+}
+
+func TestDebugRequestLineOmitsURLUserinfoQueryAndFragment(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/models"), httpmock.StatusStringResponse(200, "{}"))
+	var out bytes.Buffer
+	rt := &debugTransport{base: reg, out: &out}
+	req, err := http.NewRequest("GET",
+		"https://user:password@api.zetic.ai/v1/models?signature=query-secret#fragment-secret", nil)
+	require.NoError(t, err)
+
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+
+	assert.Contains(t, out.String(), "> GET https://api.zetic.ai/v1/models\n")
+	for _, secret := range []string{"user", "password", "signature", "query-secret", "fragment-secret"} {
+		assert.NotContains(t, out.String(), secret)
+	}
 }
 
 func TestRetry502ThenSuccessGET(t *testing.T) {

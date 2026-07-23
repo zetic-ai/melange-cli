@@ -2991,7 +2991,7 @@
         "type": "object"
       },
       "UpdateRepoRequest": {
-        "description": "PATCH body for a repo — every field optional; only fields present in\nthe payload are applied (exclude_unset semantics).",
+        "description": "PATCH body for a repo — every field optional; only fields present in\nthe payload are applied (exclude_unset semantics). ``description`` is\nnullable; the other fields may be omitted but cannot be null.",
         "properties": {
           "description": {
             "maxLength": 500,
@@ -3000,7 +3000,6 @@
             "type": "string"
           },
           "is_private": {
-            "nullable": true,
             "title": "Is Private",
             "type": "boolean"
           },
@@ -3011,7 +3010,6 @@
               "type": "string"
             },
             "maxItems": 20,
-            "nullable": true,
             "title": "Tags",
             "type": "array"
           },
@@ -3023,7 +3021,6 @@
               "speech",
               "other"
             ],
-            "nullable": true,
             "title": "Use Case",
             "type": "string"
           }

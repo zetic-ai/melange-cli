@@ -4,8 +4,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -41,7 +44,10 @@ func run(outDir string) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
-	return doc.GenMarkdownTree(cmd, outDir)
+	if err := doc.GenMarkdownTree(cmd, outDir); err != nil {
+		return err
+	}
+	return normalizeMarkdownEndings(outDir)
 }
 
 func disableAutoGenTag(cmd *cobra.Command) {
@@ -49,4 +55,24 @@ func disableAutoGenTag(cmd *cobra.Command) {
 	for _, c := range cmd.Commands() {
 		disableAutoGenTag(c)
 	}
+}
+
+func normalizeMarkdownEndings(root string) error {
+	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".md" {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		normalized := append(bytes.TrimRight(raw, "\r\n"), '\n')
+		if bytes.Equal(raw, normalized) {
+			return nil
+		}
+		return os.WriteFile(path, normalized, 0o644)
+	})
 }

@@ -46,4 +46,3 @@ melange library <command> [flags]
 * [melange library list](melange_library_list.md)	 - List public library models
 * [melange library providers](melange_library_providers.md)	 - List library providers
 * [melange library view](melange_library_view.md)	 - View a library model
-

@@ -16,7 +16,7 @@ LDFLAGS := -s -w \
 # tool directive, so `make gen` is reproducible.
 DOWN_CONVERT := npx --yes @apiture/openapi-down-convert@0.14.2
 
-.PHONY: build test lint fmt gen gen-check docs docs-check fixtures-check
+.PHONY: build test lint fmt gen gen-check docs docs-check snapshot fixtures-check
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) ./cmd/melange
@@ -45,6 +45,9 @@ docs:
 docs-check:
 	$(MAKE) docs
 	git diff --exit-code -- docs/reference
+
+snapshot:
+	goreleaser release --snapshot --clean --skip=sign
 
 # Local-dev sync check for the shared contract fixtures: re-copy the backend's
 # committed fixtures and fail if the local copy drifted. The backend

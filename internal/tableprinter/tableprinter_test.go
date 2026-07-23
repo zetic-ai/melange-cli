@@ -136,6 +136,23 @@ func TestNonTTYEscapesControlCharactersWithinCells(t *testing.T) {
 		"one logical row must always occupy one physical line")
 }
 
+func TestTableNeutralizesServerControlledOSC52(t *testing.T) {
+	ios, _, out, _ := iostreams.Test()
+	tp := tableprinter.New(ios)
+	tp.AddField("safe\x1b]52;c;Y2xpcGJvYXJk\a text")
+	tp.EndRow()
+	require.NoError(t, tp.Render())
+
+	assert.Equal(t, "safe text\n", out.String())
+
+	ios, _, out, _ = iostreams.Test()
+	tp = tableprinter.New(ios)
+	tp.AddField("safe\x1b]52;c;Y2xpcGJvYXJk\x1b\\ text")
+	tp.EndRow()
+	require.NoError(t, tp.Render())
+	assert.Equal(t, "safe text\n", out.String(), "OSC terminated by ST leaves no escape residue")
+}
+
 func TestRenderEmptyTableWritesNothing(t *testing.T) {
 	ios, _, out, _ := iostreams.Test()
 	tp := tableprinter.New(ios)

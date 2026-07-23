@@ -22,4 +22,3 @@ melange version [flags]
 ### SEE ALSO
 
 * [melange](melange.md)	 - melange — on-device AI model deployment & benchmarking
-

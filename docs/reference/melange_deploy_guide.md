@@ -52,4 +52,3 @@ melange deploy guide MODEL_KEY [flags]
 ### SEE ALSO
 
 * [melange deploy](melange_deploy.md)	 - Get SDK deployment code for a model
-

@@ -106,3 +106,8 @@ func TestRemoveStateIdempotent(t *testing.T) {
 	_, err := upload.LoadState("up_abc123")
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
+
+func TestRemoveMissingStateBeforeDirectoryExistsIsNoError(t *testing.T) {
+	stateEnv(t)
+	require.NoError(t, upload.RemoveState("up_absent"))
+}

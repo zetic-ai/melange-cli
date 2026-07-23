@@ -321,7 +321,13 @@ type debugTransport struct {
 }
 
 func (t *debugTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	fmt.Fprintf(t.out, "> %s %s\n", req.Method, req.URL)
+	safeURL := *req.URL
+	safeURL.User = nil
+	safeURL.RawQuery = ""
+	safeURL.ForceQuery = false
+	safeURL.Fragment = ""
+	safeURL.RawFragment = ""
+	fmt.Fprintf(t.out, "> %s %s\n", req.Method, safeURL.String())
 	start := time.Now()
 	resp, err := t.base.RoundTrip(req)
 	elapsed := time.Since(start).Milliseconds()

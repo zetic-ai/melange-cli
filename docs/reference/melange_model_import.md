@@ -12,14 +12,16 @@ rejected by the server. Conversion continues asynchronously — poll it
 with "melange model status", or pass --wait to block until it reaches a
 terminal state.
 
-The request carries an Idempotency-Key, so transient failures are
-retried safely; replaying the same import returns the original model.
+Each invocation carries a fresh Idempotency-Key so transient failures can be
+retried automatically within that invocation without creating a second import.
+Running the command again starts a new import request.
 Pinning a HuggingFace revision is not supported yet: imports always use
 the repository's current default-branch head.
 
 On success a confirmation with the model key, version, and state goes
-to stderr. Without --wait, --json writes the import response exactly as
-the API returned it. With --wait, structured output is
+to stderr. Without --wait, --json preserves the import response bytes except
+for normalizing the terminator to exactly one trailing newline. With --wait,
+structured output is
 {"model": <import response>, "status": <final status>}; for example,
 --jq .model.key returns the imported model key.
 
@@ -65,4 +67,3 @@ melange model import HF_REPO [flags]
 ### SEE ALSO
 
 * [melange model](melange_model.md)	 - Upload, browse, and download models
-

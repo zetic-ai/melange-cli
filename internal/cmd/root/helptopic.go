@@ -39,7 +39,8 @@ var helpTopics = []helpTopic{
 
 Credential precedence (highest wins):
 
-  MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring > config file
+  MELANGE_API_KEY > MELANGE_API_KEY_FILE > explicitly selected config
+  storage > OS keyring > legacy config fallback
 
 Host precedence: --host flag > MELANGE_HOST > config > default.
 Run "melange auth status" to see which source the active token came from.
@@ -76,8 +77,8 @@ retried by the CLI), and 130 as cancellation.
 		long: `Structured output flags shared by melange commands:
 
 --json emits the complete documented result as JSON. For server-backed
-commands the payload is the API response byte-for-byte: field names,
-field order, and unknown fields are preserved exactly. Waited upload and
+commands, field names, field order, and unknown fields are preserved from
+the API response, followed by exactly one trailing newline. Waited upload and
 import commands compose {"model": ..., "status": ...} so agents retain
 both the created model key and terminal status. Safety exception: melange
 model download --json redacts signed artifact URLs because they are
@@ -98,12 +99,12 @@ are tab-separated values with no header — stable for scripts. Backslash
 and control characters inside cells use reversible backslash escapes:
 \\, \t, \r, and \n respectively.
 
-List commands emit the page envelope {"results": [...], "count": N}
-exactly as the API returned it. --paginate fetches every page and
+List commands preserve the API page envelope {"results": [...], "count": N}
+and add exactly one trailing newline. --paginate fetches every page and
 merges all results arrays into one envelope; every other envelope key
 (count, and any keys the server may add) is carried through from the
 last page. The merged envelope is re-marshaled, so its top-level keys
-are emitted in sorted order (single-page --json output stays byte-exact).
+are emitted in sorted order.
 `,
 	},
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 // apPrecisionOrder is the stable column order: ap_type (cpu, gpu, npu) crossed
@@ -54,7 +55,7 @@ func generalTSV(ios *iostreams.IOStreams, records []gen.GeneralReportRecord) err
 		tp.AddField(string(r.Precision))
 		tp.AddField(strconv.Itoa(r.Run))
 		tp.AddField(string(r.Metric))
-		tp.AddField(formatFloat(r.Value))
+		tp.AddField(formatRawFloat(r.Value))
 		tp.AddField(string(r.Unit))
 		tp.EndRow()
 	}
@@ -177,7 +178,7 @@ func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error
 		}
 		fmt.Fprintf(&b, "  %-5s latency %s  snr %s  mem %s\n", prec, orDash(lat), orDash(snr), orDash(mem))
 	}
-	_, err := fmt.Fprint(ios.Out, b.String())
+	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
 	return err
 }
 

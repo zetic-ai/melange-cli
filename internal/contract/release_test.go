@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -49,6 +50,148 @@ func TestReleaseChecksumsAreKeylesslySignedAndInstallerVerifiesThem(t *testing.T
 	assert.Contains(t, installer, "https://token.actions.githubusercontent.com")
 }
 
+func TestLocalSnapshotSkipsSigningWithoutWeakeningReleases(t *testing.T) {
+	makefile := readRepoFile(t, "Makefile")
+	assert.Regexp(t,
+		regexp.MustCompile(`(?m)^snapshot:\n\tgoreleaser release --snapshot --clean --skip=sign$`),
+		makefile,
+		"local snapshots must not require keyless signing credentials")
+
+	config := readRepoFile(t, ".goreleaser.yml")
+	assert.Contains(t, config, "artifacts: checksum",
+		"real releases must continue signing the checksum manifest")
+}
+
+func TestInstallerRejectsInvalidVersionsBeforeNetworkAccess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("installer is a POSIX shell script")
+	}
+
+	binDir := t.TempDir()
+	curlMarker := filepath.Join(t.TempDir(), "curl-called")
+	fakeCurl := filepath.Join(binDir, "curl")
+	require.NoError(t, os.WriteFile(fakeCurl, []byte(
+		"#!/bin/sh\n: > \"$CURL_MARKER\"\nexit 99\n"), 0o755))
+
+	for _, version := range []string{
+		"1.2.3",
+		"v01.2.3",
+		"v1.2",
+		"v1.2.3-01",
+		"v1.2.3/../../escape",
+		"v1.2.3;touch-pwned",
+	} {
+		t.Run(version, func(t *testing.T) {
+			require.NoError(t, os.RemoveAll(curlMarker))
+			cmd := exec.Command("sh", filepath.Join(repoRoot(t), "script", "install.sh"))
+			cmd.Env = append(os.Environ(),
+				"MELANGE_VERSION="+version,
+				"CURL_MARKER="+curlMarker,
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			)
+			output, err := cmd.CombinedOutput()
+			require.Error(t, err)
+			assert.Contains(t, string(output),
+				"MELANGE_VERSION must be a v-prefixed semantic version")
+			assert.NoFileExists(t, curlMarker,
+				"an invalid version must be rejected before curl can use it")
+		})
+	}
+}
+
+func TestInstallerAcceptsStrictVSemVer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("installer is a POSIX shell script")
+	}
+
+	binDir := t.TempDir()
+	curlMarker := filepath.Join(t.TempDir(), "curl-called")
+	fakeCurl := filepath.Join(binDir, "curl")
+	require.NoError(t, os.WriteFile(fakeCurl, []byte(
+		"#!/bin/sh\n: > \"$CURL_MARKER\"\nexit 99\n"), 0o755))
+
+	for _, version := range []string{
+		"v0.0.0",
+		"v1.2.3",
+		"v1.2.3-rc.1",
+		"v1.2.3+build.5",
+		"v1.2.3-rc.1+build.5",
+	} {
+		t.Run(version, func(t *testing.T) {
+			require.NoError(t, os.RemoveAll(curlMarker))
+			cmd := exec.Command("sh", filepath.Join(repoRoot(t), "script", "install.sh"))
+			cmd.Env = append(os.Environ(),
+				"MELANGE_VERSION="+version,
+				"CURL_MARKER="+curlMarker,
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			)
+			output, err := cmd.CombinedOutput()
+			require.Error(t, err, "the fake curl intentionally fails the download")
+			assert.NotContains(t, string(output),
+				"MELANGE_VERSION must be a v-prefixed semantic version")
+			assert.FileExists(t, curlMarker,
+				"a valid version must reach the release download")
+		})
+	}
+}
+
+func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	readmeQuickStart := section(t, readme, "## Quick start", "## For agents")
+	assert.Contains(t, readmeQuickStart,
+		`repo="$(melange repo create whisper-tiny --private --jq .full_name)"`)
+	assert.Contains(t, readmeQuickStart, `-R "$repo"`)
+	assert.Contains(t, readmeQuickStart, "melange usage quotas")
+	assert.Contains(t, readmeQuickStart,
+		`model_key="$(printf '%s\n' "$upload_json" | jq -er .model.key)"`)
+	assert.NotContains(t, readmeQuickStart, "acme/")
+	assert.NotRegexp(t, regexp.MustCompile(`\bm_[[:alnum:]]+\b`), readmeQuickStart)
+
+	skill := readRepoFile(t, "skills/melange-cli-usage/SKILL.md")
+	skillWorkflow := section(t, skill, "```sh\n# 1. Create a repository", "\n```\n")
+	assert.Contains(t, skillWorkflow,
+		`repo="$(melange repo create whisper-tiny --private --jq .full_name)"`)
+	assert.Contains(t, skillWorkflow, "melange usage quotas")
+	assert.Contains(t, skillWorkflow,
+		`model_key="$(printf '%s\n' "$upload_json" | jq -er .model.key)"`)
+	assert.NotContains(t, skillWorkflow, "acme/")
+
+	llms := readRepoFile(t, "llms.txt")
+	for name, contents := range map[string]string{
+		"README.md":                         readme,
+		"skills/melange-cli-usage/SKILL.md": skill,
+		"llms.txt":                          llms,
+	} {
+		assert.NotContains(t, contents, "byte-for-byte", name)
+		assert.NotContains(t, contents, "byte-exact", name)
+		assert.Contains(t, contents, "exactly one trailing newline", name)
+	}
+	assert.NotContains(t, skill, "SDK 1.9.0")
+	assert.NotContains(t, llms, "SDK 1.9.0")
+
+	importHelp := readRepoFile(t, "internal/cmd/model/import.go")
+	assert.Contains(t, importHelp, "retried automatically within that invocation")
+	assert.Contains(t, importHelp, "Running the command again starts a new import request")
+	assert.NotContains(t, importHelp, "replaying the same import returns the original model")
+}
+
+func TestSecurityPolicyUsesPrivateReporting(t *testing.T) {
+	policy := readRepoFile(t, "SECURITY.md")
+	assert.Contains(t, policy, "security@zetic.ai")
+	assert.Contains(t, policy, "v1")
+	assert.Contains(t, strings.ToLower(policy), "do not")
+	assert.Contains(t, strings.ToLower(policy), "public issue")
+}
+
+func section(t *testing.T, contents, start, end string) string {
+	t.Helper()
+	startAt := strings.Index(contents, start)
+	require.NotEqual(t, -1, startAt, "missing section start %q", start)
+	endAt := strings.Index(contents[startAt+len(start):], end)
+	require.NotEqual(t, -1, endAt, "missing section end %q", end)
+	return contents[startAt : startAt+len(start)+endAt]
+}
+
 func TestGitHubActionsArePinnedByCommit(t *testing.T) {
 	majorTag := regexp.MustCompile(`(?m)^\s*-?\s*uses:\s*[^\s]+@v[0-9]+(?:\s|$)`)
 	for _, name := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml"} {
@@ -78,10 +221,18 @@ func TestTagReleaseIsGatedByRepositoryChecks(t *testing.T) {
 	}
 }
 
-func TestHomebrewInstallDoesNotClaimUnsupportedLinuxCask(t *testing.T) {
+func TestInstallDocsDoNotAdvertiseUnavailableHomebrewTap(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
-	assert.Contains(t, readme, "**Homebrew** (macOS):")
-	assert.NotContains(t, readme, "**Homebrew** (macOS/Linux):")
+	assert.NotContains(t, readme, "brew tap zetic-ai/tap")
+	assert.NotContains(t, readme, "brew install melange")
+
+	releaseConfig := readRepoFile(t, ".goreleaser.yml")
+	assert.NotContains(t, releaseConfig, "homebrew_casks:")
+	assert.NotContains(t, releaseConfig, "TAP_GITHUB_TOKEN")
+
+	releaseWorkflow := readRepoFile(t, ".github/workflows/release.yml")
+	assert.NotContains(t, releaseWorkflow, "homebrew-tap")
+	assert.NotContains(t, releaseWorkflow, "TAP_GITHUB_TOKEN")
 }
 
 func TestOpenAPISourceProvenanceMatchesCommittedArtifact(t *testing.T) {

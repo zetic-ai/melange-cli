@@ -1862,7 +1862,8 @@ type RequestedFile struct {
 }
 
 // UpdateRepoRequest PATCH body for a repo — every field optional; only fields present in
-// the payload are applied (exclude_unset semantics).
+// the payload are applied (exclude_unset semantics). “description“ is
+// nullable; the other fields may be omitted but cannot be null.
 type UpdateRepoRequest struct {
 	Description *string                   `json:"description,omitempty"`
 	IsPrivate   *bool                     `json:"is_private,omitempty"`

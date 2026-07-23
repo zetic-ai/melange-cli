@@ -8,7 +8,8 @@ Manage authentication for the Melange API.
 
 Credentials are personal access tokens (prefix ztp_) created at
 Settings → Personal Access Tokens. Tokens are resolved in this order:
-MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring > config file.
+MELANGE_API_KEY > MELANGE_API_KEY_FILE > explicitly selected config storage >
+OS keyring > legacy config fallback.
 
 ```
 melange auth <command> [flags]
@@ -47,4 +48,3 @@ melange auth <command> [flags]
 * [melange auth logout](melange_auth_logout.md)	 - Remove stored credentials for the current host
 * [melange auth status](melange_auth_status.md)	 - Show authentication status for the current host
 * [melange auth token](melange_auth_token.md)	 - Print the resolved authentication token
-

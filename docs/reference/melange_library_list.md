@@ -15,9 +15,9 @@ are ignored). --provider is an exact provider name.
 On a terminal this prints a table (MODEL, PROVIDER, TASK, TYPE, CREATED).
 When stdout is not a terminal it prints one model per line as tab-separated
 values (full_name, provider, use_case, model_type, RFC 3339 created_at)
-with no header — stable for scripts. With --json the page envelope
-{"results": [...], "count": N} is emitted exactly as the API returned it;
---paginate merges all pages into one envelope.
+with no header — stable for scripts. With --json the API page envelope
+{"results": [...], "count": N} is preserved and followed by exactly one
+trailing newline; --paginate merges all pages into one envelope.
 
 An empty result exits 0: a terminal gets "No models found" on stderr,
 scripts get empty stdout, --json gets the envelope with empty results.
@@ -66,4 +66,3 @@ melange library list [flags]
 ### SEE ALSO
 
 * [melange library](melange_library.md)	 - Browse the public model library
-

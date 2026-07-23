@@ -42,9 +42,9 @@ func newCmdList(f *cmdutil.Factory) *cobra.Command {
 On a terminal this prints a table (REPO, VISIBILITY, TYPE, UPDATED).
 When stdout is not a terminal it prints one repository per line as
 tab-separated values (full_name, visibility, model_type, RFC 3339
-updated_at) with no header — stable for scripts. With --json the page
-envelope {"results": [...], "count": N} is emitted exactly as the API
-returned it; --paginate merges all pages into one envelope.
+updated_at) with no header — stable for scripts. With --json the API page
+envelope {"results": [...], "count": N} is preserved and followed by exactly
+one trailing newline; --paginate merges all pages into one envelope.
 
 An empty result exits 0: a terminal gets "No repositories found" on
 stderr, scripts get empty stdout, --json gets the envelope with empty

@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 var supportedLanguages = map[string]gen.GetDeploymentGuideParamsLanguage{
@@ -86,6 +88,9 @@ are model-specific.`,
 			if resp.JSON200 == nil {
 				return fmt.Errorf("unexpected response fetching deployment guide (HTTP %d)", resp.StatusCode())
 			}
+			if resp.JSON200.CredentialPlaceholder != "YOUR_PERSONAL_KEY" {
+				return errors.New("invalid deployment guide: credential_placeholder must be YOUR_PERSONAL_KEY")
+			}
 			if exporter != nil {
 				return exporter.Write(f.IOStreams, json.RawMessage(resp.Body))
 			}
@@ -111,6 +116,6 @@ func printGuide(f *cmdutil.Factory, guide *gen.DeploymentGuideResponse) error {
 	for i, step := range guide.Steps {
 		fmt.Fprintf(&b, "\n## %d. %s\n\n```%s\n%s\n```\n", i+1, step.Title, step.CodeLanguage, strings.TrimRight(step.Code, "\n"))
 	}
-	_, err := fmt.Fprint(f.IOStreams.Out, b.String())
+	_, err := fmt.Fprint(f.IOStreams.Out, text.SanitizeTerminal(b.String()))
 	return err
 }

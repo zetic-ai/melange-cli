@@ -3,6 +3,7 @@ package deploy_test
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,4 +136,55 @@ func TestDeployGuideNeverOffersTokenInterpolation(t *testing.T) {
 	assert.Contains(t, help, "YOUR_PERSONAL_KEY")
 	assert.NotContains(t, help, "unsafe")
 	assert.NotContains(t, help, "current token")
+}
+
+func TestDeployGuideRejectsUnexpectedCredentialPlaceholderBeforeAnyRendering(t *testing.T) {
+	for _, structured := range []bool{false, true} {
+		name := "human"
+		if structured {
+			name = "json"
+		}
+		t.Run(name, func(t *testing.T) {
+			e := setup(t)
+			body := strings.Replace(guideBody, "YOUR_PERSONAL_KEY", "ztp_server_secret", 1)
+			e.reg.Register(
+				httpmock.REST("GET", "/v1/repos/acme/chat/models/abc123/deployment-guide"),
+				jsonStub(200, body),
+			)
+			args := []string{"deploy", "guide", "abc123", "-R", "acme/chat"}
+			if structured {
+				args = append(args, "--json")
+			}
+
+			err := run(t, e, args...)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "credential_placeholder")
+			assert.NotContains(t, err.Error(), "ztp_server_secret")
+			assert.Empty(t, e.out.String(), "an invalid guide must not be rendered in any mode")
+		})
+	}
+}
+
+func TestDeployGuideHumanOutputNeutralizesOSC52ButJSONStaysExact(t *testing.T) {
+	body := strings.Replace(guideBody, "package line",
+		`safe\u001b]52;c;Y2xpcGJvYXJkLXNlY3JldA==\u0007 text`, 1)
+
+	human := setup(t)
+	human.reg.Register(
+		httpmock.REST("GET", "/v1/repos/acme/chat/models/abc123/deployment-guide"),
+		jsonStub(200, body),
+	)
+	require.NoError(t, run(t, human, "deploy", "guide", "abc123", "-R", "acme/chat"))
+	assert.Contains(t, human.out.String(), "safe text")
+	assert.NotContains(t, human.out.String(), "\x1b")
+	assert.NotContains(t, human.out.String(), "Y2xpcGJvYXJk")
+
+	structured := setup(t)
+	structured.reg.Register(
+		httpmock.REST("GET", "/v1/repos/acme/chat/models/abc123/deployment-guide"),
+		jsonStub(200, body),
+	)
+	require.NoError(t, run(t, structured, "deploy", "guide", "abc123", "-R", "acme/chat", "--json"))
+	assert.Equal(t, body+"\n", structured.out.String(),
+		"terminal sanitization must not mutate structured JSON")
 }

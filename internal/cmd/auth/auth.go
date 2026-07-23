@@ -18,7 +18,8 @@ func NewCmdAuth(f *cmdutil.Factory) *cobra.Command {
 
 Credentials are personal access tokens (prefix ztp_) created at
 Settings → Personal Access Tokens. Tokens are resolved in this order:
-MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring > config file.`,
+MELANGE_API_KEY > MELANGE_API_KEY_FILE > explicitly selected config storage >
+OS keyring > legacy config fallback.`,
 		Example: `  # Log in interactively (paste a token)
   melange auth login
 

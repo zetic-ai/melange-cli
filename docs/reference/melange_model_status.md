@@ -14,7 +14,8 @@ outcome: 0 when the model is ready, 1 when processing failed or --timeout
 elapsed.
 
 On a terminal a human summary is printed; otherwise stable tab-separated
-key/value lines. --json emits the response exactly as the API returned it.
+key/value lines. --json preserves API fields and order and adds exactly one
+trailing newline.
 
 Exit codes: 0 success, 1 failed outcome under --wait or API error, 2 usage
 error, 4 not authenticated.
@@ -61,4 +62,3 @@ melange model status MODEL_KEY [flags]
 ### SEE ALSO
 
 * [melange model](melange_model.md)	 - Upload, browse, and download models
-

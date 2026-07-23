@@ -3443,7 +3443,7 @@
         "type": "object"
       },
       "UpdateRepoRequest": {
-        "description": "PATCH body for a repo \u2014 every field optional; only fields present in\nthe payload are applied (exclude_unset semantics).",
+        "description": "PATCH body for a repo \u2014 every field optional; only fields present in\nthe payload are applied (exclude_unset semantics). ``description`` is\nnullable; the other fields may be omitted but cannot be null.",
         "properties": {
           "description": {
             "anyOf": [
@@ -3458,50 +3458,29 @@
             "title": "Description"
           },
           "is_private": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Private"
+            "title": "Is Private",
+            "type": "boolean"
           },
           "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "maxLength": 50,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "maxItems": 20,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tags"
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Tags",
+            "type": "array"
           },
           "use_case": {
-            "anyOf": [
-              {
-                "enum": [
-                  "vision",
-                  "nlp",
-                  "llm",
-                  "speech",
-                  "other"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "enum": [
+              "vision",
+              "nlp",
+              "llm",
+              "speech",
+              "other"
             ],
-            "title": "Use Case"
+            "title": "Use Case",
+            "type": "string"
           }
         },
         "title": "UpdateRepoRequest",

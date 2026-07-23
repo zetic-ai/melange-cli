@@ -25,7 +25,8 @@ rule (speed = lowest latency; accuracy = highest SNR, ties to lower
 latency; auto = fastest run whose SNR exceeds 20 dB, else the speed run).
 When stdout is not a terminal it prints one raw record per line as
 tab-separated values — scripts get the measurements, not the derived
-table. With --json the API response is emitted byte-for-byte.
+table. With --json the API response fields and order are preserved, followed
+by exactly one trailing newline.
 
 Data is written to stdout; progress and messages go to stderr.`,
 		Example: `  # Prefer the public repository's default model; fall back to a ready model

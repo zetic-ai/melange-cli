@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,10 +12,10 @@ import (
 )
 
 // staticLookup returns a keyring-style lookup func backed by a map.
-func staticLookup(m map[string]string) func(host string) (string, bool) {
-	return func(host string) (string, bool) {
+func staticLookup(m map[string]string) func(host string) (string, bool, error) {
+	return func(host string) (string, bool, error) {
 		v, ok := m[host]
-		return v, ok
+		return v, ok, nil
 	}
 }
 
@@ -72,6 +73,39 @@ func TestResolveTokenWith(t *testing.T) {
 		assert.Equal(t, "config", got.Source)
 	})
 
+	t.Run("keyring failure never falls through to config", func(t *testing.T) {
+		t.Setenv(config.EnvAPIKey, "")
+		t.Setenv(config.EnvAPIKeyFile, "")
+		locked := errors.New("keychain locked")
+		cfg := &config.Config{
+			Hosts: map[string]config.HostEntry{host: {APIKey: "cfg-key"}},
+		}
+		got, err := cfg.ResolveTokenWith(host, func(string) (string, bool, error) {
+			return "", false, locked
+		})
+		require.ErrorIs(t, err, locked)
+		assert.Empty(t, got)
+	})
+
+	t.Run("explicit config storage bypasses unavailable keyring", func(t *testing.T) {
+		t.Setenv(config.EnvAPIKey, "")
+		t.Setenv(config.EnvAPIKeyFile, "")
+		called := false
+		cfg := &config.Config{
+			Hosts: map[string]config.HostEntry{
+				host: {APIKey: "cfg-key", Storage: config.CredentialStorageConfig},
+			},
+		}
+		got, err := cfg.ResolveTokenWith(host, func(string) (string, bool, error) {
+			called = true
+			return "", false, errors.New("keychain locked")
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "cfg-key", got.Value)
+		assert.Equal(t, "config", got.Source)
+		assert.False(t, called, "an explicitly selected config credential must not query keyring")
+	})
+
 	t.Run("empty when nothing set", func(t *testing.T) {
 		t.Setenv(config.EnvAPIKey, "")
 		t.Setenv(config.EnvAPIKeyFile, "")
@@ -113,6 +147,7 @@ func TestSetAndDeleteHostAPIKey(t *testing.T) {
 	loaded, err := config.LoadFrom(path)
 	require.NoError(t, err)
 	assert.Equal(t, "ztp_secret", loaded.Hosts["api.zetic.ai"].APIKey)
+	assert.Equal(t, config.CredentialStorageConfig, loaded.Hosts["api.zetic.ai"].Storage)
 
 	require.NoError(t, cfg.DeleteHostAPIKey("api.zetic.ai"))
 	loaded, err = config.LoadFrom(path)

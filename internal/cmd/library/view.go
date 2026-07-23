@@ -29,9 +29,9 @@ lines, noting when it is truncated).
 On a terminal this prints a human-readable block. When stdout is not a
 terminal it prints stable tab-separated key/value lines (full_name,
 account, name, provider, use_case, model_type, tags as comma-joined,
-description, RFC 3339 created_at; readme omitted). With --json the
-resource object — including the full readme — is emitted exactly as the
-API returned it.
+description, RFC 3339 created_at; readme omitted). With --json, API fields
+and order — including the full readme — are preserved and output ends with
+exactly one trailing newline.
 
 Library entries are repository coordinates, not converted model keys. Public
 library repositories can be inspected directly, without importing or uploading:
@@ -121,7 +121,7 @@ func printModelTTY(f *cmdutil.Factory, m *gen.LibraryModelDetailResponse) error 
 	}
 	fmt.Fprintf(&b, "\nNext: list converted model keys with `melange model list -R %s`.\n", m.FullName)
 	fmt.Fprintf(&b, "Then render code with `melange deploy guide MODEL_KEY -R %s`.\n", m.FullName)
-	_, err := fmt.Fprint(f.IOStreams.Out, b.String())
+	_, err := fmt.Fprint(f.IOStreams.Out, text.SanitizeTerminal(b.String()))
 	return err
 }
 

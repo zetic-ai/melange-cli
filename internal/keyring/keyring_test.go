@@ -52,12 +52,23 @@ func TestLookup(t *testing.T) {
 
 	require.NoError(t, keyring.Set("api.zetic.ai", "ztp_secret"))
 
-	v, ok := keyring.Lookup("api.zetic.ai")
+	v, ok, err := keyring.Lookup("api.zetic.ai")
+	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, "ztp_secret", v)
 
-	_, ok = keyring.Lookup("nothing.example.com")
+	_, ok, err = keyring.Lookup("nothing.example.com")
+	require.NoError(t, err)
 	assert.False(t, ok)
+}
+
+func TestLookupPropagatesKeyringUnavailable(t *testing.T) {
+	locked := errors.New("keychain locked")
+	gokeyring.MockInitWithError(locked)
+
+	_, found, err := keyring.Lookup("api.zetic.ai")
+	assert.False(t, found)
+	require.ErrorIs(t, err, locked)
 }
 
 func TestHostKey(t *testing.T) {

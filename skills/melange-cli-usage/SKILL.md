@@ -30,6 +30,9 @@ prints the resolved token (stdout has nothing else). Set `MELANGE_HOST`
 to target a non-default API host. Pass `--no-input` to guarantee no
 interactive prompts.
 
+Credential precedence is `MELANGE_API_KEY` > `MELANGE_API_KEY_FILE` >
+explicitly selected config storage > OS keyring > legacy config fallback.
+
 ## Exit codes — branch on these
 
 | Code | Meaning | Agent action |
@@ -42,8 +45,9 @@ interactive prompts.
 
 ## Output contract
 
-- `--json`: for server-backed commands the payload is the API response
-  byte-for-byte (field names, order, unknown fields preserved), except:
+- `--json`: for server-backed commands the payload preserves the API response
+  bytes (field names, order, unknown fields preserved) except for normalizing
+  the terminator to exactly one trailing newline. The documented exceptions are:
   `model upload/import --wait` returns the documented
   `{"model": ..., "status": ...}` composite, and `model download`
   replaces signed artifact URLs with `"<redacted>"`.
@@ -56,27 +60,31 @@ interactive prompts.
   tab, carriage return, and newline inside cells are escaped as `\\`, `\t`,
   `\r`, and `\n`; for agents, always prefer `--json`/`--jq`.
 - List commands emit the page envelope `{"results": [...], "count": N}`
-  exactly as returned. `--paginate` (alias `--all`) merges all pages
-  into one envelope (top-level keys then re-marshaled in sorted order).
+  with the same response-byte contract. `--paginate` (alias `--all`) merges
+  all pages into one envelope (top-level keys then re-marshaled in sorted order).
 
 ## Core workflow: create repo → upload → wait → status
 
 ```sh
 # 1. Create a repository (in the account behind your token)
-melange repo create whisper-tiny --private --json --jq .full_name
+repo="$(melange repo create whisper-tiny --private --jq .full_name)"
 
 # 2. Preview the upload manifest first (no network calls)
-melange model upload -R acme/whisper-tiny model.onnx --input audio.bin --dry-run
+melange model upload -R "$repo" model.onnx --input audio.bin --dry-run --json
 
-# 3. Upload and wait once; preserve both identity and terminal status
-upload_json="$(melange model upload -R acme/whisper-tiny model.onnx \
-  --input audio.bin --input mask.bin --wait --json)" || exit $?
-model_key="$(printf '%s\n' "$upload_json" | jq -er '.model.key')" || exit $?
+# 3. Check the upload entitlement immediately before uploading
+upload_limit="$(melange usage quotas --jq '.model_uploads.limit // "unlimited"')" || exit $?
+[ "$upload_limit" != "0" ] || { echo "Model uploads are unavailable for this account" >&2; exit 1; }
+
+# 4. Upload and wait once; preserve both identity and terminal status
+upload_json="$(melange model upload -R "$repo" model.onnx \
+  --input audio.bin --wait --json)" || exit $?
+model_key="$(printf '%s\n' "$upload_json" | jq -er .model.key)" || exit $?
 model_state="$(printf '%s\n' "$upload_json" | jq -er '.status.state')" || exit $?
 test "$model_state" = ready || exit 1
 
-# 4. Use the captured key in later structured commands
-melange model view "$model_key" -R acme/whisper-tiny --json
+# 5. Use the captured identifiers in later structured commands
+melange model view "$model_key" -R "$repo" --json
 ```
 
 For bucketed `.pt2` models, declare buckets in the same order as their input
@@ -253,8 +261,8 @@ melange deploy guide "$key" -R "$repo" --language android-kotlin --mode auto
 melange deploy guide "$key" -R "$repo" --language ios-swift --mode speed --json
 ```
 
-The plain guide is ordered Markdown with copyable SDK 1.9.0 snippets. JSON is
-the structured public response. The model repository coordinate, version,
+The plain guide is ordered Markdown with copyable SDK install and inference
+snippets; JSON is the structured public response. The model repository coordinate, version,
 family, selected mode, and SDK language are already resolved. General-model
 tensor creation remains an explicit TODO because shapes and preprocessing are
 model-specific—inspect tensor I/O metadata rather than inventing inputs.
@@ -277,7 +285,9 @@ melange model upload --resume "$session_id" -R acme/whisper-tiny
 
 Prefer the exact line printed at interruption time — already-uploaded bytes are
 never re-sent. Housekeeping: `melange model upload --sessions -R acme/repo`
-lists sessions; `--cancel SESSION_ID` discards one.
+lists sessions. Cancellation prompts for the exact session ID on a terminal;
+agents and other non-interactive callers must pass
+`--cancel SESSION_ID --yes`.
 
 ## Escape hatch: `melange api`
 
@@ -308,14 +318,15 @@ one-line summary on stderr; pagination and polling are your job here.
   is no default repo.
 - Run uploads with `--dry-run` first to validate the manifest cheaply.
 - Never parse TTY tables — use `--json` or `--jq`. Plain `--json` is
-  byte-exact except for waited upload/import composites and redacted model
+  the API response bytes with the terminator normalized to exactly one trailing
+  newline, except for waited upload/import composites and redacted model
   download authorization URLs.
 - Exit 130 means the upload session is preserved; resume with the
   printed `--resume` line instead of restarting the upload.
 - Exit 2 = your invocation is wrong (don't retry); exit 4 = credentials
   (don't retry until fixed).
 - `--jq` output re-marshals (sorted keys); use plain `--json` when you
-  need the byte-exact server payload.
+  need the original server payload bytes.
 - `MELANGE_DEBUG=1` logs request/response lines to stderr (tokens and
   headers are never logged).
 - `MELANGE_API_TIMEOUT` bounds ordinary API requests (default `30s`);

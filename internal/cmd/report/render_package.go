@@ -35,7 +35,7 @@ func packageTSV(ios *iostreams.IOStreams, records []gen.PackageReportRecord) err
 		tp.AddField(deref(r.RunConfiguration.Package))
 		tp.AddField(strconv.Itoa(r.RunConfiguration.Id))
 		tp.AddField(string(r.Metric))
-		tp.AddField(formatFloat(r.Value))
+		tp.AddField(formatRawFloat(r.Value))
 		tp.AddField(string(r.Unit))
 		tp.EndRow()
 	}

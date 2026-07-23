@@ -10,8 +10,8 @@ repository is the default; setting a new one clears the previous.
 The operation is idempotent: repeating it returns the same result.
 
 On success a confirmation goes to stderr and stdout stays empty; with
---json the resulting model summary is written to stdout exactly as the
-API returned it.
+--json, API fields and order are preserved and output ends with exactly one
+trailing newline.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.
 
@@ -55,4 +55,3 @@ melange model set-default MODEL_KEY [flags]
 ### SEE ALSO
 
 * [melange model](melange_model.md)	 - Upload, browse, and download models
-

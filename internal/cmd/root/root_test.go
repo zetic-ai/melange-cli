@@ -46,7 +46,8 @@ func TestHelpEnvironmentTopic(t *testing.T) {
 		"1, true, yes, or on (case-insensitive)",
 		"NO_COLOR",
 		"TERM=dumb",
-		"MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring > config file",
+		"MELANGE_API_KEY > MELANGE_API_KEY_FILE > explicitly selected config",
+		"storage > OS keyring > legacy config fallback",
 		"melange auth status",
 		`${XDG_CONFIG_HOME:-~/.config}/melange/config.yml`,
 		`${XDG_STATE_HOME:-~/.local/state}/melange/uploads`,
@@ -78,7 +79,7 @@ func TestHelpFormattingTopic(t *testing.T) {
 
 	for _, want := range []string{
 		"--json",
-		"byte-for-byte",
+		"exactly one trailing newline",
 		`{"model": ..., "status": ...}`,
 		"model download --json redacts signed artifact URLs",
 		"--jq",
@@ -115,7 +116,7 @@ func TestHelpTopicsHiddenFromRootHelp(t *testing.T) {
 }
 
 func TestCommandGroupsRejectUnknownSubcommands(t *testing.T) {
-	for _, group := range []string{"auth", "repo", "model", "report", "library"} {
+	for _, group := range []string{"auth", "repo", "model", "report", "library", "deploy"} {
 		t.Run(group, func(t *testing.T) {
 			out, _, err := runRoot(t, group, "typoo")
 			require.Error(t, err)
@@ -127,7 +128,7 @@ func TestCommandGroupsRejectUnknownSubcommands(t *testing.T) {
 }
 
 func TestCommandGroupsWithoutSubcommandStillShowHelp(t *testing.T) {
-	for _, group := range []string{"auth", "repo", "model", "report", "library"} {
+	for _, group := range []string{"auth", "repo", "model", "report", "library", "deploy"} {
 		t.Run(group, func(t *testing.T) {
 			out, _, err := runRoot(t, group)
 			require.NoError(t, err)

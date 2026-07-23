@@ -74,14 +74,23 @@ func stateDirFor(goos string) (string, error) {
 // statePath validates the session id (it becomes a path component) and
 // returns the state file path for it.
 func statePath(sessionID string) (string, error) {
-	if !validSessionID(sessionID) {
-		return "", fmt.Errorf("invalid upload session id %q", sessionID)
+	if err := ValidateSessionID(sessionID); err != nil {
+		return "", err
 	}
 	dir, err := StateDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, sessionID+".json"), nil
+}
+
+// ValidateSessionID rejects identifiers that cannot be used as one opaque
+// local state/lock name. Quoted errors keep control bytes inert.
+func ValidateSessionID(sessionID string) error {
+	if !validSessionID(sessionID) {
+		return fmt.Errorf("invalid upload session id %q", sessionID)
+	}
+	return nil
 }
 
 // validSessionID accepts only [A-Za-z0-9._-]+ (no separators, no traversal).
@@ -106,20 +115,40 @@ func (s *State) Save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("creating state directory: %w", err)
+	dir := filepath.Dir(path)
+	if err := secureStateDir(dir); err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding upload state: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	tmp, err := os.CreateTemp(dir, "."+s.SessionID+"-*.tmp")
+	if err != nil {
+		return fmt.Errorf("creating upload state temporary file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) //nolint:errcheck
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("securing upload state temporary file: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("writing upload state: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("syncing upload state: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing upload state: %w", err)
+	}
+	if err := replaceStateFile(tmpPath, path); err != nil {
 		return fmt.Errorf("writing upload state: %w", err)
+	}
+	if err := syncStateDirectory(dir); err != nil {
+		return fmt.Errorf("syncing upload state directory: %w", err)
 	}
 	return nil
 }
@@ -141,6 +170,9 @@ func LoadState(sessionID string) (*State, error) {
 		return nil, fmt.Errorf("%w: delete %s or rerun --resume %s to rebuild from the server (%v)",
 			ErrStateCorrupt, path, sessionID, err)
 	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return nil, fmt.Errorf("securing upload state: %w", err)
+	}
 	return &st, nil
 }
 
@@ -151,8 +183,21 @@ func RemoveState(sessionID string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
+	}
+	return syncStateDirectory(filepath.Dir(path))
+}
+
+func secureStateDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("creating state directory: %w", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return fmt.Errorf("securing state directory: %w", err)
 	}
 	return nil
 }

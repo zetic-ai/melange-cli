@@ -85,6 +85,54 @@ func TestPollTimeout(t *testing.T) {
 	assert.Equal(t, 5, calls)
 }
 
+func TestPollTimeoutBoundsInFlightCallback(t *testing.T) {
+	const timeout = 20 * time.Millisecond
+	callbackDeadline := false
+
+	err := wait.Poll(context.Background(), wait.Options{Timeout: timeout},
+		func(ctx context.Context) (bool, error) {
+			_, callbackDeadline = ctx.Deadline()
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+				return false, errors.New("poll callback was not canceled by the timeout")
+			}
+		})
+
+	assert.True(t, callbackDeadline, "callbacks must receive the advertised deadline")
+	require.ErrorIs(t, err, wait.ErrTimeout)
+}
+
+func TestPollParentCancellationIsNotReportedAsTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelTimer := time.AfterFunc(20*time.Millisecond, cancel)
+	defer cancelTimer.Stop()
+
+	err := wait.Poll(ctx, wait.Options{Timeout: time.Second},
+		func(ctx context.Context) (bool, error) {
+			<-ctx.Done()
+			return false, ctx.Err()
+		})
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, wait.ErrTimeout)
+}
+
+func TestPollParentDeadlineIsNotReportedAsPollTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	err := wait.Poll(ctx, wait.Options{Timeout: time.Second},
+		func(ctx context.Context) (bool, error) {
+			<-ctx.Done()
+			return false, ctx.Err()
+		})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.NotErrorIs(t, err, wait.ErrTimeout)
+}
+
 func TestPollFnErrorStops(t *testing.T) {
 	c := &fakeClock{now: time.Unix(0, 0)}
 	boom := errors.New("boom")

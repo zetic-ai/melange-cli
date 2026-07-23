@@ -2,7 +2,8 @@
 
 melange is the CLI for the Zetic.ai Melange platform (on-device AI model
 deployment and benchmarking). Agent contract: data on stdout, progress and
-diagnostics on stderr; stable exit codes; `--json` is byte-exact API output
+diagnostics on stderr; stable exit codes; `--json` preserves API response bytes
+except for normalizing the terminator to exactly one trailing newline,
 except that waited upload/import commands return a documented model+status
 composite and `model download` redacts signed artifact URLs (credentials).
 Full docs: docs/reference/melange.md; live topics: `melange help environment`,
@@ -33,8 +34,9 @@ MELANGE_HOST          API host (default https://api.zetic.ai)
 MELANGE_API_TIMEOUT   positive duration per ordinary API call (default 30s)
 MELANGE_DEBUG         1/true/yes/on: log request/response lines to stderr
 NO_COLOR, TERM=dumb   disable color
-Credential precedence: MELANGE_API_KEY > MELANGE_API_KEY_FILE > OS keyring >
-config file. Host precedence: --host > MELANGE_HOST > config > default.
+Credential precedence: MELANGE_API_KEY > MELANGE_API_KEY_FILE > explicitly
+selected config storage > OS keyring > legacy config fallback. Host precedence:
+--host > MELANGE_HOST > config > default.
 Config file: ${XDG_CONFIG_HOME:-~/.config}/melange/config.yml
 Upload state: ${XDG_STATE_HOME:-~/.local/state}/melange/uploads
 
@@ -102,7 +104,7 @@ model command; there is no default repository.
 melange model upload MODEL_FILE -R ACCOUNT/REPO [--input FILE ...]
     [--bucket INDEX:DIMxDIM... ...] [--external-data FILE ...]
     [--input-manifest FILE] [--dry-run] [--wait]
-    [--timeout 30m] [--resume ID | --cancel ID | --sessions] [--json]
+    [--timeout 30m] [--resume ID | --cancel ID [--yes] | --sessions] [--json]
   Resumable upload session: manifest (sizes + CRC32C) -> signed-URL streaming
   -> server-side verification -> conversion. --input order defines input_index.
   Inputs are optional; a model-only manifest is valid.
@@ -175,7 +177,7 @@ melange model download MODEL_KEY -R ACCOUNT/REPO --target TARGET_ID --yes [--out
   those collisions retain replay state for the instructed --force rerun.
   Agents/non-TTY runs must pass --yes. --output - supports one artifact and
   writes fully staged, verified bytes; it cannot combine with structured output.
-  Download --json redacts signed URLs and is therefore not byte-exact.
+  Download --json redacts signed URLs rather than preserving the response bytes.
   Example: melange model download "$model_key" -R acme/whisper --target "$target_id" --output ./models --yes
 
 ## melange deploy
@@ -190,7 +192,7 @@ melange deploy options [--json|--jq|--template]
 melange deploy guide MODEL_KEY -R ACCOUNT/REPO
     [--language android-kotlin|android-java|ios-swift|flutter]
     [--mode auto|speed|accuracy] [--json|--jq|--template]
-  Print ordered Markdown with SDK 1.9.0 install and inference snippets. Defaults
+  Print ordered Markdown with SDK install and inference snippets. Defaults
   match the dashboard: android-kotlin + auto. The model repository, key,
   version, family, and selected mode are resolved by public-v1. General model
   tensors remain an explicit model-specific TODO. JSON returns the structured
@@ -214,7 +216,8 @@ melange report view MODEL_KEY -R ACCOUNT/REPO [--type general|llm|package]
   a per-precision summary block follows. LLM: rows=devices, columns=quant_types,
   cells=tps, plus a per-dataset accuracy section. Package: a mode x metric table.
   Non-TTY: one raw record per line (flat measurement fields) — scripts get the
-  measurements, not the derived table. --json is the response byte-for-byte.
+  measurements, not the derived table. --json follows the raw response-byte
+  contract described above.
   Example: melange report view "$model_key" -R acme/whisper --json \
     --jq '[.records[]|select(.ap_type=="npu" and .metric=="latency_ms")]|min_by(.value)'
 

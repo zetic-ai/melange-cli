@@ -35,7 +35,8 @@ outcome: 0 when the model is ready, 1 when processing failed or --timeout
 elapsed.
 
 On a terminal a human summary is printed; otherwise stable tab-separated
-key/value lines. --json emits the response exactly as the API returned it.
+key/value lines. --json preserves API fields and order and adds exactly one
+trailing newline.
 
 Exit codes: 0 success, 1 failed outcome under --wait or API error, 2 usage
 error, 4 not authenticated.`,
@@ -116,16 +117,18 @@ func printStatus(f *cmdutil.Factory, exporter *cmdutil.Exporter, s *gen.ModelSta
 			state += fmt.Sprintf(" (stage: %s)", *s.Stage)
 		}
 		now := time.Now()
-		fmt.Fprintf(ios.Out, "%s in %s\n", key, repo)
-		fmt.Fprintf(ios.Out, "State:           %s\n", state)
-		fmt.Fprintf(ios.Out, "Terminal:        %s\n", yesNo(s.Terminal))
-		fmt.Fprintf(ios.Out, "Download ready:  %s\n", yesNo(s.DownloadReady))
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s in %s\n", key, repo)
+		fmt.Fprintf(&b, "State:           %s\n", state)
+		fmt.Fprintf(&b, "Terminal:        %s\n", yesNo(s.Terminal))
+		fmt.Fprintf(&b, "Download ready:  %s\n", yesNo(s.DownloadReady))
 		if fc := deref(s.FailureCode); fc != "" {
-			fmt.Fprintf(ios.Out, "Failure code:    %s\n", fc)
+			fmt.Fprintf(&b, "Failure code:    %s\n", fc)
 		}
-		fmt.Fprintf(ios.Out, "Created:         %s\n", text.RelativeTime(s.CreatedAt, now))
-		fmt.Fprintf(ios.Out, "Updated:         %s\n", text.RelativeTime(s.UpdatedAt, now))
-		return nil
+		fmt.Fprintf(&b, "Created:         %s\n", text.RelativeTime(s.CreatedAt, now))
+		fmt.Fprintf(&b, "Updated:         %s\n", text.RelativeTime(s.UpdatedAt, now))
+		_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
+		return err
 	}
 
 	// Non-TTY contract: tab-separated key/value lines, stable keys.

@@ -11,6 +11,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 var (
@@ -34,8 +35,8 @@ func newCmdCreate(f *cmdutil.Factory) *cobra.Command {
 		Long: `Create a repository in your account (the account behind your token).
 
 On success a confirmation goes to stderr and stdout stays empty; with
---json the created resource object is written to stdout exactly as the
-API returned it.
+--json, API fields and order are preserved and output ends with exactly one
+trailing newline.
 
 Creating repositories requires a token with the write scope.
 
@@ -109,7 +110,8 @@ Exit codes: 0 created, 1 API error (including a 409 name conflict and
 			}
 
 			ios := f.IOStreams
-			fmt.Fprintf(ios.ErrOut, "✓ Created repository %s\n", repo.FullName)
+			fmt.Fprintf(ios.ErrOut, "✓ Created repository %s\n",
+				text.SanitizeTerminalInline(repo.FullName))
 			if exporter != nil {
 				return exporter.Write(ios, json.RawMessage(raw))
 			}

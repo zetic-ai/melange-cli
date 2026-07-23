@@ -129,7 +129,7 @@ func (t *TablePrinter) renderTTY() error {
 			if i > 0 {
 				b.WriteString(colSep)
 			}
-			cell := f.text
+			cell := text.SanitizeTerminalInline(f.text)
 			if f.truncate && i < len(widths) {
 				cell = text.Truncate(widths[i], cell)
 			}
@@ -161,7 +161,7 @@ func (t *TablePrinter) columnWidths() []int {
 	widths := make([]int, numCols)
 	for _, row := range t.rows {
 		for i, f := range row {
-			if w := len([]rune(f.text)); w > widths[i] {
+			if w := len([]rune(text.SanitizeTerminalInline(f.text))); w > widths[i] {
 				widths[i] = w
 			}
 		}

@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +13,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/keyring"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func newCmdLogin(f *cmdutil.Factory) *cobra.Command {
@@ -31,9 +32,8 @@ The token is verified against the API, then stored in the OS keyring.
 If the keyring is unavailable, pass --insecure-storage to store it in the
 config file (created with 0600 permissions) instead.
 
-Interactively, the token is read from a paste prompt (input is not hidden —
-paste, don't type). Non-interactive runs must use --with-token or set
-MELANGE_API_KEY.
+Interactive token input is hidden. Non-interactive runs must use --with-token
+or set MELANGE_API_KEY.
 
 Exit codes: 0 success, 1 storage or validation error, 2 usage error
 (non-interactive without --with-token), 4 token rejected by the API.`,
@@ -47,7 +47,7 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
   melange auth login --with-token --json < token.txt`,
 		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			token, err := readToken(f, withToken)
+			token, err := readToken(cmd.Context(), f, withToken)
 			if err != nil {
 				return err
 			}
@@ -75,14 +75,15 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 				return err
 			}
 
-			if os.Getenv(config.EnvAPIKey) != "" {
-				fmt.Fprintf(f.IOStreams.ErrOut,
-					"! %s is set and takes precedence over stored credentials\n", config.EnvAPIKey)
-			}
-
 			storage, err := storeToken(host, token, insecureStorage)
 			if err != nil {
 				return err
+			}
+			for _, env := range []string{config.EnvAPIKey, config.EnvAPIKeyFile} {
+				if os.Getenv(env) != "" {
+					fmt.Fprintf(f.IOStreams.ErrOut,
+						"! %s is set and takes precedence over stored credentials\n", env)
+				}
 			}
 
 			if exporter != nil {
@@ -95,7 +96,11 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 			}
 			fmt.Fprintf(f.IOStreams.ErrOut,
 				"✓ Logged in to %s as %s (token: %s, scopes: %s, storage: %s)\n",
-				host.hostKey, me.Account.Name, me.Token.Name, scopeList(me.Token.Scopes), storage)
+				text.SanitizeTerminalInline(host.hostKey),
+				text.SanitizeTerminalInline(me.Account.Name),
+				text.SanitizeTerminalInline(me.Token.Name),
+				text.SanitizeTerminalInline(scopeList(me.Token.Scopes)),
+				text.SanitizeTerminalInline(storage))
 			return nil
 		},
 	}
@@ -111,7 +116,7 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 // readToken obtains the token from stdin (--with-token) or an interactive
 // paste prompt. Non-interactive invocations without --with-token are a usage
 // error (exit 2).
-func readToken(f *cmdutil.Factory, withToken bool) (string, error) {
+func readToken(ctx context.Context, f *cmdutil.Factory, withToken bool) (string, error) {
 	ios := f.IOStreams
 	if withToken {
 		raw, err := io.ReadAll(ios.In)
@@ -129,11 +134,12 @@ func readToken(f *cmdutil.Factory, withToken bool) (string, error) {
 
 	fmt.Fprint(ios.ErrOut,
 		"Paste your personal access token (create one at Settings → Personal Access Tokens): ")
-	line, err := bufio.NewReader(ios.In).ReadString('\n')
-	if err != nil && line == "" {
+	raw, err := ios.ReadPassword(ctx)
+	fmt.Fprintln(ios.ErrOut)
+	if err != nil {
 		return "", fmt.Errorf("reading token: %w", err)
 	}
-	return strings.TrimSpace(line), nil
+	return strings.TrimSpace(string(raw)), nil
 }
 
 // storeToken saves the token to the keyring, falling back to the config file
@@ -141,6 +147,17 @@ func readToken(f *cmdutil.Factory, withToken bool) (string, error) {
 func storeToken(host *hostContext, token string, insecureStorage bool) (string, error) {
 	kerr := keyring.Set(host.hostKey, token)
 	if kerr == nil {
+		// A previous --insecure-storage login explicitly selects the config
+		// credential for this host. Clear that selection only after the new
+		// keyring write succeeds, otherwise resolution would keep using the
+		// stale config token.
+		if err := host.cfg.DeleteHostAPIKey(host.hostKey); err != nil {
+			_ = keyring.Delete(host.hostKey)
+			return "", fmt.Errorf(
+				"stored the token in the OS keyring but could not clear the prior config credential: %w",
+				err,
+			)
+		}
 		return "keyring", nil
 	}
 	if !insecureStorage {

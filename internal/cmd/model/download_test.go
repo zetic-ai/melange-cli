@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
@@ -185,6 +186,56 @@ func TestDownloadTTYConfirmNoNeverCharges(t *testing.T) {
 	require.Len(t, e.reg.Requests, 1, "declining must stop before the billable POST")
 	assert.Equal(t, "GET", e.reg.Requests[0].Method)
 	assert.Contains(t, e.errOut.String(), "nothing was charged")
+}
+
+type confirmationBlockingReader struct {
+	entered chan<- struct{}
+	release <-chan struct{}
+}
+
+func (r confirmationBlockingReader) Read([]byte) (int, error) {
+	r.entered <- struct{}{}
+	<-r.release
+	return 0, io.EOF
+}
+
+func TestDownloadTTYConfirmationHonorsContextCancellationBeforeCharge(t *testing.T) {
+	e := setup(t)
+	dir := t.TempDir()
+	e.f.IOStreams.SetStdinTTY(true)
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	defer close(release)
+	reader := confirmationBlockingReader{entered: entered, release: release}
+	e.f.IOStreams.In = reader
+	e.reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper/models/m_ab12cd/targets"),
+		jsonStub(200, targetsBody()))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := root.NewCmdRoot(e.f)
+	cmd.SetIn(reader)
+	cmd.SetOut(e.out)
+	cmd.SetErr(e.errOut)
+	cmd.SetArgs(downloadArgs(dir))
+	result := make(chan error, 1)
+	go func() { result <- cmd.ExecuteContext(ctx) }()
+
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("confirmation reader was not entered")
+	}
+	cancel()
+	var err error
+	select {
+	case err = <-result:
+	case <-time.After(time.Second):
+		t.Fatal("confirmation did not stop after cancellation")
+	}
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 130, cmdutil.ExitCode(err))
+	require.Len(t, e.reg.Requests, 1, "cancellation may preview but must stop before the billable POST")
+	assert.Equal(t, "GET", e.reg.Requests[0].Method)
 }
 
 func TestDownloadTTYUnknownTargetFailsBeforeCharge(t *testing.T) {

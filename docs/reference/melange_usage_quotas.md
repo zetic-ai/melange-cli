@@ -11,7 +11,8 @@ Each quota renders as "used/limit (pct%)"; a null limit renders as
 "unlimited". On a terminal this prints a human-readable block. When
 stdout is not a terminal it prints stable tab-separated key/value lines
 (each value the same "used/limit (pct%)" or "unlimited" string). With
---json the resource object is emitted exactly as the API returned it.
+--json, API fields and order are preserved and output ends with exactly one
+trailing newline.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.
 
@@ -51,4 +52,3 @@ melange usage quotas [flags]
 ### SEE ALSO
 
 * [melange usage](melange_usage.md)	 - Show current usage counters
-

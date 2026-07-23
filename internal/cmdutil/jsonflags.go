@@ -1,6 +1,7 @@
 package cmdutil
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,7 +102,10 @@ func (e *Exporter) Write(ios *iostreams.IOStreams, data any) error {
 	case e.jq != nil:
 		return e.writeJQ(ios, raw)
 	}
-	_, err = fmt.Fprintf(ios.Out, "%s\n", raw)
+	// RFC 8259 permits space, tab, CR, and LF around a JSON value. Remove all
+	// trailing JSON whitespace before adding the CLI's single line terminator.
+	normalized := bytes.TrimRight(raw, " \t\r\n")
+	_, err = fmt.Fprintf(ios.Out, "%s\n", normalized)
 	return err
 }
 

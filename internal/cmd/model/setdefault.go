@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func newCmdSetDefault(f *cmdutil.Factory) *cobra.Command {
@@ -24,8 +25,8 @@ repository is the default; setting a new one clears the previous.
 The operation is idempotent: repeating it returns the same result.
 
 On success a confirmation goes to stderr and stdout stays empty; with
---json the resulting model summary is written to stdout exactly as the
-API returned it.
+--json, API fields and order are preserved and output ends with exactly one
+trailing newline.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 		Example: `  # Select a model key from the repository
@@ -65,7 +66,8 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 
 			ios := f.IOStreams
 			fmt.Fprintf(ios.ErrOut, "✓ Set %s (version %d) as the default model for %s/%s\n",
-				m.Key, m.Version, account, name)
+				text.SanitizeTerminalInline(m.Key), m.Version,
+				text.SanitizeTerminalInline(account), text.SanitizeTerminalInline(name))
 			if exporter != nil {
 				return exporter.Write(ios, json.RawMessage(resp.Body))
 			}

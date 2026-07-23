@@ -16,8 +16,8 @@ Changing --visibility is restricted to the repository owner server-side;
 other members get the server's 403 message.
 
 On success a confirmation goes to stderr and stdout stays empty; with
---json the updated resource object is written to stdout exactly as the
-API returned it.
+--json, API fields and order are preserved and output ends with exactly one
+trailing newline.
 
 Exit codes: 0 updated, 1 API error (including 403 permission and 404
 not found), 2 usage error, 4 not authenticated.
@@ -62,4 +62,3 @@ melange repo edit <[account/]name> [flags]
 ### SEE ALSO
 
 * [melange repo](melange_repo.md)	 - Manage model repositories
-

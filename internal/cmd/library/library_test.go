@@ -242,6 +242,25 @@ func TestLibraryViewShortReadmeNoTruncationNote(t *testing.T) {
 	assert.NotContains(t, out, "readme truncated")
 }
 
+func TestLibraryViewHumanOutputNeutralizesOSC52(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	body := strings.Replace(
+		libModelDetail("safe placeholder text"),
+		"safe placeholder text",
+		`safe\u001b]52;c;Y2xpcGJvYXJkLXNlY3JldA==\u0007 text`,
+		1,
+	)
+	e.reg.Register(httpmock.REST("GET", "/v1/library/models/zetic/whisper-tiny"),
+		jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "--no-color", "library", "view", "zetic/whisper-tiny"))
+
+	assert.Contains(t, e.out.String(), "safe text")
+	assert.NotContains(t, e.out.String(), "\x1b")
+	assert.NotContains(t, e.out.String(), "Y2xpcGJvYXJk")
+}
+
 func TestLibraryViewNonTTYOmitsReadme(t *testing.T) {
 	e := setup(t)
 	e.reg.Register(httpmock.REST("GET", "/v1/library/models/zetic/whisper-tiny"),

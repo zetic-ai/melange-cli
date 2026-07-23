@@ -10,9 +10,8 @@ The token is verified against the API, then stored in the OS keyring.
 If the keyring is unavailable, pass --insecure-storage to store it in the
 config file (created with 0600 permissions) instead.
 
-Interactively, the token is read from a paste prompt (input is not hidden —
-paste, don't type). Non-interactive runs must use --with-token or set
-MELANGE_API_KEY.
+Interactive token input is hidden. Non-interactive runs must use --with-token
+or set MELANGE_API_KEY.
 
 Exit codes: 0 success, 1 storage or validation error, 2 usage error
 (non-interactive without --with-token), 4 token rejected by the API.
@@ -55,4 +54,3 @@ melange auth login [flags]
 ### SEE ALSO
 
 * [melange auth](melange_auth.md)	 - Authenticate melange with the Melange platform
-

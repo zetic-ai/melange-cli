@@ -46,4 +46,3 @@ melange help formatting.
 * [melange report](melange_report.md)	 - Read model benchmark reports
 * [melange usage](melange_usage.md)	 - Show current usage counters
 * [melange version](melange_version.md)	 - Print the melange CLI version
-

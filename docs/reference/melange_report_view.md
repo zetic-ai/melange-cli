@@ -24,7 +24,7 @@ Missing cells render "-". Devices are sorted alphabetically.
 When stdout is not a terminal it prints one raw record per line as
 tab-separated values (the flat measurement fields) — scripts get the
 records, not the derived table. With --json the API response is emitted
-byte-for-byte.
+with its fields and order preserved, followed by exactly one trailing newline.
 
 Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 4 not authenticated.
@@ -74,4 +74,3 @@ melange report view MODEL_KEY [flags]
 ### SEE ALSO
 
 * [melange report](melange_report.md)	 - Read model benchmark reports
-

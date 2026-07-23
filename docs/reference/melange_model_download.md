@@ -45,8 +45,9 @@ mode cannot be combined with --json, --jq, or --template.
 
 With --json the authorization response is written to stdout with every
 artifact url replaced by "<redacted>" (the only documented deviation
-from byte-exact --json): use this command to download, or melange api
-if you genuinely need raw signed URLs.
+from the API response). Output ends with exactly one trailing newline.
+Use this command to download, or melange api if you genuinely need raw
+signed URLs.
 
 Exit codes: 0 success, 1 API/download/verification error (including
 quota exhaustion), 2 usage error or missing confirmation, 4 not
@@ -97,4 +98,3 @@ melange model download MODEL_KEY --target TARGET_ID [flags]
 ### SEE ALSO
 
 * [melange model](melange_model.md)	 - Upload, browse, and download models
-

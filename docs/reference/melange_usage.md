@@ -9,9 +9,9 @@ bandwidth, model uploads, and prompts.
 
 On a terminal this prints a human-readable block. When stdout is not a
 terminal it prints stable tab-separated key/value lines (active_devices,
-bandwidth, model_uploads, prompts). With --json the resource object is
-emitted exactly as the API returned it. Use "melange usage quotas" to
-see these counters against your plan limits.
+bandwidth, model_uploads, prompts). With --json, API fields and order are
+preserved and output ends with exactly one trailing newline. Use "melange
+usage quotas" to see these counters against your plan limits.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.
 
@@ -52,4 +52,3 @@ melange usage [flags]
 
 * [melange](melange.md)	 - melange — on-device AI model deployment & benchmarking
 * [melange usage quotas](melange_usage_quotas.md)	 - Show usage against plan limits
-

@@ -12,9 +12,9 @@ On a terminal this prints a table (TARGET_ID, KIND, TARGET, QUANT,
 COMPATIBILITY, SIZE) with human-readable sizes; COMPATIBILITY is a
 compact soc/os string, or "-" when the target carries no device
 compatibility (LLM targets). When stdout is not a terminal, rows are
-tab-separated with sizes in raw bytes and no header. With --json the
-response is emitted exactly as the API returned it (including the full
-compatibility object).
+tab-separated with sizes in raw bytes and no header. With --json, all API
+target metadata is preserved and output ends with exactly one trailing
+newline.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.
 
@@ -58,4 +58,3 @@ melange model targets MODEL_KEY [flags]
 ### SEE ALSO
 
 * [melange model](melange_model.md)	 - Upload, browse, and download models
-

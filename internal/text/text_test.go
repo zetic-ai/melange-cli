@@ -81,3 +81,15 @@ func TestFormatBytes(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeTerminalRemovesOSC52AndControlsButPreservesLayout(t *testing.T) {
+	in := "heading\n\tbody\x1b]52;c;Y2xpcGJvYXJkLXNlY3JldA==\a safe" +
+		"\u009d52;c;QzFTRUNSRVQ=\u009c\r\x00\x7f"
+
+	got := text.SanitizeTerminal(in)
+
+	assert.Equal(t, "heading\n\tbody safe", got)
+	assert.NotContains(t, got, "\x1b")
+	assert.NotContains(t, got, "Y2xpcGJvYXJk")
+	assert.NotContains(t, got, "QzFTRUNSRVQ")
+}

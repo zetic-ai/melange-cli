@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func newCmdStatus(f *cmdutil.Factory) *cobra.Command {
@@ -69,13 +70,17 @@ token was rejected.`,
 				})
 			}
 			out := f.IOStreams.Out
-			fmt.Fprintf(out, "Host: %s\n", host.hostKey)
-			fmt.Fprintf(out, "Account: %s (%s)\n", me.Account.Name, me.Account.Type)
-			fmt.Fprintf(out, "User: %s\n", me.User.Email)
-			fmt.Fprintf(out, "Token: %s\n", me.Token.Name)
-			fmt.Fprintf(out, "Scopes: %s\n", scopeList(me.Token.Scopes))
-			fmt.Fprintf(out, "Source: %s\n", token.Source)
-			fmt.Fprintf(out, "Storage: %s\n", storageLocation(token.Source))
+			fmt.Fprintf(out, "Host: %s\n", text.SanitizeTerminalInline(host.hostKey))
+			fmt.Fprintf(out, "Account: %s (%s)\n",
+				text.SanitizeTerminalInline(me.Account.Name),
+				text.SanitizeTerminalInline(me.Account.Type))
+			fmt.Fprintf(out, "User: %s\n", text.SanitizeTerminalInline(me.User.Email))
+			fmt.Fprintf(out, "Token: %s\n", text.SanitizeTerminalInline(me.Token.Name))
+			fmt.Fprintf(out, "Scopes: %s\n",
+				text.SanitizeTerminalInline(scopeList(me.Token.Scopes)))
+			fmt.Fprintf(out, "Source: %s\n", text.SanitizeTerminalInline(token.Source))
+			fmt.Fprintf(out, "Storage: %s\n",
+				text.SanitizeTerminalInline(storageLocation(token.Source)))
 			return nil
 		},
 	}

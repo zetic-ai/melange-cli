@@ -1,7 +1,6 @@
 package model
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	cryptorand "crypto/rand"
@@ -122,8 +121,9 @@ mode cannot be combined with --json, --jq, or --template.
 
 With --json the authorization response is written to stdout with every
 artifact url replaced by "<redacted>" (the only documented deviation
-from byte-exact --json): use this command to download, or melange api
-if you genuinely need raw signed URLs.
+from the API response). Output ends with exactly one trailing newline.
+Use this command to download, or melange api if you genuinely need raw
+signed URLs.
 
 Exit codes: 0 success, 1 API/download/verification error (including
 quota exhaustion), 2 usage error or missing confirmation, 4 not
@@ -256,7 +256,7 @@ func runDownload(ctx context.Context, opts *downloadOptions) (retErr error) {
 		dest = "stdout"
 	}
 	fmt.Fprintf(ios.ErrOut, "✓ Downloaded %d artifact(s) (%s) to %s\n",
-		len(auth.Artifacts), text.FormatBytes(total), dest)
+		len(auth.Artifacts), text.FormatBytes(total), text.SanitizeTerminalInline(dest))
 
 	if opts.exporter != nil {
 		redacted, err := redactAuthorization(rawAuthorization)
@@ -456,12 +456,13 @@ func confirmBillableDownload(ctx context.Context, opts *downloadOptions, g *gen.
 	if quant := deref(target.QuantType); quant != "" {
 		desc += ", " + quant
 	}
-	fmt.Fprintf(ios.ErrOut, "Target %s (%s): %s\n", target.TargetId, desc,
+	fmt.Fprintf(ios.ErrOut, "Target %s (%s): %s\n",
+		text.SanitizeTerminalInline(target.TargetId), text.SanitizeTerminalInline(desc),
 		text.FormatBytes(int64(target.DownloadSize)))
 	fmt.Fprintf(ios.ErrOut, "This download counts against your bandwidth quota.\n")
 	fmt.Fprintf(ios.ErrOut, "Proceed? [y/N] ")
 
-	line, err := bufio.NewReader(ios.In).ReadString('\n')
+	line, err := ios.ReadLine(ctx)
 	if err != nil && strings.TrimSpace(line) == "" {
 		return fmt.Errorf("reading confirmation: %w", err)
 	}
@@ -955,7 +956,8 @@ func checksumMismatch(name, expected, got string) error {
 
 func warnUnverified(f *cmdutil.Factory, name string) {
 	fmt.Fprintf(f.IOStreams.ErrOut,
-		"! %s: unrecognized checksum format; integrity not verified\n", name)
+		"! %s: unrecognized checksum format; integrity not verified\n",
+		text.SanitizeTerminalInline(name))
 }
 
 // progressWriter throttles progress updates to once per MiB so TTY redraws

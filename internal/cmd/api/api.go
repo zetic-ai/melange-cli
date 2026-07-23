@@ -19,6 +19,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 type options struct {
@@ -253,7 +254,7 @@ func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdu
 			summary += fmt.Sprintf(" (%s)", apiErr.RequestID)
 		}
 	}
-	fmt.Fprintf(ios.ErrOut, "melange: %s\n", summary)
+	fmt.Fprintf(ios.ErrOut, "melange: %s\n", text.SanitizeTerminalInline(summary))
 
 	// The summary is already printed, so wrap ErrSilent; AuthError still
 	// carries the exit-4 contract for rejected tokens.

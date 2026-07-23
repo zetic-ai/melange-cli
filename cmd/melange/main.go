@@ -16,6 +16,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/keyring"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func main() {
@@ -38,9 +39,10 @@ func Run(args []string) int {
 		},
 	}
 
-	// ApiClient resolves host+token (env > keyring > config) and returns an
-	// authenticated client. Only commands that require auth should call it:
-	// it returns AuthError (exit 4) when no token is available.
+	// ApiClient resolves host+token (env > env file > explicitly selected
+	// config > keyring > legacy config fallback) and returns an authenticated
+	// client. Only commands that require auth should call it; it returns
+	// AuthError (exit 4) when no token is available.
 	f.ApiClient = func() (*api.Client, error) {
 		cfg, err := f.Config()
 		if err != nil {
@@ -76,7 +78,7 @@ func Run(args []string) int {
 		// "already printed" with a specific exit code (e.g. exit 4 from
 		// `melange api` after it printed its own HTTP 401 summary).
 		if !errors.Is(mappedErr, cmdutil.ErrSilent) {
-			fmt.Fprintf(ios.ErrOut, "melange: %s\n", mappedErr.Error())
+			fmt.Fprintf(ios.ErrOut, "melange: %s\n", text.SanitizeTerminal(mappedErr.Error()))
 		}
 		return code
 	}

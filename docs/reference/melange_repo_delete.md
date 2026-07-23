@@ -52,4 +52,3 @@ melange repo delete <account/name> [flags]
 ### SEE ALSO
 
 * [melange repo](melange_repo.md)	 - Manage model repositories
-

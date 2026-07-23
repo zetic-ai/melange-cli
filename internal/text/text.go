@@ -21,7 +21,87 @@ var tsvEscaper = strings.NewReplacer(
 // contract. Printable content is unchanged; backslashes and record/column
 // control characters use reversible backslash escapes.
 func EscapeTSVCell(s string) string {
-	return tsvEscaper.Replace(s)
+	return tsvEscaper.Replace(sanitizeTerminal(s, true))
+}
+
+// SanitizeTerminal removes terminal escape/control sequences from untrusted
+// human-readable text. Newlines and tabs are retained so block layout remains
+// readable; all other C0/C1 controls are removed. OSC, CSI, and related string
+// controls are consumed through their terminator so their payload cannot be
+// reinterpreted or copied into a terminal.
+func SanitizeTerminal(s string) string {
+	return sanitizeTerminal(s, false)
+}
+
+func sanitizeTerminal(s string, preserveRecordControls bool) string {
+	runes := []rune(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		switch r {
+		case '\x1b':
+			if i+1 >= len(runes) {
+				continue
+			}
+			i++
+			switch runes[i] {
+			case '[':
+				i = skipCSI(runes, i+1)
+			case ']', 'P', 'X', '^', '_':
+				i = skipControlString(runes, i+1)
+			default:
+				// Two-byte escape sequence: consume its final byte.
+			}
+		case '\u009b':
+			i = skipCSI(runes, i+1)
+		case '\u0090', '\u0098', '\u009d', '\u009e', '\u009f':
+			i = skipControlString(runes, i+1)
+		case '\n', '\t':
+			b.WriteRune(r)
+		case '\r':
+			if preserveRecordControls {
+				b.WriteRune(r)
+			}
+		default:
+			if r < '\x20' || (r >= '\x7f' && r <= '\u009f') {
+				continue
+			}
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// SanitizeTerminalInline is SanitizeTerminal for table cells and other
+// single-line fields. Layout controls become spaces rather than new rows.
+func SanitizeTerminalInline(s string) string {
+	s = SanitizeTerminal(s)
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.ReplaceAll(s, "\t", " ")
+}
+
+func skipCSI(runes []rune, start int) int {
+	for i := start; i < len(runes); i++ {
+		if runes[i] >= '\x40' && runes[i] <= '\x7e' {
+			return i
+		}
+	}
+	return len(runes) - 1
+}
+
+func skipControlString(runes []rune, start int) int {
+	for i := start; i < len(runes); i++ {
+		switch runes[i] {
+		case '\a', '\u009c':
+			return i
+		case '\x1b':
+			if i+1 < len(runes) && runes[i+1] == '\\' {
+				return i + 1
+			}
+		}
+	}
+	return len(runes) - 1
 }
 
 // Truncate shortens s to at most max runes, appending "..." when content is

@@ -13,8 +13,8 @@ behind your token (one extra /v1/me call).
 On a terminal this prints a human-readable block. When stdout is not a
 terminal it prints stable tab-separated key/value lines (name,
 visibility, type, use_case, tags, description, created_at, updated_at;
-timestamps in RFC 3339). With --json the resource object is emitted
-exactly as the API returned it.
+timestamps in RFC 3339). With --json, API fields and order are preserved and
+output ends with exactly one trailing newline.
 
 Exit codes: 0 success, 1 API error (including not found), 2 usage
 error, 4 not authenticated.
@@ -55,4 +55,3 @@ melange repo view <[account/]name> [flags]
 ### SEE ALSO
 
 * [melange repo](melange_repo.md)	 - Manage model repositories
-

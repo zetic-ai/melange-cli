@@ -351,6 +351,23 @@ func TestAPINon2xxEnvelopePassthroughAndSummary(t *testing.T) {
 	assert.Equal(t, "melange: HTTP 404: repository zetic/nope not found (req_4)\n", e.errOut.String())
 }
 
+func TestAPINon2xxSummaryNeutralizesServerControlledOSC52(t *testing.T) {
+	e := setup(t)
+	body := `{"type":"error","error":{"type":"not_found_error",` +
+		`"message":"safe\u001b]52;c;TUVTU0FHRV9TRUNSRVQ=\u0007 text"},` +
+		`"request_id":"req\u001b]52;c;UkVRVUVTVF9TRUNSRVQ=\u0007_4"}`
+	e.reg.Register(httpmock.REST("GET", "/v1/malicious"), httpmock.StatusStringResponse(404, body))
+
+	err := run(t, e, "api", "/v1/malicious")
+	require.ErrorIs(t, err, cmdutil.ErrSilent)
+	assert.Contains(t, e.errOut.String(), "safe text")
+	assert.Contains(t, e.errOut.String(), "(req_4)")
+	assert.NotContains(t, e.errOut.String(), "\x1b")
+	assert.NotContains(t, e.errOut.String(), "TUVTU0FHRV9TRUNSRVQ")
+	assert.NotContains(t, e.errOut.String(), "UkVRVUVTVF9TRUNSRVQ")
+	assert.Equal(t, body, e.out.String(), "raw JSON error output remains structurally exact")
+}
+
 func TestAPINon2xxWithoutEnvelope(t *testing.T) {
 	e := setup(t)
 	e.reg.Register(httpmock.REST("GET", "/v1/down"), httpmock.StatusStringResponse(500, "upstream exploded"))

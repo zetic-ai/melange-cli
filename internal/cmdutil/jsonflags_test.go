@@ -45,6 +45,15 @@ func TestJSONFlagsBareJSONPassthrough(t *testing.T) {
 	assert.Equal(t, pageBody+"\n", out.String(), "the envelope must pass through byte-exact")
 }
 
+func TestJSONFlagsNormalizesExistingTrailingJSONWhitespace(t *testing.T) {
+	exporter, err := runJSONFlags(t, "--json")
+	require.NoError(t, err)
+
+	ios, _, out, _ := iostreams.Test()
+	require.NoError(t, exporter.Write(ios, json.RawMessage(pageBody+"\n \t\r\n")))
+	assert.Equal(t, pageBody+"\n", out.String(), "JSON output has exactly one trailing newline")
+}
+
 func TestJSONFlagsMarshalsNonRawData(t *testing.T) {
 	exporter, err := runJSONFlags(t, "--json")
 	require.NoError(t, err)

@@ -53,4 +53,3 @@ melange repo <command> [flags]
 * [melange repo edit](melange_repo_edit.md)	 - Edit a repository
 * [melange repo list](melange_repo_list.md)	 - List repositories
 * [melange repo view](melange_repo_view.md)	 - View a repository
-

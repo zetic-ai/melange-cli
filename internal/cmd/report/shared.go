@@ -45,3 +45,12 @@ func deref[T ~string](s *T) string {
 func formatFloat(v float32) string {
 	return strconv.FormatFloat(float64(v), 'f', 1, 32)
 }
+
+// formatRawFloat preserves the exact float32 value for machine-readable TSV.
+func formatRawFloat(v float32) string {
+	out := strconv.FormatFloat(float64(v), 'g', -1, 32)
+	if !strings.ContainsAny(out, ".eE") {
+		out += ".0"
+	}
+	return out
+}

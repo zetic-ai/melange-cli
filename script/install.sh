@@ -22,6 +22,14 @@ err() {
     exit 1
 }
 
+is_vsemver() {
+    case "$1" in
+        "" | *[!0-9A-Za-z.+-]*) return 1 ;;
+    esac
+    printf '%s\n' "$1" | LC_ALL=C grep -Eq \
+        '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+}
+
 # --- Detect OS/arch ---------------------------------------------------------
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$os" in
@@ -38,10 +46,15 @@ esac
 
 # --- Resolve version --------------------------------------------------------
 version="${MELANGE_VERSION:-}"
+if [ -n "$version" ] && ! is_vsemver "$version"; then
+    err "MELANGE_VERSION must be a v-prefixed semantic version (for example v1.2.3 or v1.2.3-rc.1)"
+fi
 if [ -z "$version" ]; then
     version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" |
         grep '"tag_name"' | head -n 1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
     [ -n "$version" ] || err "could not determine the latest release; set MELANGE_VERSION explicitly"
+    is_vsemver "$version" ||
+        err "latest release tag is not a v-prefixed semantic version: $version"
 fi
 # Strip the leading v for the archive name (archives use the bare version).
 bare_version=${version#v}

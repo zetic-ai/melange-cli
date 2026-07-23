@@ -64,4 +64,3 @@ melange model <command> [flags]
 * [melange model targets](melange_model_targets.md)	 - List a model's converted targets
 * [melange model upload](melange_model_upload.md)	 - Upload a model to a repository
 * [melange model view](melange_model_view.md)	 - View a model
-

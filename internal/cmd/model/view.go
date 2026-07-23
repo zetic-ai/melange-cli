@@ -32,8 +32,8 @@ On a terminal this prints a human-readable block. When stdout is not a
 terminal it prints stable tab-separated key/value lines (key, version,
 type, state, is_default, source_type, terminal, download_ready,
 failure_code when present, created_at, updated_at; timestamps in
-RFC 3339). With --json the resource object is emitted exactly as the
-API returned it.
+RFC 3339). With --json, API fields and order are preserved and output ends
+with exactly one trailing newline.
 
 Exit codes: 0 success, 1 API error (including not found), 2 usage
 error, 4 not authenticated.`,
@@ -108,7 +108,7 @@ func printModelTTY(f *cmdutil.Factory, m *gen.ModelDetailResponse, repo string) 
 	fmt.Fprintf(&b, "Created:         %s\n", text.RelativeTime(m.CreatedAt, now))
 	fmt.Fprintf(&b, "Updated:         %s\n", text.RelativeTime(m.UpdatedAt, now))
 	fmt.Fprintf(&b, "\nDeployment guide: melange deploy guide %s -R %s\n", m.Key, repo)
-	_, err := fmt.Fprint(ios.Out, b.String())
+	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
 	return err
 }
 

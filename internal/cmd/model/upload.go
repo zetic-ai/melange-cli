@@ -15,6 +15,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 	"github.com/zetic-ai/melange-cli/internal/text"
 	"github.com/zetic-ai/melange-cli/internal/upload"
@@ -49,6 +50,7 @@ type uploadOptions struct {
 	inactivity    time.Duration
 	resumeID      string
 	cancelID      string
+	yes           bool
 	sessions      bool
 	exporter      *cmdutil.Exporter
 
@@ -75,6 +77,10 @@ the model is ready.
 repository. Interrupting an upload (Ctrl-C) preserves the session; resume
 it with --resume SESSION_ID (already-uploaded bytes are never re-sent) or
 discard it with --cancel SESSION_ID. --sessions lists sessions.
+Once the server reports VERIFYING, DISPATCH_PENDING, or CONVERTING,
+--resume replays completion and no longer needs the original local files.
+Cancellation prompts for the exact session ID on a terminal; agents,
+non-interactive runs, and --no-input must pass --yes explicitly.
 
 When a signed upload URL expires, reissue intentionally mints a fresh URL
 and carries no Idempotency-Key; create, complete, and cancel retain their
@@ -133,8 +139,8 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
   # Resume it
   melange model upload --resume "$session_id" -R zetic/whisper-tiny
 
-  # Or cancel it instead
-  melange model upload --cancel "$session_id" -R zetic/whisper-tiny`,
+  # Or cancel it instead (scripts must opt in explicitly)
+  melange model upload --cancel "$session_id" -R zetic/whisper-tiny --yes`,
 		Args: cmdutil.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateWaitOptions(opts.doWait, opts.timeout, cmd.Flags().Changed("timeout")); err != nil {
@@ -156,6 +162,7 @@ error, 4 not authenticated, 130 interrupted (session preserved).`,
 	fl.DurationVar(&opts.inactivity, "inactivity-timeout", 2*time.Minute, "Per-chunk stall timeout during uploads")
 	fl.StringVar(&opts.resumeID, "resume", "", "Resume the upload `session`")
 	fl.StringVar(&opts.cancelID, "cancel", "", "Cancel the upload `session`")
+	fl.BoolVarP(&opts.yes, "yes", "y", false, "Confirm upload-session cancellation without prompting")
 	fl.BoolVar(&opts.sessions, "sessions", false, "List upload sessions for the repository")
 	cmdutil.AddJSONFlags(cmd, &opts.exporter)
 
@@ -178,6 +185,19 @@ func runUploadCommand(ctx context.Context, opts *uploadOptions, args []string) e
 	}
 	if opts.dryRun && modes > 0 {
 		return cmdutil.FlagError{Err: errors.New("--dry-run cannot be combined with --resume, --cancel, or --sessions")}
+	}
+	if opts.yes && opts.cancelID == "" {
+		return cmdutil.FlagError{Err: errors.New("--yes is only valid with --cancel")}
+	}
+	for _, item := range []struct {
+		flag, sessionID string
+	}{{"--resume", opts.resumeID}, {"--cancel", opts.cancelID}} {
+		flag, sessionID := item.flag, item.sessionID
+		if sessionID != "" {
+			if err := upload.ValidateSessionID(sessionID); err != nil {
+				return cmdutil.FlagError{Err: fmt.Errorf("%s: %w", flag, err)}
+			}
+		}
 	}
 	if opts.inputManifest != "" && (len(args) > 0 || len(opts.inputs) > 0 || len(opts.external) > 0 || len(opts.bucket) > 0) {
 		return cmdutil.FlagError{Err: errors.New(
@@ -215,7 +235,8 @@ func buildSpecs(opts *uploadOptions, args []string) ([]upload.FileSpec, error) {
 	ios := opts.f.IOStreams
 	note := func(path string, size int64) {
 		if size >= hashNoteThreshold {
-			fmt.Fprintf(ios.ErrOut, "Hashing %s (%s)...\n", filepath.Base(path), text.FormatBytes(size))
+			fmt.Fprintf(ios.ErrOut, "Hashing %s (%s)...\n",
+				text.SanitizeTerminalInline(filepath.Base(path)), text.FormatBytes(size))
 		}
 	}
 
@@ -301,7 +322,7 @@ func renderDryRun(opts *uploadOptions, specs []upload.FileSpec) error {
 		total += s.Size
 	}
 	fmt.Fprintf(ios.ErrOut, "Dry run: %d files, %s total would be uploaded to %s (no session created)\n",
-		len(specs), text.FormatBytes(total), opts.repo)
+		len(specs), text.FormatBytes(total), text.SanitizeTerminalInline(opts.repo))
 
 	if opts.exporter != nil {
 		files := make([]dryRunFile, len(specs))
@@ -409,6 +430,11 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 	if err != nil {
 		return err
 	}
+	lease, err := upload.AcquireSession(ctx, st.SessionID)
+	if err != nil {
+		return fmt.Errorf("locking upload session %s: %w", st.SessionID, err)
+	}
+	defer lease.Close() //nolint:errcheck
 	if err := st.Save(); err != nil {
 		return err
 	}
@@ -418,9 +444,10 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 		total += s.Size
 	}
 	fmt.Fprintf(opts.f.IOStreams.ErrOut, "Upload session %s: %d files, %s to %s\n",
-		st.SessionID, len(st.Files), text.FormatBytes(total), opts.repo)
+		text.SanitizeTerminalInline(st.SessionID), len(st.Files), text.FormatBytes(total),
+		text.SanitizeTerminalInline(opts.repo))
 
-	return transferAndComplete(ctx, opts, g, st)
+	return transferAndComplete(ctx, opts, g, st, lease)
 }
 
 // manifestOptions converts validated local bucket declarations to the exact
@@ -561,32 +588,37 @@ func activeUploadSessionState(state string) bool {
 
 func printActiveSessionGuidance(opts *uploadOptions, sessionID, state string) {
 	errOut := opts.f.IOStreams.ErrOut
-	normalizedState := strings.ToUpper(state)
-	fmt.Fprintf(errOut, "✗ An upload session is already active for %s: %s", opts.repo, sessionID)
+	safeSessionID := text.SanitizeTerminalInline(sessionID)
+	normalizedState := strings.ToUpper(text.SanitizeTerminalInline(state))
+	var b strings.Builder
+	fmt.Fprintf(&b, "✗ An upload session is already active for %s: %s",
+		text.SanitizeTerminalInline(opts.repo), safeSessionID)
 	if normalizedState != "" {
-		fmt.Fprintf(errOut, " (%s)", normalizedState)
+		fmt.Fprintf(&b, " (%s)", normalizedState)
 	}
-	fmt.Fprintln(errOut)
+	fmt.Fprintln(&b)
 
-	detailPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s", opts.account, opts.name, sessionID)
-	fmt.Fprintf(errOut, "\nInspect it:  melange api %s --jq .state\n", detailPath)
+	detailPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s",
+		opts.account, opts.name, safeSessionID)
+	fmt.Fprintf(&b, "\nInspect it:  melange api %s --jq .state\n", detailPath)
 	switch normalizedState {
 	case sessionStateCreated, sessionStateUploading:
-		fmt.Fprintf(errOut, "Resume it:   melange model upload --resume %s -R %s\n", sessionID, opts.repo)
-		fmt.Fprintf(errOut, "Cancel it:   melange model upload --cancel %s -R %s\n", sessionID, opts.repo)
-	case sessionStateVerifying:
-		fmt.Fprintln(errOut, "Verification is in progress; wait for verification to finish, then retry the original upload.")
-	case sessionStateDispatchPending:
-		fmt.Fprintln(errOut, "Conversion dispatch is pending. Resolve any quota or transient dispatch issue, then retry dispatch:")
-		fmt.Fprintf(errOut, "  melange api -X POST %s/complete --jq .state\n", detailPath)
+		fmt.Fprintf(&b, "Resume it:   melange model upload --resume %s -R %s\n", safeSessionID, opts.repo)
+		fmt.Fprintf(&b, "Cancel it:   melange model upload --cancel %s -R %s --yes\n", safeSessionID, opts.repo)
+	case sessionStateVerifying, sessionStateDispatchPending:
+		fmt.Fprintln(&b, "The files are server-owned; resume completion without local artifacts:")
+		fmt.Fprintf(&b, "  melange model upload --resume %s -R %s --wait\n", safeSessionID, opts.repo)
 	default:
-		fmt.Fprintln(errOut, "Inspect the session state before deciding whether to resume, cancel, wait, or retry.")
+		fmt.Fprintln(&b, "Inspect the session state before deciding whether to resume, cancel, wait, or retry.")
 	}
+	_, _ = fmt.Fprint(errOut, text.SanitizeTerminal(b.String()))
 }
 
 // transferAndComplete uploads all pending files then completes the session.
 // Interrupts (Ctrl-C) preserve the session and print the resume command.
-func transferAndComplete(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State) error {
+func transferAndComplete(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
+	st *upload.State, lease *upload.SessionLease,
+) error {
 	up := &upload.Uploader{
 		Client:       bareHTTPClient(opts.f),
 		StallTimeout: opts.inactivity,
@@ -599,13 +631,14 @@ func transferAndComplete(ctx context.Context, opts *uploadOptions, g *gen.Client
 		return fmt.Errorf("%w\nThe session is preserved; resume with: melange model upload --resume %s -R %s",
 			err, st.SessionID, st.Repo)
 	}
-	return completeAndReport(ctx, opts, g, st)
+	return completeAndReport(ctx, opts, g, st, lease)
 }
 
 func printResumeHint(opts *uploadOptions, st *upload.State) {
 	errOut := opts.f.IOStreams.ErrOut
 	fmt.Fprintf(errOut, "\nInterrupted. The upload session is preserved; already-uploaded bytes will not be re-sent.\n")
-	fmt.Fprintf(errOut, "Resume with: melange model upload --resume %s -R %s\n", st.SessionID, st.Repo)
+	fmt.Fprintf(errOut, "Resume with: melange model upload --resume %s -R %s\n",
+		text.SanitizeTerminalInline(st.SessionID), text.SanitizeTerminalInline(st.Repo))
 }
 
 // transferAll uploads files sequentially. The per-file loop is the seam for
@@ -739,63 +772,217 @@ func saveState(st *upload.State) {
 	_ = st.Save()
 }
 
-// completeAndReport finishes the session and reports the outcome. An HTTP
-// 200 with state FAILED is a failed outcome (exit 1).
-func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State) error {
+// completeAndReport finishes the session and reports the outcome. Completion
+// is itself asynchronous: VERIFYING, DISPATCH_PENDING, and even CONVERTING may
+// temporarily carry no model reference. Those responses keep local recovery
+// state; --wait deliberately replays complete with fresh idempotency keys
+// until the model reference or a terminal failure is observable.
+func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
+	st *upload.State, lease *upload.SessionLease,
+) error {
+	return completeSessionAndReport(ctx, opts, g, st.SessionID, lease)
+}
+
+func completeSessionAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
+	sessionID string, lease *upload.SessionLease,
+) error {
 	ios := opts.f.IOStreams
-	resp, err := g.CompleteModelUploadWithResponse(ctx, opts.account, opts.name, st.SessionID,
+	waitStarted := completionClockNow()
+	completionCtx := ctx
+	cancelCompletion := func() {}
+	if opts.doWait {
+		completionCtx, cancelCompletion = context.WithTimeoutCause(ctx, opts.timeout, wait.ErrTimeout)
+	}
+	defer cancelCompletion()
+
+	resp, err := g.CompleteModelUploadWithResponse(completionCtx, opts.account, opts.name, sessionID,
 		&gen.CompleteModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
 	if err != nil {
+		if errors.Is(context.Cause(completionCtx), wait.ErrTimeout) {
+			return completionTimeout(opts, sessionID)
+		}
 		if errors.Is(err, context.Canceled) {
-			printResumeHint(opts, st)
+			printCompletionResumeHint(opts, sessionID)
 			return canceledSilently{}
 		}
-		return err
+		return completionRecoveryError(opts, sessionID, err)
 	}
 	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-		return aerr
+		return completionRecoveryError(opts, sessionID, aerr)
 	}
-	out := resp.JSON200
-	if out == nil {
+	if resp.JSON200 == nil {
 		return fmt.Errorf("unexpected response completing upload session (HTTP %d)", resp.StatusCode())
 	}
 
+	if opts.doWait && resp.JSON200.Model == nil && recoverableCompletionState(string(resp.JSON200.State)) {
+		remaining := remainingCompletionBudget(waitStarted, opts.timeout)
+		if remaining <= 0 {
+			return completionTimeout(opts, sessionID)
+		}
+		resp, err = waitForCompletionModel(completionCtx, opts, g, sessionID, remaining)
+		if errors.Is(err, wait.ErrTimeout) {
+			return completionTimeout(opts, sessionID)
+		}
+		if errors.Is(err, context.Canceled) {
+			printCompletionResumeHint(opts, sessionID)
+			return canceledSilently{}
+		}
+		if err != nil {
+			return completionRecoveryError(opts, sessionID, err)
+		}
+	}
+
+	out := resp.JSON200
 	if strings.EqualFold(string(out.State), "FAILED") {
-		fmt.Fprintf(ios.ErrOut, "✗ Upload verification failed: %s (session %s)\n", deref(out.FailureCode), out.Id)
+		fmt.Fprintf(ios.ErrOut, "✗ Upload verification failed: %s (session %s)\n",
+			text.SanitizeTerminalInline(deref(out.FailureCode)), text.SanitizeTerminalInline(out.Id))
 		fmt.Fprintf(ios.ErrOut, "Fix the reported file and upload again.\n")
 		// FAILED is terminal: the session can never be resumed, so keeping
 		// the state file (and its session URIs) would only mislead --resume.
-		_ = upload.RemoveState(st.SessionID)
+		warnRemoveUploadState(ios, sessionID)
+		if err := lease.Close(); err != nil {
+			return err
+		}
 		if opts.exporter != nil {
 			_ = opts.exporter.Write(ios, json.RawMessage(resp.Body))
 		}
 		return cmdutil.ErrSilent
 	}
 
+	if terminalCompletionWithoutModel(out) {
+		warnRemoveUploadState(ios, sessionID)
+		if err := lease.Close(); err != nil {
+			return err
+		}
+		return fmt.Errorf("upload session %s is %s; start a new upload",
+			text.SanitizeTerminalInline(sessionID), strings.ToLower(string(out.State)))
+	}
+
 	if out.Model != nil {
 		fmt.Fprintf(ios.ErrOut, "✓ Upload complete: model %s version %d (state %s)\n",
-			out.Model.Key, out.Model.Version, strings.ToLower(string(out.State)))
+			text.SanitizeTerminalInline(out.Model.Key), out.Model.Version,
+			text.SanitizeTerminalInline(strings.ToLower(string(out.State))))
 	} else {
-		fmt.Fprintf(ios.ErrOut, "✓ Upload complete: session %s (state %s)\n", out.Id, strings.ToLower(string(out.State)))
+		fmt.Fprintf(ios.ErrOut, "✓ Upload complete: session %s (state %s)\n",
+			text.SanitizeTerminalInline(out.Id),
+			text.SanitizeTerminalInline(strings.ToLower(string(out.State))))
+		fmt.Fprintf(ios.ErrOut, "Completion is still in progress; the session is preserved.\n")
+		fmt.Fprintf(ios.ErrOut, "Resume with: melange model upload --resume %s -R %s\n",
+			text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+		if opts.exporter != nil {
+			return opts.exporter.Write(ios, json.RawMessage(resp.Body))
+		}
+		return nil
 	}
-	// The session reached a server-terminal outcome; local state is done.
-	_ = upload.RemoveState(st.SessionID)
+
+	// A model reference is the durable handoff from upload-session recovery to
+	// model-status polling. Only now is local session state no longer useful.
+	warnRemoveUploadState(ios, sessionID)
+	if err := lease.Close(); err != nil {
+		return err
+	}
 
 	if opts.doWait {
-		if out.Model == nil {
-			return errors.New("cannot --wait: the complete response carried no model reference")
-		}
 		modelJSON, err := completedModelJSON(resp.Body)
 		if err != nil {
 			return err
 		}
-		return waitForModelWithResult(ctx, opts.f, g, opts.account, opts.name,
-			out.Model.Key, opts.timeout, opts.exporter, modelJSON)
+		remaining := remainingCompletionBudget(waitStarted, opts.timeout)
+		if remaining <= 0 {
+			fmt.Fprintf(ios.ErrOut, "Timed out after %s; the model is still processing.\n", opts.timeout)
+			fmt.Fprintf(ios.ErrOut, "Check again with: melange model status %s -R %s\n",
+				text.SanitizeTerminalInline(out.Model.Key),
+				text.SanitizeTerminalInline(opts.repo))
+			return cmdutil.ErrSilent
+		}
+		return waitForModelWithResultWithin(completionCtx, opts.f, g, opts.account, opts.name,
+			out.Model.Key, remaining, opts.timeout, opts.exporter, modelJSON)
 	}
 	if opts.exporter != nil {
 		return opts.exporter.Write(ios, json.RawMessage(resp.Body))
 	}
 	return nil
+}
+
+func waitForCompletionModel(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
+	sessionID string, timeout time.Duration,
+) (*gen.CompleteModelUploadResult, error) {
+	var last *gen.CompleteModelUploadResult
+	err := wait.Poll(ctx, wait.Options{
+		Timeout: timeout,
+		Jitter:  pollJitter,
+		Sleep:   pollSleep,
+		Now:     pollNow,
+	}, func(ctx context.Context) (bool, error) {
+		resp, err := g.CompleteModelUploadWithResponse(ctx, opts.account, opts.name, sessionID,
+			&gen.CompleteModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
+		if err != nil {
+			return false, err
+		}
+		if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+			return false, aerr
+		}
+		if resp.JSON200 == nil {
+			return false, fmt.Errorf("unexpected response completing upload session (HTTP %d)", resp.StatusCode())
+		}
+		last = resp
+		out := resp.JSON200
+		return out.Model != nil || strings.EqualFold(string(out.State), "FAILED") ||
+			terminalCompletionWithoutModel(out), nil
+	})
+	return last, err
+}
+
+func recoverableCompletionState(state string) bool {
+	switch strings.ToUpper(state) {
+	case sessionStateVerifying, sessionStateDispatchPending, "CONVERTING":
+		return true
+	default:
+		return false
+	}
+}
+
+func terminalCompletionWithoutModel(out *gen.CompleteModelUploadResponse) bool {
+	if out == nil || out.Model != nil {
+		return false
+	}
+	switch strings.ToUpper(string(out.State)) {
+	case "CANCELED", "EXPIRED":
+		return true
+	default:
+		return false
+	}
+}
+
+func completionClockNow() time.Time {
+	if pollNow != nil {
+		return pollNow()
+	}
+	return time.Now()
+}
+
+func remainingCompletionBudget(start time.Time, timeout time.Duration) time.Duration {
+	return timeout - completionClockNow().Sub(start)
+}
+
+func completionTimeout(opts *uploadOptions, sessionID string) error {
+	fmt.Fprintf(opts.f.IOStreams.ErrOut,
+		"Timed out after %s waiting for upload completion; the session is preserved.\n", opts.timeout)
+	fmt.Fprintf(opts.f.IOStreams.ErrOut,
+		"Resume with: melange model upload --resume %s -R %s --wait\n",
+		text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+	return cmdutil.ErrSilent
+}
+
+func completionRecoveryError(opts *uploadOptions, sessionID string, err error) error {
+	return fmt.Errorf("%w\nThe session is preserved; resume with: melange model upload --resume %s -R %s",
+		err, text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+}
+
+func printCompletionResumeHint(opts *uploadOptions, sessionID string) {
+	fmt.Fprintf(opts.f.IOStreams.ErrOut,
+		"\nInterrupted. The upload session is preserved.\nResume with: melange model upload --resume %s -R %s\n",
+		text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
 }
 
 func completedModelJSON(body []byte) (json.RawMessage, error) {
@@ -816,6 +1003,12 @@ func completedModelJSON(body []byte) (json.RawMessage, error) {
 // ---------------------------------------------------------------------------
 
 func runResume(ctx context.Context, opts *uploadOptions, args []string) error {
+	lease, err := upload.AcquireSession(ctx, opts.resumeID)
+	if err != nil {
+		return fmt.Errorf("locking upload session %s: %w", opts.resumeID, err)
+	}
+	defer lease.Close() //nolint:errcheck
+
 	g, err := genClient(opts.f)
 	if err != nil {
 		return err
@@ -831,20 +1024,28 @@ func runResume(ctx context.Context, opts *uploadOptions, args []string) error {
 	case errors.Is(err, os.ErrNotExist):
 		st = nil // rebuild from the server below
 	case errors.Is(err, upload.ErrStateCorrupt):
-		fmt.Fprintf(opts.f.IOStreams.ErrOut, "! %v\n", err)
+		fmt.Fprintf(opts.f.IOStreams.ErrOut, "! %s\n",
+			text.SanitizeTerminalInline(err.Error()))
 		st = nil // treat as missing: rebuild from the server below
 	default:
 		return err
 	}
 
-	// The server's session state is authoritative: a terminal session can
-	// never be resumed, with or without local state.
+	// Once all bytes are server-owned, resuming means replaying completion;
+	// local artifacts are no longer required. The replay is safe and uses a
+	// fresh idempotency key so an earlier intermediate response is not cached.
 	detail, err := fetchUploadSession(ctx, opts, g)
 	if err != nil {
 		return err
 	}
+	if recoverableCompletionState(string(detail.State)) {
+		return completeSessionAndReport(ctx, opts, g, opts.resumeID, lease)
+	}
+
+	// Other terminal sessions can never be resumed, with or without local
+	// state.
 	if terminalSessionState(string(detail.State)) {
-		_ = upload.RemoveState(opts.resumeID)
+		warnRemoveUploadState(opts.f.IOStreams, opts.resumeID)
 		return fmt.Errorf("session %s is %s; start a new upload", opts.resumeID, strings.ToLower(string(detail.State)))
 	}
 
@@ -855,8 +1056,9 @@ func runResume(ctx context.Context, opts *uploadOptions, args []string) error {
 		}
 	}
 
-	fmt.Fprintf(opts.f.IOStreams.ErrOut, "Resuming upload session %s (%d files)\n", st.SessionID, len(st.Files))
-	return transferAndComplete(ctx, opts, g, st)
+	fmt.Fprintf(opts.f.IOStreams.ErrOut, "Resuming upload session %s (%d files)\n",
+		text.SanitizeTerminalInline(st.SessionID), len(st.Files))
+	return transferAndComplete(ctx, opts, g, st, lease)
 }
 
 // fetchUploadSession GETs one upload session's server-side detail.
@@ -972,6 +1174,15 @@ func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.Cli
 // ---------------------------------------------------------------------------
 
 func runCancel(ctx context.Context, opts *uploadOptions) error {
+	if err := confirmUploadCancellation(ctx, opts); err != nil {
+		return err
+	}
+	lease, err := upload.AcquireSession(ctx, opts.cancelID)
+	if err != nil {
+		return fmt.Errorf("locking upload session %s: %w", opts.cancelID, err)
+	}
+	defer lease.Close() //nolint:errcheck
+
 	g, err := genClient(opts.f)
 	if err != nil {
 		return err
@@ -984,14 +1195,49 @@ func runCancel(ctx context.Context, opts *uploadOptions) error {
 	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		return aerr
 	}
-	_ = upload.RemoveState(opts.cancelID)
+	warnRemoveUploadState(opts.f.IOStreams, opts.cancelID)
+	if err := lease.Close(); err != nil {
+		return err
+	}
 
 	ios := opts.f.IOStreams
-	fmt.Fprintf(ios.ErrOut, "✓ Canceled upload session %s\n", opts.cancelID)
+	fmt.Fprintf(ios.ErrOut, "✓ Canceled upload session %s\n",
+		text.SanitizeTerminalInline(opts.cancelID))
 	if opts.exporter != nil {
 		return opts.exporter.Write(ios, json.RawMessage(resp.Body))
 	}
 	return nil
+}
+
+func confirmUploadCancellation(ctx context.Context, opts *uploadOptions) error {
+	if opts.yes {
+		return nil
+	}
+	ios := opts.f.IOStreams
+	if !ios.IsStdinTTY() || opts.f.NoInput {
+		return cmdutil.FlagError{Err: fmt.Errorf(
+			"canceling upload session %s requires confirmation; re-run with --yes", opts.cancelID)}
+	}
+	safeCancelID := text.SanitizeTerminalInline(opts.cancelID)
+	fmt.Fprintf(ios.ErrOut, "Canceling upload session %s discards its resumable state.\nType %s to confirm: ",
+		safeCancelID, safeCancelID)
+	line, err := ios.ReadLine(ctx)
+	if err != nil && line == "" {
+		return fmt.Errorf("reading cancellation confirmation: %w", err)
+	}
+	line = strings.TrimSuffix(line, "\n")
+	line = strings.TrimSuffix(line, "\r")
+	if line != opts.cancelID {
+		return fmt.Errorf("confirmation did not match %s; upload session not canceled", opts.cancelID)
+	}
+	return nil
+}
+
+func warnRemoveUploadState(ios *iostreams.IOStreams, sessionID string) {
+	if err := upload.RemoveState(sessionID); err != nil {
+		fmt.Fprintf(ios.ErrOut, "! Server operation succeeded, but local upload state cleanup failed: %s\n",
+			text.SanitizeTerminalInline(err.Error()))
+	}
 }
 
 func runSessions(ctx context.Context, opts *uploadOptions) error {
@@ -1057,14 +1303,16 @@ type progress struct {
 }
 
 func newProgress(f *cmdutil.Factory, name string, total int64) *progress {
-	return &progress{f: f, tty: f.IOStreams.IsStderrTTY(), name: name, total: total,
+	return &progress{f: f, tty: f.IOStreams.IsStderrTTY(),
+		name: text.SanitizeTerminalInline(name), total: total,
 		arrow: "↑", verb: "uploaded"}
 }
 
 // newDownloadProgress is the ↓ variant; total may be 0 when the size is
 // unknown until the stream ends (percentages are then skipped).
 func newDownloadProgress(f *cmdutil.Factory, name string, total int64) *progress {
-	return &progress{f: f, tty: f.IOStreams.IsStderrTTY(), name: name, total: total,
+	return &progress{f: f, tty: f.IOStreams.IsStderrTTY(),
+		name: text.SanitizeTerminalInline(name), total: total,
 		arrow: "↓", verb: "downloaded"}
 }
 
@@ -1108,6 +1356,16 @@ type waitedModelResult struct {
 // terminal status for structured upload/import output. A nil model keeps the
 // model status command's existing raw-status contract.
 func waitForModelWithResult(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResponses, account, name, key string, timeout time.Duration, exporter *cmdutil.Exporter, model json.RawMessage) error {
+	return waitForModelWithResultWithin(ctx, f, g, account, name, key, timeout, timeout, exporter, model)
+}
+
+// waitForModelWithResultWithin separates the remaining polling budget from
+// the user-facing total. Upload completion recovery may consume part of a
+// shared --timeout before model-status polling begins.
+func waitForModelWithResultWithin(ctx context.Context, f *cmdutil.Factory, g *gen.ClientWithResponses,
+	account, name, key string, timeout, displayTimeout time.Duration,
+	exporter *cmdutil.Exporter, model json.RawMessage,
+) error {
 	ios := f.IOStreams
 	var last *gen.ModelStatusResponse
 	var raw []byte
@@ -1133,8 +1391,10 @@ func waitForModelWithResult(ctx context.Context, f *cmdutil.Factory, g *gen.Clie
 		return last.Terminal, nil
 	})
 	if errors.Is(err, wait.ErrTimeout) {
-		fmt.Fprintf(ios.ErrOut, "Timed out after %s; the model is still processing.\n", timeout)
-		fmt.Fprintf(ios.ErrOut, "Check again with: melange model status %s -R %s/%s\n", key, account, name)
+		fmt.Fprintf(ios.ErrOut, "Timed out after %s; the model is still processing.\n", displayTimeout)
+		fmt.Fprintf(ios.ErrOut, "Check again with: melange model status %s -R %s/%s\n",
+			text.SanitizeTerminalInline(key), text.SanitizeTerminalInline(account),
+			text.SanitizeTerminalInline(name))
 		return cmdutil.ErrSilent
 	}
 	if err != nil {
@@ -1151,7 +1411,8 @@ func waitForModelWithResult(ctx context.Context, f *cmdutil.Factory, g *gen.Clie
 		return perr
 	}
 	if strings.EqualFold(string(last.State), string(gen.ModelStatusResponseStateFailed)) {
-		fmt.Fprintf(ios.ErrOut, "✗ Model processing failed: %s\n", deref(last.FailureCode))
+		fmt.Fprintf(ios.ErrOut, "✗ Model processing failed: %s\n",
+			text.SanitizeTerminalInline(deref(last.FailureCode)))
 		return cmdutil.ErrSilent
 	}
 	return nil

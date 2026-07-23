@@ -189,13 +189,24 @@ func TestReportGeneralNonTTYRecordPerLine(t *testing.T) {
 	assert.Empty(t, e.errOut.String())
 }
 
+func TestReportGeneralNonTTYPreservesFloat32ValueLosslessly(t *testing.T) {
+	e := setup(t)
+	body := strings.Replace(generalFixture(), `"value":5`, `"value":1.234`, 1)
+	e.reg.Register(httpmock.REST("GET", generalPath), jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "report", "view", "m_x", "-R", "zetic/whisper"))
+
+	first := strings.SplitN(e.out.String(), "\n", 2)[0]
+	assert.Equal(t, "Pixel\tPixel\t\t\tnpu\tNPU_FP32\tfp32\t0\tlatency_ms\t1.234\tms", first)
+}
+
 func TestReportGeneralJSONByteExact(t *testing.T) {
 	e := setup(t)
 	body := generalFixture()
 	e.reg.Register(httpmock.REST("GET", generalPath), jsonStub(200, body))
 
 	require.NoError(t, run(t, e, "report", "view", "m_x", "-R", "zetic/whisper", "--json"))
-	assert.Equal(t, body+"\n", e.out.String(), "--json is the API response byte-for-byte")
+	assert.Equal(t, body+"\n", e.out.String(), "--json preserves API JSON with exactly one trailing newline")
 }
 
 // ---------------------------------------------------------------------------

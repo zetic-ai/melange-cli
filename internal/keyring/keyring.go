@@ -50,12 +50,15 @@ func Delete(host string) error {
 }
 
 // Lookup adapts Get to the config token-resolution lookup signature.
-func Lookup(host string) (string, bool) {
+func Lookup(host string) (string, bool, error) {
 	token, err := Get(host)
-	if err != nil {
-		return "", false
+	if errors.Is(err, ErrNotFound) {
+		return "", false, nil
 	}
-	return token, true
+	if err != nil {
+		return "", false, err
+	}
+	return token, true, nil
 }
 
 // HostKey normalizes a host or URL into the keyring key: scheme and path are

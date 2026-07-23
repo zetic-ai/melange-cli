@@ -1,7 +1,7 @@
 // Package config handles loading, saving, and resolving configuration values
-// for the melange CLI. Configuration is stored in a YAML file; precedence
-// resolution always wins in this order: flag > env > env-file > keyring >
-// config > default.
+// for the melange CLI. Credential resolution follows this order:
+// environment > environment file > explicitly selected config storage >
+// keyring > legacy config fallback.
 package config
 
 import (
@@ -22,11 +22,18 @@ const (
 	EnvAPIKeyFile = "MELANGE_API_KEY_FILE"
 
 	DefaultHost = "https://api.zetic.ai"
+
+	// CredentialStorageConfig marks a host whose token was explicitly stored
+	// in the mode-0600 config file after the user opted into
+	// --insecure-storage. Resolution skips the unavailable keyring only for
+	// this explicit per-host selection.
+	CredentialStorageConfig = "config"
 )
 
 // HostEntry holds per-host credentials.
 type HostEntry struct {
-	APIKey string `yaml:"api_key"`
+	APIKey  string `yaml:"api_key"`
+	Storage string `yaml:"storage,omitempty"`
 }
 
 // Config is the top-level config file schema.
@@ -58,13 +65,9 @@ func (c *Config) ResolveHost(flagValue string) Resolved {
 	return Resolved{Value: DefaultHost, Source: "default"}
 }
 
-// ResolveToken returns the API token for the given host following the
-// precedence chain:
-//
-//	env:MELANGE_API_KEY > env:MELANGE_API_KEY_FILE > config(hosts.<host>.api_key) > empty
-//
-// A set-but-unreadable MELANGE_API_KEY_FILE is a hard error: falling through
-// to keyring/config would silently switch credentials.
+// ResolveToken returns the API token for the given host without consulting a
+// keyring. Call ResolveTokenWith for the full CLI credential resolution path.
+// A set-but-unreadable MELANGE_API_KEY_FILE is a hard error.
 func (c *Config) ResolveToken(host string) (Resolved, error) {
 	return c.ResolveTokenWith(host, nil)
 }
@@ -73,8 +76,13 @@ func (c *Config) ResolveToken(host string) (Resolved, error) {
 // keyring). The lookup is a plain func so this package does not import
 // internal/keyring; commands pass keyring.Lookup. Precedence:
 //
-//	env:MELANGE_API_KEY > env:MELANGE_API_KEY_FILE > keyring > config > empty
-func (c *Config) ResolveTokenWith(host string, lookup func(host string) (string, bool)) (Resolved, error) {
+//	env:MELANGE_API_KEY > env:MELANGE_API_KEY_FILE > explicitly selected
+//	config storage > keyring > legacy config > empty
+//
+// A keyring lookup failure remains a hard error unless this host explicitly
+// selected config storage. This prevents an unavailable keyring from silently
+// switching credentials.
+func (c *Config) ResolveTokenWith(host string, lookup func(host string) (string, bool, error)) (Resolved, error) {
 	if v := os.Getenv(EnvAPIKey); v != "" {
 		return Resolved{Value: v, Source: "env:" + EnvAPIKey}, nil
 	}
@@ -91,15 +99,24 @@ func (c *Config) ResolveTokenWith(host string, lookup func(host string) (string,
 			Source: "env:" + EnvAPIKeyFile,
 		}, nil
 	}
+	var configured HostEntry
+	if c != nil && c.Hosts != nil {
+		configured = c.Hosts[host]
+	}
+	if configured.Storage == CredentialStorageConfig && configured.APIKey != "" {
+		return Resolved{Value: configured.APIKey, Source: "config"}, nil
+	}
 	if lookup != nil {
-		if v, ok := lookup(host); ok && v != "" {
+		v, ok, err := lookup(host)
+		if err != nil {
+			return Resolved{}, fmt.Errorf("resolving token from keyring: %w", err)
+		}
+		if ok && v != "" {
 			return Resolved{Value: v, Source: "keyring"}, nil
 		}
 	}
-	if c != nil && c.Hosts != nil {
-		if entry, ok := c.Hosts[host]; ok && entry.APIKey != "" {
-			return Resolved{Value: entry.APIKey, Source: "config"}, nil
-		}
+	if configured.APIKey != "" {
+		return Resolved{Value: configured.APIKey, Source: "config"}, nil
 	}
 	return Resolved{}, nil
 }
@@ -109,7 +126,7 @@ func (c *Config) SetHostAPIKey(host, key string) error {
 	if c.Hosts == nil {
 		c.Hosts = make(map[string]HostEntry)
 	}
-	c.Hosts[host] = HostEntry{APIKey: key}
+	c.Hosts[host] = HostEntry{APIKey: key, Storage: CredentialStorageConfig}
 	return Save(c)
 }
 

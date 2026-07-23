@@ -40,4 +40,3 @@ melange auth token [flags]
 ### SEE ALSO
 
 * [melange auth](melange_auth.md)	 - Authenticate melange with the Melange platform
-

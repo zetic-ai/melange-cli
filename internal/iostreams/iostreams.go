@@ -4,7 +4,11 @@
 package iostreams
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 
@@ -25,6 +29,8 @@ type IOStreams struct {
 	stderrTTY *bool
 	noColor   bool // set by --no-color flag
 	termWidth *int // override for tests
+
+	passwordReader func(fd int) ([]byte, error)
 }
 
 // IsStdinTTY reports whether In is a terminal.
@@ -102,6 +108,128 @@ func (s *IOStreams) ColorEnabled() bool {
 
 // SetTerminalWidth overrides the detected terminal width (used by tests).
 func (s *IOStreams) SetTerminalWidth(w int) { s.termWidth = &w }
+
+// SetPasswordReader overrides hidden terminal input. It is primarily a test
+// seam for commands that must not echo secrets.
+func (s *IOStreams) SetPasswordReader(read func(fd int) ([]byte, error)) {
+	s.passwordReader = read
+}
+
+// ReadLine reads one line from stdin and stops waiting when ctx is canceled.
+// The returned line includes its trailing newline, matching bufio.ReadString.
+func (s *IOStreams) ReadLine(ctx context.Context) (string, error) {
+	return readContext(ctx, func() (string, error) {
+		return bufio.NewReader(s.In).ReadString('\n')
+	})
+}
+
+// ReadPassword reads one line from the terminal with echo disabled. Terminal
+// state is restored before the method returns, including on cancellation.
+func (s *IOStreams) ReadPassword(ctx context.Context) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	fd := -1
+	f, fileBacked := s.In.(*os.File)
+	if fileBacked {
+		fd = int(f.Fd())
+	}
+	if s.passwordReader != nil {
+		return readContext(ctx, func() ([]byte, error) {
+			return s.passwordReader(fd)
+		})
+	}
+	if fd < 0 {
+		return nil, fmt.Errorf("hidden input requires terminal-backed stdin")
+	}
+
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return nil, err
+	}
+	restored := false
+	defer func() {
+		if !restored {
+			_ = term.Restore(fd, oldState)
+		}
+	}()
+
+	raw, readErr := readPasswordLine(ctx, f)
+	restoreErr := term.Restore(fd, oldState)
+	restored = restoreErr == nil
+	if readErr != nil {
+		if restoreErr != nil {
+			return raw, errors.Join(readErr, fmt.Errorf("restoring terminal input: %w", restoreErr))
+		}
+		return raw, readErr
+	}
+	if restoreErr != nil {
+		return nil, fmt.Errorf("restoring terminal input: %w", restoreErr)
+	}
+	return raw, nil
+}
+
+func readPasswordLine(ctx context.Context, reader io.Reader) ([]byte, error) {
+	var password []byte
+	for {
+		var b [1]byte
+		n, err := readContext(ctx, func() (int, error) {
+			return reader.Read(b[:])
+		})
+		if n > 0 {
+			switch b[0] {
+			case '\r', '\n':
+				return password, nil
+			case '\b', 0x7f:
+				if len(password) > 0 {
+					password = password[:len(password)-1]
+				}
+			case 0x03: // Ctrl-C is a byte while the terminal is in raw mode.
+				return nil, context.Canceled
+			case 0x04: // Ctrl-D
+				if len(password) == 0 {
+					return nil, io.EOF
+				}
+				return password, nil
+			default:
+				password = append(password, b[0])
+			}
+			continue
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) && len(password) > 0 {
+				return password, nil
+			}
+			return password, err
+		}
+	}
+}
+
+type readResult[T any] struct {
+	value T
+	err   error
+}
+
+func readContext[T any](ctx context.Context, read func() (T, error)) (T, error) {
+	var zero T
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	result := make(chan readResult[T], 1)
+	go func() {
+		value, err := read()
+		result <- readResult[T]{value: value, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	case got := <-result:
+		if err := ctx.Err(); err != nil {
+			return zero, err
+		}
+		return got.value, got.err
+	}
+}
 
 // TerminalWidth returns the width of the terminal, or 80 when not a TTY.
 func (s *IOStreams) TerminalWidth() int {

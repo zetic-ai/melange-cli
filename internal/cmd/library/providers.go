@@ -22,8 +22,8 @@ with each provider's model count.
 
 On a terminal this prints a table (NAME, MODELS). When stdout is not a
 terminal it prints one provider per line as tab-separated values (name,
-model_count) with no header. With --json the envelope {"results": [...],
-"count": N} is emitted exactly as the API returned it.
+model_count) with no header. With --json the API envelope {"results": [...],
+"count": N} is preserved and followed by exactly one trailing newline.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 		Example: `  # List providers
