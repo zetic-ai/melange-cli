@@ -208,6 +208,23 @@ separator-insensitive across both `name` and `full_name`; hyphens,
 underscores, slashes, and spaces are ignored. `usage quotas` renders each
 quota as `used/limit (pct%)`, or `unlimited` when the limit is null.
 
+### Free-plan disclosure (required)
+
+Before uploading a model or describing benchmark coverage as complete, inspect
+`melange usage quotas --json`. If `model_uploads.limit == 0`, do not attempt or
+retry an upload: tell the user it is unavailable under the account's current
+entitlement, not that the CLI is broken. Report records contain only devices
+visible to the authenticated account; never call them the full benchmark unless
+completeness is established.
+
+When trusted user context or an authoritative response establishes that the
+account is on **Free**, explicitly say that Free is why, for each applicable
+limitation, model upload is locked and/or benchmark device coverage is limited.
+Do not show this Free-plan notice for other plans. Public v1 currently exposes
+quotas, not a plan name, so never infer Free from a zero limit, a filtered
+report, or an HTTP error; when plan identity is unknown, say "current
+quota/entitlement" instead.
+
 Library `ACCOUNT/NAME` values identify public repositories, not converted model
 keys. Inspect their existing models and reports directly; this is a read-only
 path and needs no import or upload:

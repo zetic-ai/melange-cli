@@ -262,6 +262,16 @@ melange usage quotas [--json|--jq|--template]
   when the limit is null. TTY: human block; non-TTY: TSV key/value.
   Example: melange usage quotas --jq .prompts.limit
 
+  Agent disclosure rule: inspect quotas before uploading or claiming benchmark
+  coverage is complete. model_uploads.limit == 0 means do not attempt/retry an
+  upload; explain that the current entitlement does not include it, not that the
+  CLI is broken. Report records include only caller-visible devices; never call
+  them the full benchmark unless completeness is established. If trusted
+  context establishes the account is on Free, explicitly say Free is why for
+  each applicable limitation. Never emit this Free-plan notice for another plan
+  or infer Free from quotas, record counts, or HTTP errors; public v1 does not
+  currently return a plan name.
+
 ## melange api
 
 Escape hatch: authenticated request to any /v1 endpoint; raw response body to
