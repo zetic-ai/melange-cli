@@ -2,9 +2,22 @@
 
 package upload
 
-import "golang.org/x/sys/windows"
+import (
+	"sync"
+
+	"golang.org/x/sys/windows"
+)
+
+// Concurrent replacements of the same destination can fail with
+// ERROR_ACCESS_DENIED on Windows even when each source is an independent
+// temporary file. Upload state writes are small, so serialize only the atomic
+// replacement boundary instead of weakening durability or adding retries.
+var replaceStateFileMu sync.Mutex
 
 func replaceStateFile(source, destination string) error {
+	replaceStateFileMu.Lock()
+	defer replaceStateFileMu.Unlock()
+
 	sourcePtr, err := windows.UTF16PtrFromString(source)
 	if err != nil {
 		return err
