@@ -67,6 +67,7 @@ Restart your agent after installation so it can discover the skill.
 ## Authentication
 
 Create a Personal Access Token in Melange → Settings → Personal Access Tokens.
+[link](https://melange.zetic.ai/settings?tab=pat)
 
 Login with your Melange personal access token (stored securely across platforms):
 
