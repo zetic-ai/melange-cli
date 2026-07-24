@@ -1,8 +1,8 @@
-# melange-cli
+# Melange CLI
 
-`melange` — the public command-line interface for [Melange](https://melange.zetic.ai), zetic.ai's on-device AI model deployment and benchmarking platform.
+`melange` is the public command-line interface for [Melange](https://melange.zetic.ai), an on-device AI deployment platform by [ZETIC](https://zetic.ai).
 
-Designed agents-first: non-interactive safe, structured `--json` output, stable exit codes, and machine-actionable errors — with a pleasant TTY experience for humans.
+It is designed agents-first: non-interactive safe, structured `--json` output, stable exit codes, and machine-actionable errors. Give your AI agent access to Melange.
 
 ## Install
 
@@ -26,7 +26,7 @@ Prebuilt binaries (darwin/linux/windows, amd64/arm64) with checksums and SBOMs a
 ## Agent skills
 
 An [agent skill](https://agentskills.io) is available for driving `melange` from
-Claude Code, Codex, Cursor, and other compatible coding agents. Install it at
+Claude Code, Codex, Cursor, OpenCode, and other compatible coding agents. Install it at
 user scope with the open Agent Skills installer:
 
 ```sh
