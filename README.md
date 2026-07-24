@@ -45,11 +45,24 @@ Restart your agent after installation so it can discover the skill.
 
 ## Authentication
 
-Create a Personal Access Token in Melange → Settings → Personal Access Tokens, then:
+Create a Personal Access Token in Melange → Settings → Personal Access Tokens.
+
+Login with your Melange personal access token (stored securely across platforms):
 
 ```sh
-melange auth login            # paste token interactively
-melange auth status           # verify who you are
+melange auth login
+```
+
+Or set environment variable:
+
+```sh
+export MELANGE_API_KEY="ztp_your_personal_access_token"
+```
+
+### Check status
+
+```sh
+melange auth status
 ```
 
 ## Quick start
