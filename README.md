@@ -6,35 +6,56 @@ It is designed agents-first: non-interactive safe, structured `--json` output, s
 
 ## Install
 
-**Installer script** (macOS/Linux; requires
-[`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/),
-verifies the release-workflow signature and checksum, then installs to
-`/usr/local/bin` or `~/.local/bin`):
+**Homebrew** (macOS or Linux):
+
+```sh
+brew install zetic-ai/tap/melange
+```
+
+**npm** (macOS, Linux, or Windows):
+
+```sh
+npm install -g @zetic-ai/melange-cli
+```
+
+Both install prebuilt release binaries; Go is not required.
+
+<details>
+<summary>Installer script, Go, and manual installation</summary>
+
+The macOS/Linux installer requires
+[`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/) and
+verifies the release-workflow signature and checksum:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install.sh | sh
 ```
 
-**Go**:
+With a current Go toolchain:
 
 ```sh
 go install github.com/zetic-ai/melange-cli/cmd/melange@latest
 ```
 
-Prebuilt binaries (darwin/linux/windows, amd64/arm64) with checksums and SBOMs are on the [releases page](https://github.com/zetic-ai/melange-cli/releases).
+Prebuilt binaries for macOS, Linux, and Windows on amd64/arm64, with checksums
+and SBOMs, are available on the
+[releases page](https://github.com/zetic-ai/melange-cli/releases).
+
+</details>
 
 ## Agent skills
 
 An [agent skill](https://agentskills.io) is available for driving `melange` from
-Claude Code, Codex, Cursor, OpenCode, and other compatible coding agents. Install it at
-user scope with the open Agent Skills installer:
+Claude Code, Codex, Cursor, OpenCode, and other compatible coding agents.
+Install it at user scope with the open Agent Skills installer:
 
 ```sh
-# Install the skill (user scope recommended; select an agent when prompted)
-npx skills add zetic-ai/melange-cli --skill melange-cli --global
+# Install for universal agents and Claude Code
+npx skills add zetic-ai/melange-cli --skill melange-cli \
+  --agent universal claude-code --global --yes
 
-# Or install non-interactively for Claude Code
-npx skills add zetic-ai/melange-cli --skill melange-cli --agent claude-code --global --yes
+# Or choose one or more supported agents interactively
+npx skills add zetic-ai/melange-cli --skill melange-cli --global
 
 # Update the installed skill after a melange-cli release
 npx skills update melange-cli --global
@@ -108,6 +129,7 @@ Requires Go (see `go.mod`) and `make`:
 |--------|--------------|
 | `make build` | Build `bin/melange` with version ldflags |
 | `make test` | `go test ./...` |
+| `make npm-test` | Test the npm distribution installer |
 | `make lint` | `golangci-lint run` |
 | `make fmt` | `gofmt -l -w .` |
 | `make gen` / `make gen-check` | Regenerate / verify the OpenAPI client |

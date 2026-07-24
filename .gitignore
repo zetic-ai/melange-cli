@@ -2,6 +2,9 @@
 /melange
 /bin/
 /dist/
+/npm/checksums.txt
+/npm/LICENSE
+/npm/vendor/
 
 # Test artifacts
 *.test

@@ -1,0 +1,35 @@
+{
+  "name": "@zetic-ai/melange-cli",
+  "version": "0.0.0-development",
+  "description": "Agent-first command-line interface for ZETIC Melange",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/zetic-ai/melange-cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zetic-ai/melange-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zetic-ai/melange-cli/issues"
+  },
+  "bin": {
+    "melange": "bin/melange.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "checksums.txt",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

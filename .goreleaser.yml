@@ -4,9 +4,8 @@
 #   make snapshot
 #
 # A real tag-triggered release uses the GitHub-provided GITHUB_TOKEN with
-# `contents: write` to create the release. Package-manager publication can be
-# added after a maintained tap exists; the initial release has no external
-# repository dependency.
+# `contents: write` to create the release. Homebrew publication additionally
+# uses HOMEBREW_TAP_GITHUB_TOKEN to update zetic-ai/homebrew-tap.
 version: 2
 
 project_name: melange
@@ -65,6 +64,30 @@ signs:
 # installs it via anchore/sbom-action/download-syft).
 sboms:
   - artifacts: archive
+
+homebrew_casks:
+  - name: melange
+    ids:
+      - default
+    binaries:
+      - melange
+    directory: Casks
+    homepage: https://github.com/zetic-ai/melange-cli
+    description: Agent-first command-line interface for ZETIC Melange
+    skip_upload: auto
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/melange"]
+          end
+    repository:
+      owner: zetic-ai
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: zetic-ai-release
+      email: dev@zetic.ai
 
 release:
   draft: false

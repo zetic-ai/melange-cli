@@ -16,13 +16,16 @@ LDFLAGS := -s -w \
 # tool directive, so `make gen` is reproducible.
 DOWN_CONVERT := npx --yes @apiture/openapi-down-convert@0.14.2
 
-.PHONY: build test lint fmt gen gen-check docs docs-check snapshot fixtures-check
+.PHONY: build test npm-test lint fmt gen gen-check docs docs-check snapshot fixtures-check
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) ./cmd/melange
 
 test:
 	go test ./...
+
+npm-test:
+	npm test --prefix npm
 
 lint:
 	golangci-lint run

@@ -228,18 +228,53 @@ func TestTagReleaseIsGatedByRepositoryChecks(t *testing.T) {
 	}
 }
 
-func TestInstallDocsDoNotAdvertiseUnavailableHomebrewTap(t *testing.T) {
+func TestInstallDocsUseTheMaintainedHomebrewTap(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
-	assert.NotContains(t, readme, "brew tap zetic-ai/tap")
-	assert.NotContains(t, readme, "brew install melange")
+	assert.Contains(t, readme, "brew install zetic-ai/tap/melange")
 
 	releaseConfig := readRepoFile(t, ".goreleaser.yml")
-	assert.NotContains(t, releaseConfig, "homebrew_casks:")
-	assert.NotContains(t, releaseConfig, "TAP_GITHUB_TOKEN")
+	assert.Contains(t, releaseConfig, "homebrew_casks:")
+	assert.Contains(t, releaseConfig, "owner: zetic-ai")
+	assert.Contains(t, releaseConfig, "name: homebrew-tap")
+	assert.Contains(t, releaseConfig, "HOMEBREW_TAP_GITHUB_TOKEN")
 
 	releaseWorkflow := readRepoFile(t, ".github/workflows/release.yml")
-	assert.NotContains(t, releaseWorkflow, "homebrew-tap")
-	assert.NotContains(t, releaseWorkflow, "TAP_GITHUB_TOKEN")
+	assert.Contains(t, releaseWorkflow, "HOMEBREW_PUBLISH_ENABLED")
+	assert.Contains(t, releaseWorkflow, "HOMEBREW_TAP_GITHUB_TOKEN")
+	assert.Contains(t, releaseWorkflow, "--skip=homebrew",
+		"an unconfigured tap must not break the signed GitHub release")
+}
+
+func TestNPMDistributionPublishesTheVerifiedReleaseBinary(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	assert.Contains(t, readme, "npm install -g @zetic-ai/melange-cli")
+
+	packageJSON := readRepoFile(t, "npm/package.json")
+	assert.Contains(t, packageJSON, `"name": "@zetic-ai/melange-cli"`)
+	assert.Contains(t, packageJSON, `"postinstall": "node scripts/install.js"`)
+	assert.Contains(t, packageJSON, `"provenance": true`)
+
+	installer := readRepoFile(t, "npm/scripts/install.js")
+	assert.Contains(t, installer, "checksums.txt")
+	assert.Contains(t, installer, "Checksum verification failed")
+
+	releaseWorkflow := readRepoFile(t, ".github/workflows/release.yml")
+	assert.Contains(t, releaseWorkflow, "cp dist/checksums.txt npm/checksums.txt")
+	assert.Contains(t, releaseWorkflow, "npm publish ./npm --access public --provenance")
+	assert.Contains(t, releaseWorkflow, "id-token: write")
+}
+
+func TestAgentSkillDocsDefaultToUniversalAndClaudeWithInteractiveSelection(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	assert.Contains(t, readme,
+		"npx skills add zetic-ai/melange-cli --skill melange-cli")
+	assert.Contains(t, readme, "--agent universal claude-code --global --yes",
+		"default installation must cover universal agents and Claude Code")
+	assert.Contains(t, readme,
+		"npx skills add zetic-ai/melange-cli --skill melange-cli --global",
+		"other users must be able to choose agents interactively")
+	assert.Contains(t, readme, "npx skills update melange-cli --global")
+	assert.NotContains(t, readme, "gh skill")
 }
 
 func TestOpenAPISourceProvenanceMatchesCommittedArtifact(t *testing.T) {
