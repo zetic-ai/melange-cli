@@ -141,15 +141,14 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 		"Windows checkouts must preserve byte-exact OpenAPI and skill artifacts")
 
 	readme := readRepoFile(t, "README.md")
-	readmeQuickStart := section(t, readme, "## Quick start", "## For agents")
-	assert.Contains(t, readmeQuickStart,
-		`repo="$(melange repo create whisper-tiny --private --jq .full_name)"`)
-	assert.Contains(t, readmeQuickStart, `-R "$repo"`)
-	assert.Contains(t, readmeQuickStart, "melange usage quotas")
-	assert.Contains(t, readmeQuickStart,
-		`model_key="$(printf '%s\n' "$upload_json" | jq -er .model.key)"`)
-	assert.NotContains(t, readmeQuickStart, "acme/")
-	assert.NotRegexp(t, regexp.MustCompile(`\bm_[[:alnum:]]+\b`), readmeQuickStart)
+	// The README keeps its agents-first "Build with AI" quick start (the CLI
+	// shell workflow itself lives in the skill and is checked below). Published
+	// docs must never ship fabricated identifiers that look copy-pasteable — a
+	// placeholder account or a made-up model key would mislead a reader.
+	readmeQuickStart := section(t, readme, "## Build with AI", "## Documentation")
+	assert.Contains(t, readmeQuickStart, "### Quick start")
+	assert.NotContains(t, readme, "acme/")
+	assert.NotRegexp(t, regexp.MustCompile(`\bm_[[:alnum:]]+\b`), readme)
 
 	skill := readRepoFile(t, "skills/melange-cli/SKILL.md")
 	assert.Contains(t, skill, "name: melange-cli\n")
@@ -164,6 +163,7 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 	assert.NotContains(t, skillWorkflow, "acme/")
 
 	llms := readRepoFile(t, "llms.txt")
+	// No published doc may over-promise byte-exactness.
 	for name, contents := range map[string]string{
 		"README.md":                   readme,
 		"skills/melange-cli/SKILL.md": skill,
@@ -171,6 +171,13 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 	} {
 		assert.NotContains(t, contents, "byte-for-byte", name)
 		assert.NotContains(t, contents, "byte-exact", name)
+	}
+	// The agent-facing surface docs state the JSON trailing-newline contract;
+	// the README is a high-level overview and does not.
+	for name, contents := range map[string]string{
+		"skills/melange-cli/SKILL.md": skill,
+		"llms.txt":                    llms,
+	} {
 		assert.Contains(t, contents, "exactly one trailing newline", name)
 	}
 	assert.NotContains(t, skill, "SDK 1.9.0")
