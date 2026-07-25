@@ -191,7 +191,7 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 
 func TestSecurityPolicyUsesPrivateReporting(t *testing.T) {
 	policy := readRepoFile(t, "SECURITY.md")
-	assert.Contains(t, policy, "security@zetic.ai")
+	assert.Contains(t, policy, "tony@zetic.ai")
 	assert.Contains(t, policy, "v1")
 	assert.Contains(t, strings.ToLower(policy), "do not")
 	assert.Contains(t, strings.ToLower(policy), "public issue")
