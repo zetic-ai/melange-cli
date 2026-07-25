@@ -467,6 +467,47 @@ func TestStatusJSON(t *testing.T) {
 	assert.Equal(t, "ci-token", got.TokenName)
 }
 
+const planBody = `{"plan":"pro","is_trial":false,"trial_ends_at":null}`
+
+func TestStatusShowsPlanWhenAvailable(t *testing.T) {
+	e := setup(t)
+	t.Setenv(config.EnvAPIKey, "ztp_env")
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	e.reg.Register(httpmock.REST("GET", "/v1/billing/plan"), httpmock.StatusStringResponse(200, planBody))
+
+	require.NoError(t, run(t, e, "auth", "status"))
+	assert.Contains(t, e.out.String(), "Plan: pro")
+
+	e.out.Reset()
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	e.reg.Register(httpmock.REST("GET", "/v1/billing/plan"), httpmock.StatusStringResponse(200, planBody))
+	require.NoError(t, run(t, e, "auth", "status", "--json"))
+	var got struct {
+		Plan string `json:"plan"`
+	}
+	require.NoError(t, json.Unmarshal(e.out.Bytes(), &got))
+	assert.Equal(t, "pro", got.Plan)
+}
+
+func TestStatusOmitsPlanWhenEndpointMissing(t *testing.T) {
+	e := setup(t)
+	t.Setenv(config.EnvAPIKey, "ztp_env")
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	e.reg.Register(httpmock.REST("GET", "/v1/billing/plan"),
+		httpmock.StatusStringResponse(404, `{"type":"error","error":{"type":"not_found_error","message":"nope"},"request_id":"r"}`))
+
+	// A missing/failing plan endpoint must not fail status or add a Plan line.
+	require.NoError(t, run(t, e, "auth", "status"))
+	assert.NotContains(t, e.out.String(), "Plan:")
+
+	e.out.Reset()
+	e.reg.Register(httpmock.REST("GET", "/v1/me"), httpmock.StatusStringResponse(200, meBody))
+	e.reg.Register(httpmock.REST("GET", "/v1/billing/plan"),
+		httpmock.StatusStringResponse(404, `{"type":"error","error":{"type":"not_found_error","message":"nope"},"request_id":"r"}`))
+	require.NoError(t, run(t, e, "auth", "status", "--json"))
+	assert.NotContains(t, e.out.String(), "\"plan\"")
+}
+
 func TestStatusJQ(t *testing.T) {
 	e := setup(t)
 	t.Setenv(config.EnvAPIKey, "ztp_env")

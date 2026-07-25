@@ -18,7 +18,8 @@ func newCmdStatus(f *cmdutil.Factory) *cobra.Command {
 		Short: "Show authentication status for the current host",
 		Long: `Verify the resolved token against the API and report the identity
 behind it: host, account, token name, scopes, where the token came from
-(env, keyring, or config), and where it is stored.
+(env, keyring, or config), and where it is stored. When the server supports
+it, the account's billing plan is shown too (use "melange plan" for detail).
 
 Exit codes: 0 authenticated, 1 network/API error, 4 not logged in or the
 token was rejected.`,
@@ -59,15 +60,28 @@ token was rejected.`,
 				return err
 			}
 
+			// Best-effort: the plan enriches status but is not what status
+			// verifies. A read failure (e.g. a backend that predates the
+			// endpoint) must not turn a valid token into an error, so the
+			// plan line is simply omitted when unavailable.
+			var planName string
+			if p, perr := client.GetBillingPlan(cmd.Context()); perr == nil {
+				planName = string(p.Plan)
+			}
+
 			if exporter != nil {
-				return exporter.Write(f.IOStreams, map[string]any{
+				payload := map[string]any{
 					"host":         host.hostKey,
 					"account":      me.Account.Name,
 					"scopes":       me.Token.Scopes,
 					"token_name":   me.Token.Name,
 					"token_source": token.Source,
 					"storage":      storageLocation(token.Source),
-				})
+				}
+				if planName != "" {
+					payload["plan"] = planName
+				}
+				return exporter.Write(f.IOStreams, payload)
 			}
 			out := f.IOStreams.Out
 			fmt.Fprintf(out, "Host: %s\n", text.SanitizeTerminalInline(host.hostKey))
@@ -78,6 +92,9 @@ token was rejected.`,
 			fmt.Fprintf(out, "Token: %s\n", text.SanitizeTerminalInline(me.Token.Name))
 			fmt.Fprintf(out, "Scopes: %s\n",
 				text.SanitizeTerminalInline(scopeList(me.Token.Scopes)))
+			if planName != "" {
+				fmt.Fprintf(out, "Plan: %s\n", text.SanitizeTerminalInline(planName))
+			}
 			fmt.Fprintf(out, "Source: %s\n", text.SanitizeTerminalInline(token.Source))
 			fmt.Fprintf(out, "Storage: %s\n",
 				text.SanitizeTerminalInline(storageLocation(token.Source)))

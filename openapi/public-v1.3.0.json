@@ -233,6 +233,38 @@
         "title": "ActiveUpload",
         "type": "object"
       },
+      "BillingPlanResponse": {
+        "description": "The account's effective billing plan identity.",
+        "properties": {
+          "is_trial": {
+            "title": "Is Trial",
+            "type": "boolean"
+          },
+          "plan": {
+            "enum": [
+              "free",
+              "lite",
+              "pro",
+              "pro_plus",
+              "enterprise"
+            ],
+            "title": "Plan",
+            "type": "string"
+          },
+          "trial_ends_at": {
+            "format": "date-time",
+            "nullable": true,
+            "title": "Trial Ends At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "is_trial"
+        ],
+        "title": "BillingPlanResponse",
+        "type": "object"
+      },
       "CancelModelUploadResponse": {
         "properties": {
           "id": {
@@ -2670,11 +2702,16 @@
         "type": "object"
       },
       "QuotaItem": {
-        "description": "`used` this month vs the plan `limit`; `limit: null` = unlimited.",
+        "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
         "properties": {
           "limit": {
             "nullable": true,
             "title": "Limit",
+            "type": "integer"
+          },
+          "remaining": {
+            "nullable": true,
+            "title": "Remaining",
             "type": "integer"
           },
           "used": {
@@ -3156,6 +3193,46 @@
   },
   "openapi": "3.0.3",
   "paths": {
+    "/v1/billing/plan": {
+      "get": {
+        "description": "Effective billing plan for the token's account.\n\n`plan` is the entitlement tier quotas derive from (a trial grant reports\nthe granted tier with `is_trial: true`). Use `/usage/quotas` for the\nper-counter headroom.",
+        "operationId": "get_billing_plan",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPlanResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Billing Plan",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/deployment/options": {
       "get": {
         "description": "Supported deterministic guide selectors. React Native is excluded.",
@@ -5709,7 +5786,7 @@
     },
     "/v1/usage/quotas": {
       "get": {
-        "description": "Usage against the account's plan quotas.\n\nEach counter reports `{used, limit}`; `limit: null` means unlimited.",
+        "description": "Usage against the account's plan quotas.\n\nEach counter reports `{used, limit, remaining}`; null means unlimited.\n`remaining` is what enforcement would allow right now (spike headroom\nincluded, floored at 0) — preflight on `remaining`, not `limit - used`.",
         "operationId": "get_usage_quotas",
         "parameters": [],
         "responses": {
@@ -5781,6 +5858,10 @@
     {
       "description": "Usage and quota reporting.",
       "name": "usage"
+    },
+    {
+      "description": "Billing plan identity for the token's account.",
+      "name": "billing"
     },
     {
       "description": "Credential-safe SDK deployment options and code guides.",

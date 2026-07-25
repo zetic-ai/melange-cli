@@ -50,8 +50,9 @@ melange auth login [--with-token] [--insecure-storage] [--json]
   Example: melange auth login --with-token < token.txt
 
 melange auth status [--json|--jq|--template]
-  Verify the resolved token; report host, account, token name, scopes, source.
-  Exit 0 authenticated, 1 network/API error, 4 not logged in/rejected.
+  Verify the resolved token; report host, account, token name, scopes, source,
+  and (when the server supports it) the account plan. Exit 0 authenticated,
+  1 network/API error, 4 not logged in/rejected.
   Example: MELANGE_API_KEY=ztp_... melange auth status --json
 
 melange auth token
@@ -262,18 +263,31 @@ melange usage [--json|--jq|--template]
 
 melange usage quotas [--json|--jq|--template]
   Show each counter against its plan limit as "used/limit (pct%)", or "unlimited"
-  when the limit is null. TTY: human block; non-TTY: TSV key/value.
-  Example: melange usage quotas --jq .prompts.limit
+  when the limit is null. TTY: human block; non-TTY: TSV key/value. --json/--jq
+  also carry "remaining" per counter — what the server will actually allow now
+  (spike headroom included, floored at 0; null = unlimited).
+  Example: melange usage quotas --jq .model_uploads.remaining
 
   Agent disclosure rule: inspect quotas before uploading or claiming benchmark
-  coverage is complete. model_uploads.limit == 0 means do not attempt/retry an
-  upload; explain that the current entitlement does not include it, not that the
-  CLI is broken. Report records include only caller-visible devices; never call
-  them the full benchmark unless completeness is established. If trusted
-  context establishes the account is on Free, explicitly say Free is why for
-  each applicable limitation. Never emit this Free-plan notice for another plan
-  or infer Free from quotas, record counts, or HTTP errors; public v1 does not
-  currently return a plan name.
+  coverage is complete. model_uploads.remaining == 0 means do not attempt/retry
+  an upload; explain that no upload quota remains on the account's plan, not that
+  the CLI is broken. Report records include only caller-visible devices; never
+  call them the full benchmark unless completeness is established. Plan identity
+  is knowable via `melange plan`; when remaining is 0 and the plan is Free/Lite,
+  say the plan is why, otherwise say the monthly quota is exhausted. Check
+  `melange plan` rather than inferring the cause from a zero, record counts, or
+  HTTP errors.
+
+## melange plan
+
+Effective billing plan for the token's account.
+
+melange plan [--json|--jq|--template]
+  Show plan (free|lite|pro|pro_plus|enterprise), is_trial, trial_ends_at. TTY:
+  human block; non-TTY: TSV key/value. Reflects what the server enforces: an
+  account that bypasses quota limits reports pro_plus with unlimited quotas,
+  matching the dashboard. Exit 0 success, 1 API error, 2 usage error, 4 not
+  authenticated. Example: melange plan --jq .plan
 
 ## melange api
 

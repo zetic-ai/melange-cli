@@ -17,6 +17,33 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for BillingPlanResponsePlan.
+const (
+	Enterprise BillingPlanResponsePlan = "enterprise"
+	Free       BillingPlanResponsePlan = "free"
+	Lite       BillingPlanResponsePlan = "lite"
+	Pro        BillingPlanResponsePlan = "pro"
+	ProPlus    BillingPlanResponsePlan = "pro_plus"
+)
+
+// Valid indicates whether the value is a known member of the BillingPlanResponsePlan enum.
+func (e BillingPlanResponsePlan) Valid() bool {
+	switch e {
+	case Enterprise:
+		return true
+	case Free:
+		return true
+	case Lite:
+		return true
+	case Pro:
+		return true
+	case ProPlus:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CancelModelUploadResponseState.
 const (
 	CancelModelUploadResponseStateCANCELED        CancelModelUploadResponseState = "CANCELED"
@@ -1050,6 +1077,16 @@ type ActiveUpload struct {
 	StartedAt     string   `json:"started_at"`
 }
 
+// BillingPlanResponse The account's effective billing plan identity.
+type BillingPlanResponse struct {
+	IsTrial     bool                    `json:"is_trial"`
+	Plan        BillingPlanResponsePlan `json:"plan"`
+	TrialEndsAt *time.Time              `json:"trial_ends_at,omitempty"`
+}
+
+// BillingPlanResponsePlan defines model for BillingPlanResponse.Plan.
+type BillingPlanResponsePlan string
+
 // CancelModelUploadResponse defines model for CancelModelUploadResponse.
 type CancelModelUploadResponse struct {
 	Id    string                         `json:"id"`
@@ -1772,10 +1809,18 @@ type ProjectResponse struct {
 	Name        string  `json:"name"`
 }
 
-// QuotaItem `used` this month vs the plan `limit`; `limit: null` = unlimited.
+// QuotaItem `used` this month vs the plan `limit`, plus enforcement-accurate
+// `remaining`.
+//
+// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+// limits); `remaining: null` = unlimited. `remaining` is what the
+// enforcement path would allow right now (spike headroom included, floored
+// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+// do this" check.
 type QuotaItem struct {
-	Limit *int `json:"limit,omitempty"`
-	Used  int  `json:"used"`
+	Limit     *int `json:"limit,omitempty"`
+	Remaining *int `json:"remaining,omitempty"`
+	Used      int  `json:"used"`
 }
 
 // ReissueUploadFilesRequest defines model for ReissueUploadFilesRequest.
@@ -1884,16 +1929,44 @@ type UploadStatusResponse struct {
 
 // UsageQuotasResponse defines model for UsageQuotasResponse.
 type UsageQuotasResponse struct {
-	// ActiveDevices `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// ActiveDevices `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	ActiveDevices QuotaItem `json:"active_devices"`
 
-	// Bandwidth `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// Bandwidth `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	Bandwidth QuotaItem `json:"bandwidth"`
 
-	// ModelUploads `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// ModelUploads `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	ModelUploads QuotaItem `json:"model_uploads"`
 
-	// Prompts `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// Prompts `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	Prompts QuotaItem `json:"prompts"`
 }
 
@@ -2135,6 +2208,17 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// GetBillingPlan Get Billing Plan
+	//
+	// Effective billing plan for the token's account.
+	//
+	// `plan` is the entitlement tier quotas derive from (a trial grant reports
+	// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+	// per-counter headroom.
+	//
+	// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+	GetBillingPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetDeploymentOptions Get Deployment Options
 	//
@@ -2639,10 +2723,33 @@ type ClientInterface interface {
 	//
 	// Usage against the account's plan quotas.
 	//
-	// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+	// Each counter reports `{used, limit, remaining}`; null means unlimited.
+	// `remaining` is what enforcement would allow right now (spike headroom
+	// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 	//
 	// Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 	GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetBillingPlan Get Billing Plan
+//
+// Effective billing plan for the token's account.
+//
+// `plan` is the entitlement tier quotas derive from (a trial grant reports
+// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+// per-counter headroom.
+//
+// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+func (c *Client) GetBillingPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBillingPlanRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // GetDeploymentOptions Get Deployment Options
@@ -3586,7 +3693,9 @@ func (c *Client) GetUsage(ctx context.Context, reqEditors ...RequestEditorFn) (*
 //
 // Usage against the account's plan quotas.
 //
-// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+// Each counter reports `{used, limit, remaining}`; null means unlimited.
+// `remaining` is what enforcement would allow right now (spike headroom
+// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 //
 // Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 func (c *Client) GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3599,6 +3708,33 @@ func (c *Client) GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditor
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetBillingPlanRequest constructs an http.Request for the GetBillingPlan method
+func NewGetBillingPlanRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/billing/plan")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewGetDeploymentOptionsRequest constructs an http.Request for the GetDeploymentOptions method
@@ -5509,6 +5645,19 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// GetBillingPlanWithResponse Get Billing Plan
+	//
+	// Effective billing plan for the token's account.
+	//
+	// `plan` is the entitlement tier quotas derive from (a trial grant reports
+	// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+	// per-counter headroom.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+	GetBillingPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBillingPlanResult, error)
+
 	// GetDeploymentOptionsWithResponse Get Deployment Options
 	//
 	// Supported deterministic guide selectors. React Native is excluded.
@@ -6066,12 +6215,112 @@ type ClientWithResponsesInterface interface {
 	//
 	// Usage against the account's plan quotas.
 	//
-	// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+	// Each counter reports `{used, limit, remaining}`; null means unlimited.
+	// `remaining` is what enforcement would allow right now (spike headroom
+	// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 	GetUsageQuotasWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetUsageQuotasResult, error)
+}
+
+// GetBillingPlanResult401Headers the declared response headers of an HTTP 401 response for GetBillingPlan
+type GetBillingPlanResult401Headers struct {
+	WWWAuthenticate *string
+	XRequestID      *string
+}
+
+// GetBillingPlanResult403Headers the declared response headers of an HTTP 403 response for GetBillingPlan
+type GetBillingPlanResult403Headers struct {
+	XRequestID *string
+}
+
+// GetBillingPlanResult404Headers the declared response headers of an HTTP 404 response for GetBillingPlan
+type GetBillingPlanResult404Headers struct {
+	XRequestID *string
+}
+
+// GetBillingPlanResult500Headers the declared response headers of an HTTP 500 response for GetBillingPlan
+type GetBillingPlanResult500Headers struct {
+	XRequestID *string
+}
+
+type GetBillingPlanResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BillingPlanResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *ServerError
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetBillingPlanResult401Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *GetBillingPlanResult403Headers
+	// Headers404 the parsed response headers for an HTTP 404 response
+	Headers404 *GetBillingPlanResult404Headers
+	// Headers500 the parsed response headers for an HTTP 500 response
+	Headers500 *GetBillingPlanResult500Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetBillingPlanResult) GetJSON200() *BillingPlanResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetBillingPlanResult) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetBillingPlanResult) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetBillingPlanResult) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r GetBillingPlanResult) GetJSON500() *ServerError {
+	return r.JSON500
+}
+
+// GetBody returns the raw response body bytes
+func (r GetBillingPlanResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBillingPlanResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBillingPlanResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetBillingPlanResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 // GetDeploymentOptionsResult401Headers the declared response headers of an HTTP 401 response for GetDeploymentOptions
@@ -10332,6 +10581,25 @@ func (r GetUsageQuotasResult) ContentType() string {
 	return ""
 }
 
+// GetBillingPlanWithResponse Get Billing Plan
+//
+// Effective billing plan for the token's account.
+//
+// `plan` is the entitlement tier quotas derive from (a trial grant reports
+// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+// per-counter headroom.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+func (c *ClientWithResponses) GetBillingPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBillingPlanResult, error) {
+	rsp, err := c.GetBillingPlan(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBillingPlanResult(rsp)
+}
+
 // GetDeploymentOptionsWithResponse Get Deployment Options
 //
 // Supported deterministic guide selectors. React Native is excluded.
@@ -11155,7 +11423,9 @@ func (c *ClientWithResponses) GetUsageWithResponse(ctx context.Context, reqEdito
 //
 // Usage against the account's plan quotas.
 //
-// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+// Each counter reports `{used, limit, remaining}`; null means unlimited.
+// `remaining` is what enforcement would allow right now (spike headroom
+// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -11166,6 +11436,110 @@ func (c *ClientWithResponses) GetUsageQuotasWithResponse(ctx context.Context, re
 		return nil, err
 	}
 	return ParseGetUsageQuotasResult(rsp)
+}
+
+// ParseGetBillingPlanResult parses an HTTP response from a GetBillingPlanWithResponse call
+func ParseGetBillingPlanResult(rsp *http.Response) (*GetBillingPlanResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBillingPlanResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BillingPlanResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ServerError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetBillingPlanResult401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 403:
+		var headers GetBillingPlanResult403Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers403 = &headers
+	case rsp.StatusCode == 404:
+		var headers GetBillingPlanResult404Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers404 = &headers
+	case rsp.StatusCode == 500:
+		var headers GetBillingPlanResult500Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers500 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseGetDeploymentOptionsResult parses an HTTP response from a GetDeploymentOptionsWithResponse call

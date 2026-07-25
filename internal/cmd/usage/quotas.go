@@ -29,6 +29,11 @@ stdout is not a terminal it prints stable tab-separated key/value lines
 --json, API fields and order are preserved and output ends with exactly one
 trailing newline.
 
+Each counter also carries a "remaining" field in --json: the amount the
+server would actually allow right now (spike headroom included, floored at
+0; null means unlimited). Prefer "remaining" over deriving limit-used for
+preflight checks — it reflects what enforcement permits.
+
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 		Example: `  # Show quotas
   melange usage quotas
@@ -36,8 +41,8 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
   # Machine-readable
   melange usage quotas --json
 
-  # Agent pattern: the prompts limit (null when unlimited)
-  melange usage quotas --jq .prompts.limit`,
+  # Agent pattern: model-upload headroom (null when unlimited)
+  melange usage quotas --jq .model_uploads.remaining`,
 		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			g, err := genClient(f)

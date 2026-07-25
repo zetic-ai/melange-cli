@@ -42,6 +42,7 @@ melange help formatting.
 * [melange deploy](melange_deploy.md)	 - Get SDK deployment code for a model
 * [melange library](melange_library.md)	 - Browse the public model library
 * [melange model](melange_model.md)	 - Upload, browse, and download models
+* [melange plan](melange_plan.md)	 - Show the account's billing plan
 * [melange repo](melange_repo.md)	 - Manage model repositories
 * [melange report](melange_report.md)	 - Read model benchmark reports
 * [melange usage](melange_usage.md)	 - Show current usage counters

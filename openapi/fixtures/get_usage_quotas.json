@@ -9,18 +9,22 @@
     "body": {
       "active_devices": {
         "limit": 10,
+        "remaining": 7,
         "used": 3
       },
       "bandwidth": {
         "limit": 53687091200,
+        "remaining": 53687089966,
         "used": 1234
       },
       "model_uploads": {
         "limit": 0,
+        "remaining": 0,
         "used": 2
       },
       "prompts": {
         "limit": 3,
+        "remaining": 2,
         "used": 1
       }
     },
