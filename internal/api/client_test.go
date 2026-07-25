@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zetic-ai/melange-cli/internal/api"
+	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
 
@@ -169,6 +170,43 @@ func TestGetMe(t *testing.T) {
 	assert.Equal(t, "Bearer ztp_secret", got.Header.Get("Authorization"),
 		"gen client must ride the wrapper's auth transport")
 	assert.Equal(t, testUA, got.Header.Get("User-Agent"))
+}
+
+func TestGetBillingPlan(t *testing.T) {
+	reg := &httpmock.Registry{}
+	body := `{"plan": "pro", "is_trial": true, "trial_ends_at": "2026-08-01T00:00:00Z"}`
+	reg.Register(httpmock.REST("GET", "/v1/billing/plan"), httpmock.JSONResponse(200, json.RawMessage(body)))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_secret", reg, nil)
+	plan, err := client.GetBillingPlan(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, gen.BillingPlanResponsePlan("pro"), plan.Plan)
+	assert.True(t, plan.IsTrial)
+	require.NotNil(t, plan.TrialEndsAt)
+	assert.Equal(t, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), *plan.TrialEndsAt)
+
+	require.Len(t, reg.Requests, 1)
+	got := reg.Requests[0]
+	assert.Equal(t, "Bearer ztp_secret", got.Header.Get("Authorization"),
+		"gen client must ride the wrapper's auth transport")
+	assert.Equal(t, testUA, got.Header.Get("User-Agent"))
+}
+
+func TestGetBillingPlanNon2xxReturnsAPIError(t *testing.T) {
+	reg := &httpmock.Registry{}
+	body := `{"type":"error","error":{"type":"not_found_error","message":"Account not found"},"request_id":"req_9"}`
+	reg.Register(httpmock.REST("GET", "/v1/billing/plan"), httpmock.StatusStringResponse(404, body))
+
+	client := newTestClient(t, "https://api.zetic.ai", "ztp_bad", reg, nil)
+	_, err := client.GetBillingPlan(context.Background())
+	require.Error(t, err)
+
+	var apiErr *api.Error
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, 404, apiErr.StatusCode)
+	assert.Equal(t, "not_found_error", apiErr.Type)
+	assert.Equal(t, "req_9", apiErr.RequestID)
 }
 
 func TestGetMeNon2xxReturnsAPIError(t *testing.T) {

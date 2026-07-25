@@ -637,6 +637,14 @@ func cases() []contractCase {
 				return err
 			},
 		},
+		{
+			name:         "get_billing_plan",
+			responseBody: func() any { return &gen.BillingPlanResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+				_, err := c.GetBillingPlanWithResponse(ctx)
+				return err
+			},
+		},
 		// Error envelopes: response-only (the CLI surfaces these through the
 		// shared ErrorEnvelope type).
 		{

@@ -6,7 +6,8 @@ Show authentication status for the current host
 
 Verify the resolved token against the API and report the identity
 behind it: host, account, token name, scopes, where the token came from
-(env, keyring, or config), and where it is stored.
+(env, keyring, or config), and where it is stored. When the server supports
+it, the account's billing plan is shown too (use "melange plan" for detail).
 
 Exit codes: 0 authenticated, 1 network/API error, 4 not logged in or the
 token was rejected.

@@ -22,7 +22,9 @@ export MELANGE_API_KEY=ztp_...          # personal access token
 melange auth status --json              # verify: exit 0 = authenticated
 ```
 
-Exit 4 from `auth status` means not logged in or token rejected.
+Exit 4 from `auth status` means not logged in or token rejected. When the
+server supports it, `auth status` also shows the account's plan; `melange plan`
+reports it in detail.
 Alternatives: `MELANGE_API_KEY_FILE=/path/to/token` (fails loudly if
 unreadable), or a stored login for interactive setups:
 `melange auth login --with-token < token.txt`. `melange auth token`
@@ -72,9 +74,11 @@ repo="$(melange repo create whisper-tiny --private --jq .full_name)"
 # 2. Preview the upload manifest first (no network calls)
 melange model upload -R "$repo" model.onnx --input audio.bin --dry-run --json
 
-# 3. Check the upload entitlement immediately before uploading
-upload_limit="$(melange usage quotas --jq '.model_uploads.limit // "unlimited"')" || exit $?
-[ "$upload_limit" != "0" ] || { echo "Model uploads are unavailable for this account" >&2; exit 1; }
+# 3. Check the upload entitlement immediately before uploading.
+#    `remaining` is what the server will actually allow now (spike headroom
+#    included; null = unlimited). Preflight on it, not on limit-used.
+upload_remaining="$(melange usage quotas --jq '.model_uploads.remaining // "unlimited"')" || exit $?
+[ "$upload_remaining" != "0" ] || { echo "No model-upload quota remaining for this account" >&2; exit 1; }
 
 # 4. Upload and wait once; preserve both identity and terminal status
 upload_json="$(melange model upload -R "$repo" model.onnx \
@@ -207,31 +211,39 @@ melange library view zetic/whisper-tiny --json     # includes the full readme
 melange library providers --jq '.results[] | select(.model_count>=10) | .name'
 
 melange usage --jq .prompts                        # this period's counters
-melange usage quotas --jq .prompts.limit           # limit is null when unlimited
+melange usage quotas --jq .model_uploads.remaining # headroom now; null = unlimited
+melange plan --jq .plan                            # free|lite|pro|pro_plus|enterprise
 ```
 
 `library list` filters map to query params (`--task` repeats; a model
 matching ANY task is included). Its `--search` is case- and
 separator-insensitive across both `name` and `full_name`; hyphens,
 underscores, slashes, and spaces are ignored. `usage quotas` renders each
-quota as `used/limit (pct%)`, or `unlimited` when the limit is null.
+quota as `used/limit (pct%)`, or `unlimited` when the limit is null; its
+`--json`/`--jq` output also carries `remaining` per counter — the amount the
+server will actually allow now (spike headroom included, floored at 0; null =
+unlimited). Prefer `remaining` over `limit - used` for preflight.
 
-### Free-plan disclosure (required)
+`melange plan` reports the account's effective plan (`plan`, plus `is_trial`
+and `trial_ends_at`). It reflects what the server enforces: an account that
+bypasses quota limits reports `pro_plus` and unlimited quotas, exactly as the
+dashboard shows.
+
+### Entitlement disclosure (required)
 
 Before uploading a model or describing benchmark coverage as complete, inspect
-`melange usage quotas --json`. If `model_uploads.limit == 0`, do not attempt or
-retry an upload: tell the user it is unavailable under the account's current
-entitlement, not that the CLI is broken. Report records contain only devices
+`melange usage quotas --json`. If `model_uploads.remaining == 0`, do not attempt
+or retry an upload: tell the user they have no upload quota left under their
+current plan, not that the CLI is broken. Report records contain only devices
 visible to the authenticated account; never call them the full benchmark unless
 completeness is established.
 
-When trusted user context or an authoritative response establishes that the
-account is on **Free**, explicitly say that Free is why, for each applicable
-limitation, model upload is locked and/or benchmark device coverage is limited.
-Do not show this Free-plan notice for other plans. Public v1 currently exposes
-quotas, not a plan name, so never infer Free from a zero limit, a filtered
-report, or an HTTP error; when plan identity is unknown, say "current
-quota/entitlement" instead.
+Plan identity is knowable — read it from `melange plan --jq .plan`. When
+`model_uploads.remaining == 0` and the plan is **Free** (or **Lite**), say that
+the plan is why model upload is locked; on other plans say the monthly upload
+quota is exhausted. Do not attribute a zero to the wrong cause: check `melange
+plan` rather than inferring Free from a zero limit, a filtered report, or an
+HTTP error.
 
 Library `ACCOUNT/NAME` values identify public repositories, not converted model
 keys. Inspect their existing models and reports directly; this is a read-only

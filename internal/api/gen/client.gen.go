@@ -17,6 +17,33 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for BillingPlanResponsePlan.
+const (
+	Enterprise BillingPlanResponsePlan = "enterprise"
+	Free       BillingPlanResponsePlan = "free"
+	Lite       BillingPlanResponsePlan = "lite"
+	Pro        BillingPlanResponsePlan = "pro"
+	ProPlus    BillingPlanResponsePlan = "pro_plus"
+)
+
+// Valid indicates whether the value is a known member of the BillingPlanResponsePlan enum.
+func (e BillingPlanResponsePlan) Valid() bool {
+	switch e {
+	case Enterprise:
+		return true
+	case Free:
+		return true
+	case Lite:
+		return true
+	case Pro:
+		return true
+	case ProPlus:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CancelModelUploadResponseState.
 const (
 	CancelModelUploadResponseStateCANCELED        CancelModelUploadResponseState = "CANCELED"
@@ -1050,6 +1077,16 @@ type ActiveUpload struct {
 	StartedAt     string   `json:"started_at"`
 }
 
+// BillingPlanResponse The account's effective billing plan identity.
+type BillingPlanResponse struct {
+	IsTrial     bool                    `json:"is_trial"`
+	Plan        BillingPlanResponsePlan `json:"plan"`
+	TrialEndsAt *time.Time              `json:"trial_ends_at,omitempty"`
+}
+
+// BillingPlanResponsePlan defines model for BillingPlanResponse.Plan.
+type BillingPlanResponsePlan string
+
 // CancelModelUploadResponse defines model for CancelModelUploadResponse.
 type CancelModelUploadResponse struct {
 	Id    string                         `json:"id"`
@@ -1772,10 +1809,18 @@ type ProjectResponse struct {
 	Name        string  `json:"name"`
 }
 
-// QuotaItem `used` this month vs the plan `limit`; `limit: null` = unlimited.
+// QuotaItem `used` this month vs the plan `limit`, plus enforcement-accurate
+// `remaining`.
+//
+// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+// limits); `remaining: null` = unlimited. `remaining` is what the
+// enforcement path would allow right now (spike headroom included, floored
+// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+// do this" check.
 type QuotaItem struct {
-	Limit *int `json:"limit,omitempty"`
-	Used  int  `json:"used"`
+	Limit     *int `json:"limit,omitempty"`
+	Remaining *int `json:"remaining,omitempty"`
+	Used      int  `json:"used"`
 }
 
 // ReissueUploadFilesRequest defines model for ReissueUploadFilesRequest.
@@ -1884,16 +1929,44 @@ type UploadStatusResponse struct {
 
 // UsageQuotasResponse defines model for UsageQuotasResponse.
 type UsageQuotasResponse struct {
-	// ActiveDevices `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// ActiveDevices `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	ActiveDevices QuotaItem `json:"active_devices"`
 
-	// Bandwidth `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// Bandwidth `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	Bandwidth QuotaItem `json:"bandwidth"`
 
-	// ModelUploads `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// ModelUploads `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	ModelUploads QuotaItem `json:"model_uploads"`
 
-	// Prompts `used` this month vs the plan `limit`; `limit: null` = unlimited.
+	// Prompts `used` this month vs the plan `limit`, plus enforcement-accurate
+	// `remaining`.
+	//
+	// `limit: null` = unlimited (no plan cap, or the account bypasses quota
+	// limits); `remaining: null` = unlimited. `remaining` is what the
+	// enforcement path would allow right now (spike headroom included, floored
+	// at 0), so `remaining > 0` — not `limit - used` — is the truthful "can I
+	// do this" check.
 	Prompts QuotaItem `json:"prompts"`
 }
 
@@ -2135,6 +2208,17 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// GetBillingPlan Get Billing Plan
+	//
+	// Effective billing plan for the token's account.
+	//
+	// `plan` is the entitlement tier quotas derive from (a trial grant reports
+	// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+	// per-counter headroom.
+	//
+	// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+	GetBillingPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetDeploymentOptions Get Deployment Options
 	//
@@ -2639,10 +2723,33 @@ type ClientInterface interface {
 	//
 	// Usage against the account's plan quotas.
 	//
-	// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+	// Each counter reports `{used, limit, remaining}`; null means unlimited.
+	// `remaining` is what enforcement would allow right now (spike headroom
+	// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 	//
 	// Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 	GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetBillingPlan Get Billing Plan
+//
+// Effective billing plan for the token's account.
+//
+// `plan` is the entitlement tier quotas derive from (a trial grant reports
+// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+// per-counter headroom.
+//
+// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+func (c *Client) GetBillingPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBillingPlanRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // GetDeploymentOptions Get Deployment Options
@@ -3586,7 +3693,9 @@ func (c *Client) GetUsage(ctx context.Context, reqEditors ...RequestEditorFn) (*
 //
 // Usage against the account's plan quotas.
 //
-// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+// Each counter reports `{used, limit, remaining}`; null means unlimited.
+// `remaining` is what enforcement would allow right now (spike headroom
+// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 //
 // Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 func (c *Client) GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3599,6 +3708,33 @@ func (c *Client) GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditor
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetBillingPlanRequest constructs an http.Request for the GetBillingPlan method
+func NewGetBillingPlanRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/billing/plan")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewGetDeploymentOptionsRequest constructs an http.Request for the GetDeploymentOptions method
@@ -5509,6 +5645,19 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// GetBillingPlanWithResponse Get Billing Plan
+	//
+	// Effective billing plan for the token's account.
+	//
+	// `plan` is the entitlement tier quotas derive from (a trial grant reports
+	// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+	// per-counter headroom.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+	GetBillingPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBillingPlanResult, error)
+
 	// GetDeploymentOptionsWithResponse Get Deployment Options
 	//
 	// Supported deterministic guide selectors. React Native is excluded.
@@ -6066,12 +6215,112 @@ type ClientWithResponsesInterface interface {
 	//
 	// Usage against the account's plan quotas.
 	//
-	// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+	// Each counter reports `{used, limit, remaining}`; null means unlimited.
+	// `remaining` is what enforcement would allow right now (spike headroom
+	// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 	GetUsageQuotasWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetUsageQuotasResult, error)
+}
+
+// GetBillingPlanResult401Headers the declared response headers of an HTTP 401 response for GetBillingPlan
+type GetBillingPlanResult401Headers struct {
+	WWWAuthenticate *string
+	XRequestID      *string
+}
+
+// GetBillingPlanResult403Headers the declared response headers of an HTTP 403 response for GetBillingPlan
+type GetBillingPlanResult403Headers struct {
+	XRequestID *string
+}
+
+// GetBillingPlanResult404Headers the declared response headers of an HTTP 404 response for GetBillingPlan
+type GetBillingPlanResult404Headers struct {
+	XRequestID *string
+}
+
+// GetBillingPlanResult500Headers the declared response headers of an HTTP 500 response for GetBillingPlan
+type GetBillingPlanResult500Headers struct {
+	XRequestID *string
+}
+
+type GetBillingPlanResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *BillingPlanResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *ServerError
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetBillingPlanResult401Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *GetBillingPlanResult403Headers
+	// Headers404 the parsed response headers for an HTTP 404 response
+	Headers404 *GetBillingPlanResult404Headers
+	// Headers500 the parsed response headers for an HTTP 500 response
+	Headers500 *GetBillingPlanResult500Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetBillingPlanResult) GetJSON200() *BillingPlanResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetBillingPlanResult) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetBillingPlanResult) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetBillingPlanResult) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r GetBillingPlanResult) GetJSON500() *ServerError {
+	return r.JSON500
+}
+
+// GetBody returns the raw response body bytes
+func (r GetBillingPlanResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBillingPlanResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBillingPlanResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetBillingPlanResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 // GetDeploymentOptionsResult401Headers the declared response headers of an HTTP 401 response for GetDeploymentOptions
@@ -6557,6 +6806,12 @@ type ZeticPublicProjectsCreateProjectResult422Headers struct {
 	XRequestID *string
 }
 
+// ZeticPublicProjectsCreateProjectResult429Headers the declared response headers of an HTTP 429 response for ZeticPublicProjectsCreateProject
+type ZeticPublicProjectsCreateProjectResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // ZeticPublicProjectsCreateProjectResult500Headers the declared response headers of an HTTP 500 response for ZeticPublicProjectsCreateProject
 type ZeticPublicProjectsCreateProjectResult500Headers struct {
 	XRequestID *string
@@ -6575,6 +6830,8 @@ type ZeticPublicProjectsCreateProjectResult struct {
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -6585,6 +6842,8 @@ type ZeticPublicProjectsCreateProjectResult struct {
 	Headers409 *ZeticPublicProjectsCreateProjectResult409Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *ZeticPublicProjectsCreateProjectResult422Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *ZeticPublicProjectsCreateProjectResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *ZeticPublicProjectsCreateProjectResult500Headers
 }
@@ -6612,6 +6871,11 @@ func (r ZeticPublicProjectsCreateProjectResult) GetJSON409() *Conflict {
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r ZeticPublicProjectsCreateProjectResult) GetJSON422() *ValidationError {
 	return r.JSON422
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r ZeticPublicProjectsCreateProjectResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -6664,6 +6928,12 @@ type ZeticPublicProjectsDeleteProjectResult404Headers struct {
 	XRequestID *string
 }
 
+// ZeticPublicProjectsDeleteProjectResult429Headers the declared response headers of an HTTP 429 response for ZeticPublicProjectsDeleteProject
+type ZeticPublicProjectsDeleteProjectResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // ZeticPublicProjectsDeleteProjectResult500Headers the declared response headers of an HTTP 500 response for ZeticPublicProjectsDeleteProject
 type ZeticPublicProjectsDeleteProjectResult500Headers struct {
 	XRequestID *string
@@ -6680,6 +6950,8 @@ type ZeticPublicProjectsDeleteProjectResult struct {
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -6688,6 +6960,8 @@ type ZeticPublicProjectsDeleteProjectResult struct {
 	Headers403 *ZeticPublicProjectsDeleteProjectResult403Headers
 	// Headers404 the parsed response headers for an HTTP 404 response
 	Headers404 *ZeticPublicProjectsDeleteProjectResult404Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *ZeticPublicProjectsDeleteProjectResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *ZeticPublicProjectsDeleteProjectResult500Headers
 }
@@ -6710,6 +6984,11 @@ func (r ZeticPublicProjectsDeleteProjectResult) GetJSON403() *Forbidden {
 // GetJSON404 returns the response for an HTTP 404 `application/json` response
 func (r ZeticPublicProjectsDeleteProjectResult) GetJSON404() *NotFound {
 	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r ZeticPublicProjectsDeleteProjectResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -7027,6 +7306,12 @@ type ZeticPublicUploadsCancelUploadResult409Headers struct {
 	XRequestID *string
 }
 
+// ZeticPublicUploadsCancelUploadResult429Headers the declared response headers of an HTTP 429 response for ZeticPublicUploadsCancelUpload
+type ZeticPublicUploadsCancelUploadResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // ZeticPublicUploadsCancelUploadResult500Headers the declared response headers of an HTTP 500 response for ZeticPublicUploadsCancelUpload
 type ZeticPublicUploadsCancelUploadResult500Headers struct {
 	XRequestID *string
@@ -7043,6 +7328,8 @@ type ZeticPublicUploadsCancelUploadResult struct {
 	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -7053,6 +7340,8 @@ type ZeticPublicUploadsCancelUploadResult struct {
 	Headers404 *ZeticPublicUploadsCancelUploadResult404Headers
 	// Headers409 the parsed response headers for an HTTP 409 response
 	Headers409 *ZeticPublicUploadsCancelUploadResult409Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *ZeticPublicUploadsCancelUploadResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *ZeticPublicUploadsCancelUploadResult500Headers
 }
@@ -7075,6 +7364,11 @@ func (r ZeticPublicUploadsCancelUploadResult) GetJSON404() *NotFound {
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
 func (r ZeticPublicUploadsCancelUploadResult) GetJSON409() *Conflict {
 	return r.JSON409
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r ZeticPublicUploadsCancelUploadResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -7645,6 +7939,12 @@ type CreateRepoResult422Headers struct {
 	XRequestID *string
 }
 
+// CreateRepoResult429Headers the declared response headers of an HTTP 429 response for CreateRepo
+type CreateRepoResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // CreateRepoResult500Headers the declared response headers of an HTTP 500 response for CreateRepo
 type CreateRepoResult500Headers struct {
 	XRequestID *string
@@ -7663,6 +7963,8 @@ type CreateRepoResult struct {
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -7673,6 +7975,8 @@ type CreateRepoResult struct {
 	Headers409 *CreateRepoResult409Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *CreateRepoResult422Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *CreateRepoResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *CreateRepoResult500Headers
 }
@@ -7700,6 +8004,11 @@ func (r CreateRepoResult) GetJSON409() *Conflict {
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r CreateRepoResult) GetJSON422() *ValidationError {
 	return r.JSON422
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r CreateRepoResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -7752,6 +8061,12 @@ type DeleteRepoResult404Headers struct {
 	XRequestID *string
 }
 
+// DeleteRepoResult429Headers the declared response headers of an HTTP 429 response for DeleteRepo
+type DeleteRepoResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // DeleteRepoResult500Headers the declared response headers of an HTTP 500 response for DeleteRepo
 type DeleteRepoResult500Headers struct {
 	XRequestID *string
@@ -7766,6 +8081,8 @@ type DeleteRepoResult struct {
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -7774,6 +8091,8 @@ type DeleteRepoResult struct {
 	Headers403 *DeleteRepoResult403Headers
 	// Headers404 the parsed response headers for an HTTP 404 response
 	Headers404 *DeleteRepoResult404Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *DeleteRepoResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *DeleteRepoResult500Headers
 }
@@ -7791,6 +8110,11 @@ func (r DeleteRepoResult) GetJSON403() *Forbidden {
 // GetJSON404 returns the response for an HTTP 404 `application/json` response
 func (r DeleteRepoResult) GetJSON404() *NotFound {
 	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r DeleteRepoResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -7946,6 +8270,12 @@ type UpdateRepoResult422Headers struct {
 	XRequestID *string
 }
 
+// UpdateRepoResult429Headers the declared response headers of an HTTP 429 response for UpdateRepo
+type UpdateRepoResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // UpdateRepoResult500Headers the declared response headers of an HTTP 500 response for UpdateRepo
 type UpdateRepoResult500Headers struct {
 	XRequestID *string
@@ -7964,6 +8294,8 @@ type UpdateRepoResult struct {
 	JSON404 *NotFound
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -7974,6 +8306,8 @@ type UpdateRepoResult struct {
 	Headers404 *UpdateRepoResult404Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *UpdateRepoResult422Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *UpdateRepoResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *UpdateRepoResult500Headers
 }
@@ -8001,6 +8335,11 @@ func (r UpdateRepoResult) GetJSON404() *NotFound {
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r UpdateRepoResult) GetJSON422() *ValidationError {
 	return r.JSON422
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r UpdateRepoResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -8597,6 +8936,12 @@ type CancelModelUploadResult422Headers struct {
 	XRequestID *string
 }
 
+// CancelModelUploadResult429Headers the declared response headers of an HTTP 429 response for CancelModelUpload
+type CancelModelUploadResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // CancelModelUploadResult500Headers the declared response headers of an HTTP 500 response for CancelModelUpload
 type CancelModelUploadResult500Headers struct {
 	XRequestID *string
@@ -8617,6 +8962,8 @@ type CancelModelUploadResult struct {
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -8629,6 +8976,8 @@ type CancelModelUploadResult struct {
 	Headers409 *CancelModelUploadResult409Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *CancelModelUploadResult422Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *CancelModelUploadResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *CancelModelUploadResult500Headers
 }
@@ -8661,6 +9010,11 @@ func (r CancelModelUploadResult) GetJSON409() *Conflict {
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r CancelModelUploadResult) GetJSON422() *ValidationError {
 	return r.JSON422
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r CancelModelUploadResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -9213,6 +9567,12 @@ type SetDefaultModelResult404Headers struct {
 	XRequestID *string
 }
 
+// SetDefaultModelResult429Headers the declared response headers of an HTTP 429 response for SetDefaultModel
+type SetDefaultModelResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
 // SetDefaultModelResult500Headers the declared response headers of an HTTP 500 response for SetDefaultModel
 type SetDefaultModelResult500Headers struct {
 	XRequestID *string
@@ -9229,6 +9589,8 @@ type SetDefaultModelResult struct {
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -9237,6 +9599,8 @@ type SetDefaultModelResult struct {
 	Headers403 *SetDefaultModelResult403Headers
 	// Headers404 the parsed response headers for an HTTP 404 response
 	Headers404 *SetDefaultModelResult404Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *SetDefaultModelResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *SetDefaultModelResult500Headers
 }
@@ -9259,6 +9623,11 @@ func (r SetDefaultModelResult) GetJSON403() *Forbidden {
 // GetJSON404 returns the response for an HTTP 404 `application/json` response
 func (r SetDefaultModelResult) GetJSON404() *NotFound {
 	return r.JSON404
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r SetDefaultModelResult) GetJSON429() *RateLimited {
+	return r.JSON429
 }
 
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
@@ -10332,6 +10701,25 @@ func (r GetUsageQuotasResult) ContentType() string {
 	return ""
 }
 
+// GetBillingPlanWithResponse Get Billing Plan
+//
+// Effective billing plan for the token's account.
+//
+// `plan` is the entitlement tier quotas derive from (a trial grant reports
+// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
+// per-counter headroom.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
+func (c *ClientWithResponses) GetBillingPlanWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBillingPlanResult, error) {
+	rsp, err := c.GetBillingPlan(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBillingPlanResult(rsp)
+}
+
 // GetDeploymentOptionsWithResponse Get Deployment Options
 //
 // Supported deterministic guide selectors. React Native is excluded.
@@ -11155,7 +11543,9 @@ func (c *ClientWithResponses) GetUsageWithResponse(ctx context.Context, reqEdito
 //
 // Usage against the account's plan quotas.
 //
-// Each counter reports `{used, limit}`; `limit: null` means unlimited.
+// Each counter reports `{used, limit, remaining}`; null means unlimited.
+// `remaining` is what enforcement would allow right now (spike headroom
+// included, floored at 0) — preflight on `remaining`, not `limit - used`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -11166,6 +11556,110 @@ func (c *ClientWithResponses) GetUsageQuotasWithResponse(ctx context.Context, re
 		return nil, err
 	}
 	return ParseGetUsageQuotasResult(rsp)
+}
+
+// ParseGetBillingPlanResult parses an HTTP response from a GetBillingPlanWithResponse call
+func ParseGetBillingPlanResult(rsp *http.Response) (*GetBillingPlanResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBillingPlanResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest BillingPlanResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ServerError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetBillingPlanResult401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 403:
+		var headers GetBillingPlanResult403Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers403 = &headers
+	case rsp.StatusCode == 404:
+		var headers GetBillingPlanResult404Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers404 = &headers
+	case rsp.StatusCode == 500:
+		var headers GetBillingPlanResult500Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers500 = &headers
+	}
+
+	return response, nil
 }
 
 // ParseGetDeploymentOptionsResult parses an HTTP response from a GetDeploymentOptionsWithResponse call
@@ -11703,6 +12197,13 @@ func ParseZeticPublicProjectsCreateProjectResult(rsp *http.Response) (*ZeticPubl
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -11760,6 +12261,23 @@ func ParseZeticPublicProjectsCreateProjectResult(rsp *http.Response) (*ZeticPubl
 			headers.XRequestID = &value
 		}
 		response.Headers422 = &headers
+	case rsp.StatusCode == 429:
+		var headers ZeticPublicProjectsCreateProjectResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers ZeticPublicProjectsCreateProjectResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -11817,6 +12335,13 @@ func ParseZeticPublicProjectsDeleteProjectResult(rsp *http.Response) (*ZeticPubl
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -11864,6 +12389,23 @@ func ParseZeticPublicProjectsDeleteProjectResult(rsp *http.Response) (*ZeticPubl
 			headers.XRequestID = &value
 		}
 		response.Headers404 = &headers
+	case rsp.StatusCode == 429:
+		var headers ZeticPublicProjectsDeleteProjectResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers ZeticPublicProjectsDeleteProjectResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -12217,6 +12759,13 @@ func ParseZeticPublicUploadsCancelUploadResult(rsp *http.Response) (*ZeticPublic
 		}
 		response.JSON409 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -12274,6 +12823,23 @@ func ParseZeticPublicUploadsCancelUploadResult(rsp *http.Response) (*ZeticPublic
 			headers.XRequestID = &value
 		}
 		response.Headers409 = &headers
+	case rsp.StatusCode == 429:
+		var headers ZeticPublicUploadsCancelUploadResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers ZeticPublicUploadsCancelUploadResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -12914,6 +13480,13 @@ func ParseCreateRepoResult(rsp *http.Response) (*CreateRepoResult, error) {
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -12971,6 +13544,23 @@ func ParseCreateRepoResult(rsp *http.Response) (*CreateRepoResult, error) {
 			headers.XRequestID = &value
 		}
 		response.Headers422 = &headers
+	case rsp.StatusCode == 429:
+		var headers CreateRepoResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers CreateRepoResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -13024,6 +13614,13 @@ func ParseDeleteRepoResult(rsp *http.Response) (*DeleteRepoResult, error) {
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -13071,6 +13668,23 @@ func ParseDeleteRepoResult(rsp *http.Response) (*DeleteRepoResult, error) {
 			headers.XRequestID = &value
 		}
 		response.Headers404 = &headers
+	case rsp.StatusCode == 429:
+		var headers DeleteRepoResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers DeleteRepoResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -13239,6 +13853,13 @@ func ParseUpdateRepoResult(rsp *http.Response) (*UpdateRepoResult, error) {
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -13296,6 +13917,23 @@ func ParseUpdateRepoResult(rsp *http.Response) (*UpdateRepoResult, error) {
 			headers.XRequestID = &value
 		}
 		response.Headers422 = &headers
+	case rsp.StatusCode == 429:
+		var headers UpdateRepoResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers UpdateRepoResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -13967,6 +14605,13 @@ func ParseCancelModelUploadResult(rsp *http.Response) (*CancelModelUploadResult,
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -14034,6 +14679,23 @@ func ParseCancelModelUploadResult(rsp *http.Response) (*CancelModelUploadResult,
 			headers.XRequestID = &value
 		}
 		response.Headers422 = &headers
+	case rsp.StatusCode == 429:
+		var headers CancelModelUploadResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers CancelModelUploadResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -14657,6 +15319,13 @@ func ParseSetDefaultModelResult(rsp *http.Response) (*SetDefaultModelResult, err
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ServerError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -14704,6 +15373,23 @@ func ParseSetDefaultModelResult(rsp *http.Response) (*SetDefaultModelResult, err
 			headers.XRequestID = &value
 		}
 		response.Headers404 = &headers
+	case rsp.StatusCode == 429:
+		var headers SetDefaultModelResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
 	case rsp.StatusCode == 500:
 		var headers SetDefaultModelResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {

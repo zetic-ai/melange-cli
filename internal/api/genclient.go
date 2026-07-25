@@ -48,6 +48,32 @@ func (c *Client) GetMe(ctx context.Context) (*gen.MeResponse, error) {
 	return me, nil
 }
 
+// GetBillingPlan fetches the effective billing plan for the client's token
+// via the generated client. Shared by the plan command and auth status.
+func (c *Client) GetBillingPlan(ctx context.Context) (*gen.BillingPlanResponse, error) {
+	g, err := c.Gen()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.GetBillingPlanWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
+		return nil, err
+	}
+	plan := resp.JSON200
+	if plan == nil {
+		// 2xx without the json content type (e.g. a proxy quirk): decode the
+		// body directly rather than failing on the header.
+		plan = &gen.BillingPlanResponse{}
+		if err := json.Unmarshal(resp.Body, plan); err != nil {
+			return nil, fmt.Errorf("decoding /v1/billing/plan response: %w", err)
+		}
+	}
+	return plan, nil
+}
+
 // GenError converts a generated-client response into an error: nil for 2xx,
 // otherwise an *Error via ErrorFrom. It is THE way to surface non-2xx results
 // from generated responses; it tolerates a nil HTTPResponse.

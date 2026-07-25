@@ -111,11 +111,12 @@ func TestUsageForbiddenExits1(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // quotasBody: prompts has a limit (50% used), active_devices is unlimited
-// (null limit), model_uploads is a zero-limit edge (renders 0%).
-const quotasBody = `{"active_devices":{"used":3,"limit":null},` +
-	`"bandwidth":{"used":500,"limit":1000},` +
-	`"model_uploads":{"used":0,"limit":0},` +
-	`"prompts":{"used":25,"limit":50}}`
+// (null limit + remaining), model_uploads is a zero-limit edge (renders 0%).
+// remaining rides along in --json but the human/non-TTY forms ignore it.
+const quotasBody = `{"active_devices":{"used":3,"limit":null,"remaining":null},` +
+	`"bandwidth":{"used":500,"limit":1000,"remaining":500},` +
+	`"model_uploads":{"used":0,"limit":0,"remaining":0},` +
+	`"prompts":{"used":25,"limit":50,"remaining":25}}`
 
 func TestUsageQuotasTTYUnlimitedAndPct(t *testing.T) {
 	e := setup(t)
