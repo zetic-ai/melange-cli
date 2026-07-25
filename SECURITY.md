@@ -12,7 +12,7 @@ The initial v1 release line is supported with security updates:
 ## Reporting a vulnerability
 
 Please report suspected vulnerabilities privately to
-[security@zetic.ai](mailto:tony@zetic.ai). Include the affected version,
+[tony@zetic.ai](mailto:tony@zetic.ai). Include the affected version,
 impact, reproduction steps, and any suggested mitigation when available.
 
 Do not disclose a vulnerability in a public issue, discussion, or pull request.
