@@ -4,6 +4,10 @@ Give your AI agent access to [Melange](https://melange.zetic.ai), an on-device A
 
 ## Install
 
+Setting up Melange is two steps: install the `melange` binary, then install the agent skill that lets your coding agent drive it.
+
+### 1. Install the CLI
+
 **Homebrew** (macOS or Linux):
 
 ```sh
@@ -39,7 +43,7 @@ and SBOMs, are available on the
 
 </details>
 
-## Agent skills for coding agents
+### 2. Install the agent skill
 
 An [agent skill](https://agentskills.io) is available for driving `melange` from
 Claude Code, Codex, Cursor, OpenCode, and other compatible coding agents.
@@ -56,8 +60,8 @@ npx skills add zetic-ai/melange-cli --skill melange-cli --global
 npx skills update melange-cli --global
 ```
 
-Installing the `melange` binary does not install or update the agent skill.
-Restart your agent after installation so it can discover the skill.
+Installing the `melange` binary does not install or update the agent skill, so
+run this step too. Restart your agent afterward so it can discover the skill.
 
 ## Authentication
 
