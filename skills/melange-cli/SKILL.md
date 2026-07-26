@@ -1,6 +1,6 @@
 ---
 name: melange-cli
-description: "Use when interacting with zetic.ai Melange: uploading/deploying on-device AI models, browsing repos/reports via the melange CLI. Covers auth, JSON output contract, exit-code branching, upload/resume workflows, and the raw API escape hatch."
+description: "Use when interacting with zetic.ai Melange: uploading/deploying on-device AI models, monitoring conversion status, reporting benchmarks, browsing repos/reports via the melange CLI. Covers auth, JSON output contract, exit-code branching, upload/resume workflows, non-blocking conversion monitoring, how to present model status and benchmark results, and the raw API escape hatch."
 ---
 
 # Melange CLI
@@ -138,6 +138,9 @@ melange model upload -R acme/whisper-tiny \
 - `--wait` polls until a terminal state (default `--timeout 30m`);
   under `--wait`, exit 1 means conversion failed or the timeout elapsed.
   A plain `model status` read is a query and exits 0 regardless of state.
+  The workflow above is written for scripts. When a person is waiting, drop
+  `--wait` and monitor in the background instead — see "Presenting results
+  to the user".
 - Browse repositories: `melange repo list --search whisper --paginate`,
   `melange repo list --jq '.results[].full_name'`,
   `melange repo view acme/whisper-tiny --json`.
@@ -152,7 +155,8 @@ melange model view "$model_key" -R acme/whisper-tiny --jq .download_ready
 melange deploy guide "$model_key" -R acme/whisper-tiny --language android-kotlin --mode auto
 melange model targets "$model_key" -R acme/whisper-tiny --json      # converted targets
 melange model set-default "$model_key" -R acme/whisper-tiny         # pin the repo default
-melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait  # import an LLM (repo type llm)
+melange model import meta-llama/Llama-3.2-1B -R acme/llm --json  # interactive: returns at once, state converting
+melange model import meta-llama/Llama-3.2-1B -R acme/llm --wait  # scripts: block until ready or failed
 target_id=$(melange model targets "$model_key" -R acme/whisper-tiny --jq '.results[0].target_id')
 melange model download "$model_key" -R acme/whisper-tiny --target "$target_id" --output ./models --yes
 ```
@@ -202,6 +206,198 @@ auto = fastest run whose SNR exceeds 20 dB, else speed). Non-TTY output is
 **one raw record per line** (flat measurement fields) — scripts get the
 measurements, not the derived table. Always use `--json` for the exact
 response.
+
+When a person asked for the report, write it to a file as well — see
+"Report a model" below.
+
+## Presenting results to the user
+
+These rules govern the answer you write for a human, not how you call the CLI.
+They apply whenever a person is waiting on you; non-interactive scripts keep
+using the blocking forms.
+
+### Never block on conversion
+
+Conversion runs server-side for minutes. `model import` and `model upload`
+**without** `--wait` return as soon as the model is registered — state
+`converting`. With `--wait` they block until `ready` or `failed`. Blocking in
+the foreground leaves the user watching a stalled command with no idea which
+phase is running.
+
+So: import or upload **without** `--wait`, answer immediately with the pipeline
+panel and what remains, then poll in the background.
+
+The public conversion state machine has exactly four lowercase states —
+`converting` → `optimizing` → `ready`, or `failed`. `stage` is `convert` while
+converting and `benchmark` while optimizing. `download_ready` turns true at
+`optimizing`, so the model is already usable while benchmarking finishes. There
+is no percentage: `progress` is always null, so never invent one. `retry_after`
+is the server's suggested poll interval (5 seconds while non-terminal). These
+are not the UPPERCASE upload-session states — do not mix the two vocabularies.
+
+Run these two stages in the background, in order:
+
+```sh
+# Stage 1 — returns the moment conversion finishes (~30m ceiling).
+i=0
+while [ "$i" -lt 360 ]; do
+  state="$(melange model status "$model_key" -R "$repo" --jq .state)" || exit $?
+  [ "$state" = converting ] || break
+  i=$((i + 1)); sleep 5
+done
+melange model status "$model_key" -R "$repo" --json
+```
+
+Report that transition, then hand the rest to the CLI's own waiter:
+
+```sh
+# Stage 2 — exit 0 ready, 1 failed or timed out.
+melange model status "$model_key" -R "$repo" --wait --timeout 30m --json
+```
+
+Stage 1 returns immediately when the model is already past `converting`, so it
+is also the correct first step for a conversion that started earlier.
+
+### Pipeline panel
+
+Render the panel after every import, upload, and status check, filled from
+`.state`. Glyphs are `✔` complete, `◐` in progress, `○` pending, `✖` failed.
+
+```
+╭─ Conversion Pipeline ───────────────────────────────╮
+│   ◐ CONVERTING   →   ○ OPTIMIZING   →   ○ READY     │
+│     in progress        pending           pending    │
+╰─────────────────────────────────────────────────────╯
+
+╭─ Conversion Pipeline ───────────────────────────────╮
+│   ✔ CONVERTING   →   ◐ OPTIMIZING   →   ○ READY     │
+│     complete           in progress       pending    │
+╰─────────────────────────────────────────────────────╯
+
+╭─ Conversion Pipeline ───────────────────────────────╮
+│   ✔ CONVERTING   →   ✔ OPTIMIZING   →   ✔ READY     │
+│     complete           complete          available  │
+╰─────────────────────────────────────────────────────╯
+
+╭─ Conversion Pipeline ───────────────────────────────╮
+│   ✔ CONVERTING   →   ✖ OPTIMIZING   →   ○ READY     │
+│     complete           failed            blocked    │
+╰─────────────────────────────────────────────────────╯
+```
+
+State the phase in words next to the panel: at `converting`, benchmarking and
+packaging are still to come; at `optimizing`, say the model is already
+downloadable while benchmarks finish; at `ready`, point to the report and the
+deployment guide. On `failed`, mark the failing stage from `.stage`, quote
+`.failure_code` verbatim, and do not guess a cause the code does not name.
+
+### Report a model
+
+Lead every model explanation with this order — never start from an incidental
+detail:
+
+1. **Name** — the Hugging Face or repository name, `ACCOUNT/REPO`, the model
+   key, and the current state.
+2. **Description** — a short paragraph: what the model does, its family and
+   size, where it came from.
+3. **Headline metrics** — the four-card panel below.
+4. **Benchmarks** — write the full report to `./melange-reports/<repo-slug>.md`
+   (create the directory), say where it is, then give at most five bullets of
+   takeaways. Write the file whenever the user asks for details, a report, or
+   benchmarks; never replace it with a summary in chat.
+
+The report file carries, in order: title and identity (repo, key, version,
+state, source); description; the headline-metrics table; a per-device
+measurement table; accuracy or signal-quality results; coverage and caveats
+(the entitlement disclosure below); and the exact commands the numbers came
+from. Take values from `--json`, never from a TTY table. Summary fields arrive
+rounded to 2 decimals; raw `records[].value` floats do not, so round them for
+display the way the CLI does — 1 decimal in per-device tables, 2 in headline
+figures. Round only for display: never restate a measurement at a precision the
+response did not support, and never adjust a number to make a point.
+
+### Headline metrics
+
+```
+╭ Throughput ──╮╭ First token ─╮╭ Memory ──────╮╭ Model size ──╮
+│ up to        ││ as low as    ││ smallest as  ││ smaller by   │
+│ 286.30 TPS   ││ 13.13 ms     ││ 47.11 MB     ││ x4.63 vs ORG │
+╰──────────────╯╰──────────────╯╰──────────────╯╰──────────────╯
+```
+
+LLM reports (`--type llm`), each from `report view ... --json`:
+
+| Card | Value |
+|------|-------|
+| Throughput | `[.summary.quants[].best_tps] \| map(select(. != null)) \| max` |
+| First token | `[.summary.quants[].best_ttft_ms] \| map(select(. != null)) \| min` |
+| Memory | `[.summary.quants[].best_memory_mb] \| map(select(. != null)) \| min` |
+| Model size | ORG ÷ smallest quantized, from `model_size_bytes` records; when the report carries none, from `model targets` `download_size` |
+
+General reports (`--type general`) use the same panel with different cards:
+
+```
+╭ Latency ─────╮╭ NPU speedup ─╮╭ Memory ──────╮╭ Signal ──────╮
+│ as low as    ││ up to        ││ smallest as  ││ up to        │
+│ 23.51 ms     ││ x12.52       ││ 0.97 MB      ││ 85.19 dB     │
+╰──────────────╯╰──────────────╯╰──────────────╯╰──────────────╯
+```
+
+| Card | Value |
+|------|-------|
+| Latency | `.summary.latency_ms.all.min` |
+| NPU speedup | per device `min(cpu latency_ms) / min(npu latency_ms)`, then the max across devices |
+| Memory | `[.records[] \| select(.metric=="memory_inference_peak_mb") \| .value] \| min` |
+| Signal | `.summary.snr_db.all.max` |
+
+```sh
+# Model size, LLM — most reports carry no model_size_bytes records
+melange report view "$model_key" -R "$repo" --type llm --json \
+  --jq '[.records[] | select(.metric == "model_size_bytes")] as $s
+        | ([$s[] | select(.quant_type == "org") | .value] | max) as $org
+        | ([$s[] | select(.quant_type != "org") | .value] | min) as $small
+        | if $org and $small and $small > 0 then $org / $small else null end'
+
+# Fall back to the converted artifacts, which carry a size for every quant
+melange model targets "$model_key" -R "$repo" --json \
+  --jq '[.results[] | {quant: .quant_type, mb: (.download_size / 1048576)}] as $t
+        | ([$t[] | select(.quant == "org") | .mb] | max) as $org
+        | ([$t[] | select(.quant != "org") | .mb] | min) as $small
+        | if $org and $small and $small > 0
+          then {smallest_mb: $small, ratio: ($org / $small)} else null end'
+
+# NPU speedup, general models
+melange report view "$model_key" -R "$repo" --type general --json \
+  --jq '[[.records[] | select(.metric == "latency_ms" and .device != null)]
+         | group_by(.device.marketing_name)[]
+         | {device: .[0].device.marketing_name,
+            cpu: ([.[] | select(.ap_type == "cpu") | .value] | min),
+            npu: ([.[] | select(.ap_type == "npu") | .value] | min)}
+         | select(.cpu != null and .npu != null and .npu > 0)
+         | {device, gain: (.cpu / .npu)}] | max_by(.gain)'
+```
+
+Rules for the panel:
+
+- **Drop a card rather than estimate one.** Real reports are sparse:
+  `best_memory_mb` is often null, and accuracy scores and `model_size_bytes`
+  records are frequently absent. Follow the fallback chain first — for model
+  size, the report records, then `model targets`, then accuracy — and only
+  omit the card when every source is empty.
+- Name what a ratio compares. `x4.63 vs ORG` means the smallest quantization
+  against the original weights; the NPU speedup is CPU-versus-NPU latency on
+  one device. Never divide a value from one accelerator by a value from
+  another — the result is not a speedup.
+- `quant_type` is always lowercase in public output (`org`, `f16`, `bf16`,
+  `q8_0`, `q6_k`, `q4_k_m`, `q3_k_m`, `q2_k`, `iq2_s`).
+- `accuracy_score` and `model_size_bytes` records have `device: null` and
+  `ap_type: null`. Filter them out before grouping by device.
+- The dashboard shows a "deployability" percentage. It is a threshold widget in
+  the web UI, not an API field, and no melange command returns it. Say it is
+  not available rather than producing a number for it.
+- Device counts are entitlement-limited, not model properties — the same model
+  reports far fewer devices on a smaller plan. Label any count as the devices
+  visible to the account.
 
 ## Browse the public library and your usage
 
@@ -348,3 +544,8 @@ one-line summary on stderr; pagination and polling are your job here.
   responses; a failed read leaves stdout empty instead of emitting partial data.
 - Deployment guides accept repository model keys only. Never pass a Hugging
   Face ID to `melange deploy guide`, and never invent SDK fields or callbacks.
+- Never run `--wait` in the foreground while a person is waiting; import or
+  upload without it, report the phase, and monitor in the background.
+- Never present a metric the response did not carry. Drop the card, say the
+  value is unavailable, and never compare values measured on different
+  accelerators as if one were a speedup.
