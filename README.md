@@ -1,8 +1,6 @@
 # Melange CLI
 
-`melange` is the public command-line interface for [Melange](https://melange.zetic.ai), an on-device AI deployment platform by [ZETIC](https://zetic.ai).
-
-It is designed agents-first: non-interactive safe, structured `--json` output, stable exit codes, and machine-actionable errors. Give your AI agent access to Melange.
+Give your AI agent access to [Melange](https://melange.zetic.ai), an on-device AI deployment platform by [ZETIC](https://zetic.ai). `melange` is designed agents-first: non-interactive safe, structured `--json` output, stable exit codes, and machine-actionable errors.
 
 ## Install
 
@@ -41,10 +39,10 @@ and SBOMs, are available on the
 
 </details>
 
-## Agent skills
+## Agent skills for coding agents
 
 An [agent skill](https://agentskills.io) is available for driving `melange` from
-Claude Code, Codex, Cursor, OpenCode, and other compatible coding agents.,
+Claude Code, Codex, Cursor, OpenCode, and other compatible coding agents.
 
 ```sh
 # Install for universal agents and Claude Code
@@ -63,15 +61,13 @@ Restart your agent after installation so it can discover the skill.
 
 ## Authentication
 
-Create a Personal Access Token in Melange → Settings → Personal Access Tokens. Get it [here](https://melange.zetic.ai/settings?tab=pat), then:
-
-Set environment variable with your Melange PAT:
+Get a Personal Access Token at [Melange](https://melange.zetic.ai/settings?tab=pat) (Settings → Personal Access Tokens). Then either export it:
 
 ```sh
 export MELANGE_API_KEY="ztp_your_personal_access_token"
 ```
 
-Or login (stored securely across platforms):
+Or store it once:
 
 ```sh
 melange auth login
@@ -96,14 +92,14 @@ With the agent skill installed, your agent can:
 
 ### Quick start
 
-Discover and deploy
+Discover a public model and deploy
 
 ```sh
 Find a computer vision model by Meta in the Melange model library,
 review its real device benchmark results, and give me the iOS deployment code/guide.
 ```
 
-Upload a model
+Upload your own model
 
 ```sh
 I want to upload model.pt2 with sample.npy to Melange.
