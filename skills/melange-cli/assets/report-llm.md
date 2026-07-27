@@ -110,24 +110,7 @@ For first-token latency or memory, replace `"tps"` with `"ttft_ms"` or
 `"memory_inference_peak_mb"`, swap `max_by` for `min_by`, sort ascending
 (`sort_by(.best)`), and say lower is better.
 
-## 6. Accuracy details
-
-| Category | ORG | F16 | BF16 | Q8_0 | Q6_K | Q4_K_M | Q3_K_M | Q2_K |
-|----------|----:|----:|-----:|-----:|-----:|-------:|-------:|-----:|
-| Model size (GB) | | | | | | | | |
-| MMLU | | | | | | | | |
-| TruthfulQA | | | | | | | | |
-| CNN/Daily Mail | | | | | | | | |
-| GSM8K | | | | | | | | |
-
-```sh
-melange report view "$model_key" -R "$repo" --type llm --json --jq '.summary.accuracy'
-```
-
-Most reports carry no accuracy scores. Print the table with `-` throughout rather
-than dropping it, so the gap is visible.
-
-## 7. Coverage
+## 6. Coverage
 
 State the device count and that it reflects what this account's plan can see:
 
