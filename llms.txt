@@ -35,9 +35,14 @@ See skills/melange-cli/SKILL.md for the panel templates these rules refer to.
   upload-session states.
 - Explain a model in this order: name and repository/model key; a short
   description; the headline metrics; then benchmarks.
-- On any request for details, a report, or benchmarks, write the full report to
-  ./melange-reports/<repo-slug>.md and say where it is. Do not substitute a
-  chat summary for the file.
+- On any request for details, a report, or benchmarks, print the full report in
+  the reply — not a file path, not a prose summary. Write a file only on request.
+- The report is the model's, like the dashboard model page: every quantization
+  (LLM) and every device (general). .summary.quants and .summary.<metric>.all are
+  bests across all devices, so never label them with one device's name. Filter
+  records[] by device.marketing_name only when the user names a device, and say
+  it is a slice. Keep rows with null cells (print an em dash); if a device table
+  is too long, sort it and state how many rows were left out.
 - Headline metrics — LLM: best_tps, best_ttft_ms, best_memory_mb, and ORG vs
   smallest quantized size (model_size_bytes records, else model targets
   download_size). General: latency_ms.all.min, per-device min(cpu latency)/

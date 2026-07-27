@@ -207,8 +207,9 @@ auto = fastest run whose SNR exceeds 20 dB, else speed). Non-TTY output is
 measurements, not the derived table. Always use `--json` for the exact
 response.
 
-When a person asked for the report, write it to a file as well — see
-"Report a model" below.
+A report covers the whole model across every device and precision the account
+can see. Filtering to one device is a slice, not the report — see "Report a
+model" below.
 
 ## Presenting results to the user
 
@@ -301,20 +302,68 @@ detail:
 2. **Description** — a short paragraph: what the model does, its family and
    size, where it came from.
 3. **Headline metrics** — the four-card panel below.
-4. **Benchmarks** — write the full report to `./melange-reports/<repo-slug>.md`
-   (create the directory), say where it is, then give at most five bullets of
-   takeaways. Write the file whenever the user asks for details, a report, or
-   benchmarks; never replace it with a summary in chat.
+4. **Benchmarks** — the full report, written out in your reply.
 
-The report file carries, in order: title and identity (repo, key, version,
-state, source); description; the headline-metrics table; a per-device
-measurement table; accuracy or signal-quality results; coverage and caveats
-(the entitlement disclosure below); and the exact commands the numbers came
-from. Take values from `--json`, never from a TTY table. Summary fields arrive
+Write the report **in the answer itself**. Do not save it to a file and hand
+back a path, and do not replace it with a prose summary; the user asked for the
+numbers, so print them. Sections in order: identity (repo, key, version, state,
+source); description; the headline-metrics panel; the model-wide measurement
+table; accuracy or signal-quality results; coverage and caveats (the entitlement
+disclosure below); and the exact commands the numbers came from. Only write a
+file when the user asks for one.
+
+Take values from `--json`, never from a TTY table. Summary fields arrive
 rounded to 2 decimals; raw `records[].value` floats do not, so round them for
 display the way the CLI does — 1 decimal in per-device tables, 2 in headline
 figures. Round only for display: never restate a measurement at a precision the
 response did not support, and never adjust a number to make a point.
+
+### Report the whole model, not one device
+
+The report is the model's, the way the dashboard's model page is. Cover every
+quantization (LLM) and every device (general) the response carried. Never
+truncate a table silently, and never drop a column because some cells are null —
+print `—` for a missing cell and keep the row.
+
+`.summary.quants` (LLM) and `.summary.<metric>.all` (general) are **model-wide
+bests, taken across all devices**. They belong to no single device, so never
+label them with one. This is the failure to avoid: quoting `.summary.quants`
+under a heading like "Device: Google Pixel 10" states a measurement that device
+never produced — TinyLlama's 116.51 TPS is an iPad Pro 12.9" GPU run.
+
+Narrow to one device only when the user names one. Then say plainly that it is a
+device slice, and derive it from `records[]` filtered on that
+`device.marketing_name` — never by relabeling the summary.
+
+```sh
+# LLM: every quantization, model-wide. This is the report's main table.
+melange report view "$model_key" -R "$repo" --type llm --json \
+  --jq '.summary.quants | to_entries | sort_by(-(.value.best_tps // -1))[]
+        | {quant: .key, tps: .value.best_tps, ttft_ms: .value.best_ttft_ms,
+           memory_mb: .value.best_memory_mb, accuracy: .value.best_accuracy}'
+
+# LLM: which device produced each best, when the user wants the per-device view.
+melange report view "$model_key" -R "$repo" --type llm --json \
+  --jq '[.records[] | select(.metric == "tps" and .device != null)]
+        | group_by(.device.marketing_name)[] | max_by(.value)
+        | {device: .device.marketing_name, tps: .value, quant: .quant_type,
+           ap_type}'
+
+# General: every device, best latency per accelerator plus signal quality.
+melange report view "$model_key" -R "$repo" --type general --json \
+  --jq '[.records[] | select(.device != null)]
+        | group_by(.device.marketing_name)[]
+        | {device: .[0].device.marketing_name, soc: .[0].device.soc,
+           cpu_ms: ([.[] | select(.metric == "latency_ms" and .ap_type == "cpu") | .value] | min),
+           gpu_ms: ([.[] | select(.metric == "latency_ms" and .ap_type == "gpu") | .value] | min),
+           npu_ms: ([.[] | select(.metric == "latency_ms" and .ap_type == "npu") | .value] | min),
+           snr_db: ([.[] | select(.metric == "snr_db") | .value] | max)}'
+```
+
+A real report is large — TinyLlama returns 5040 records over 50 devices. When a
+device table is too long to print in full, sort it, show the top rows, and state
+the count you left out and how to get them. Never let a truncated view read as
+the complete set.
 
 ### Headline metrics
 
@@ -395,6 +444,9 @@ Rules for the panel:
 - The dashboard shows a "deployability" percentage. It is a threshold widget in
   the web UI, not an API field, and no melange command returns it. Say it is
   not available rather than producing a number for it.
+- Every card is a model-wide best across all devices. Never caption the panel
+  with one device's name; if you want to say where a figure came from, look the
+  device up in `records[]` and attribute that figure alone.
 - Device counts are entitlement-limited, not model properties — the same model
   reports far fewer devices on a smaller plan. Label any count as the devices
   visible to the account.
@@ -549,3 +601,6 @@ one-line summary on stderr; pagination and polling are your job here.
 - Never present a metric the response did not carry. Drop the card, say the
   value is unavailable, and never compare values measured on different
   accelerators as if one were a speedup.
+- Report the whole model, not one device: summary values are bests across all
+  devices, so labelling them with a device name misattributes the measurement.
+  Print the report in your reply rather than saving it to a file.
