@@ -1,6 +1,6 @@
 ---
 name: melange-cli
-description: "Use when interacting with zetic.ai Melange: uploading/deploying on-device AI models, monitoring conversion status, reporting benchmarks, browsing repos/reports via the melange CLI. Covers auth, JSON output contract, exit-code branching, upload/resume workflows, non-blocking conversion monitoring, how to present model status and benchmark results, and the raw API escape hatch."
+description: "Use when running the zetic.ai `melange` CLI: uploading/importing on-device AI models, monitoring conversion status, reporting Melange benchmarks, generating deployment guides, browsing repos and the public library. Covers auth, JSON output contract, exit-code branching, upload/resume, non-blocking conversion monitoring, model report templates, and the raw API escape hatch. Do NOT trigger for general ML work — training, local inference, or other model registries — unless the `melange` CLI is involved."
 ---
 
 # Melange CLI
@@ -57,7 +57,7 @@ explicitly selected config storage > OS keyring > legacy config fallback.
   re-marshaled with sorted object keys; bare strings print raw.
 - `--template TMPL` (implies `--json`): Go template with `tablerow`,
   `timeago`, `json` functions.
-- Never parse TTY tables. On a TTY humans get aligned tables; when
+- Read data through `--json`/`--jq`. On a TTY humans get aligned tables; when
   stdout is not a TTY you get headerless tab-separated values. Backslash,
   tab, carriage return, and newline inside cells are escaped as `\\`, `\t`,
   `\r`, and `\n`; for agents, always prefer `--json`/`--jq`.
@@ -166,19 +166,14 @@ Waited upload and import output has one stable shape:
 Use `.model.key` for identity and `.status.state` for the terminal outcome.
 Without `--wait`, each command keeps its raw create/import response.
 
-`model download` is **billable** and replay-safe across CLI processes. It
-persists a host/repository/model/target authorization key in per-user application state and
-serializes processes with a lock. Local output is recovery metadata, not part
-of the billing identity: correcting an impossible file/stdout shape to a
-directory keeps the charged key. Durable completion/recovery state also keeps
-a waiting process or its later retry from rotating that key after another
-process succeeds. Signed URLs and access tokens are never stored. Transient
-artifact GETs retry; 403/404 refresh once, and 30 seconds without byte progress
-triggers a retry while each chunk resets the timer. `--output` never overwrites
-without `--force`. Known collisions validate before authorization, but artifact
-names arrive only in the billable response; a later collision keeps replay
-state and asks for `--force` without another charge. Agents must pass `--yes`.
-Use `--output -` only for one artifact and never with structured-output flags.
+`model download` is **billable** and replay-safe across CLI processes — a retry
+after an interruption reuses the charge rather than adding one. Pass `--yes`;
+without it the command prompts. `--output` refuses to overwrite without
+`--force`, and a collision discovered after authorization asks for `--force`
+without charging again. Use `--output -` for a single artifact only, never
+alongside structured-output flags. Transient artifact GETs retry on their own;
+30 seconds without byte progress triggers a retry, and each chunk resets the
+timer. Signed URLs and access tokens are never stored.
 
 ## Read benchmark reports: `melange report view`
 
@@ -266,25 +261,14 @@ Render the panel after every import, upload, and status check, filled from
 
 ```
 ╭─ Conversion Pipeline ───────────────────────────────╮
-│   ◐ CONVERTING   →   ○ OPTIMIZING   →   ○ READY     │
-│     in progress        pending           pending    │
-╰─────────────────────────────────────────────────────╯
-
-╭─ Conversion Pipeline ───────────────────────────────╮
 │   ✔ CONVERTING   →   ◐ OPTIMIZING   →   ○ READY     │
 │     complete           in progress       pending    │
 ╰─────────────────────────────────────────────────────╯
-
-╭─ Conversion Pipeline ───────────────────────────────╮
-│   ✔ CONVERTING   →   ✔ OPTIMIZING   →   ✔ READY     │
-│     complete           complete          available  │
-╰─────────────────────────────────────────────────────╯
-
-╭─ Conversion Pipeline ───────────────────────────────╮
-│   ✔ CONVERTING   →   ✖ OPTIMIZING   →   ○ READY     │
-│     complete           failed            blocked    │
-╰─────────────────────────────────────────────────────╯
 ```
+
+Substitute the glyph and caption per phase: reached phases `✔ complete`, the
+current one `◐ in progress`, later ones `○ pending`, `ready` once reached
+`✔ available`, and on failure `✖ failed` with the phases after it `○ blocked`.
 
 State the phase in words next to the panel: at `converting`, benchmarking and
 packaging are still to come; at `optimizing`, say the model is already
@@ -294,162 +278,19 @@ deployment guide. On `failed`, mark the failing stage from `.stage`, quote
 
 ### Report a model
 
-Lead every model explanation with this order — never start from an incidental
-detail:
+Fill in a template and print the result in your reply:
 
-1. **Name** — the Hugging Face or repository name, `ACCOUNT/REPO`, the model
-   key, and the current state.
-2. **Description** — a short paragraph: what the model does, its family and
-   size, where it came from.
-3. **Headline metrics** — the four-card panel below.
-4. **Benchmarks** — the full report, written out in your reply.
+| Model type | Template |
+|------------|----------|
+| LLM | `assets/report-llm.md` |
+| everything else | `assets/report-general.md` |
 
-Write the report **in the answer itself**. Do not save it to a file and hand
-back a path, and do not replace it with a prose summary; the user asked for the
-numbers, so print them. Sections in order: identity (repo, key, version, state,
-source); description; the headline-metrics panel; the model-wide measurement
-table; accuracy or signal-quality results; coverage and caveats (the entitlement
-disclosure below); and the exact commands the numbers came from. Only write a
-file when the user asks for one.
+Read the template before you answer and keep its section order. It carries the
+verified jq for every figure, the rounding and missing-value conventions, and the
+path for reporting a single device when the user names one.
 
-Take values from `--json`, never from a TTY table. Summary fields arrive
-rounded to 2 decimals; raw `records[].value` floats do not, so round them for
-display the way the CLI does — 1 decimal in per-device tables, 2 in headline
-figures. Round only for display: never restate a measurement at a precision the
-response did not support, and never adjust a number to make a point.
-
-### Report the whole model, not one device
-
-The report is the model's, the way the dashboard's model page is. Cover every
-quantization (LLM) and every device (general) the response carried. Never
-truncate a table silently, and never drop a column because some cells are null —
-print `—` for a missing cell and keep the row.
-
-`.summary.quants` (LLM) and `.summary.<metric>.all` (general) are **model-wide
-bests, taken across all devices**. They belong to no single device, so never
-label them with one. This is the failure to avoid: quoting `.summary.quants`
-under a heading like "Device: Google Pixel 10" states a measurement that device
-never produced — TinyLlama's 116.51 TPS is an iPad Pro 12.9" GPU run.
-
-Narrow to one device only when the user names one. Then say plainly that it is a
-device slice, and derive it from `records[]` filtered on that
-`device.marketing_name` — never by relabeling the summary.
-
-```sh
-# LLM: every quantization, model-wide. This is the report's main table.
-melange report view "$model_key" -R "$repo" --type llm --json \
-  --jq '.summary.quants | to_entries | sort_by(-(.value.best_tps // -1))[]
-        | {quant: .key, tps: .value.best_tps, ttft_ms: .value.best_ttft_ms,
-           memory_mb: .value.best_memory_mb, accuracy: .value.best_accuracy}'
-
-# LLM: which device produced each best, when the user wants the per-device view.
-melange report view "$model_key" -R "$repo" --type llm --json \
-  --jq '[.records[] | select(.metric == "tps" and .device != null)]
-        | group_by(.device.marketing_name)[] | max_by(.value)
-        | {device: .device.marketing_name, tps: .value, quant: .quant_type,
-           ap_type}'
-
-# General: every device, best latency per accelerator plus signal quality.
-melange report view "$model_key" -R "$repo" --type general --json \
-  --jq '[.records[] | select(.device != null)]
-        | group_by(.device.marketing_name)[]
-        | {device: .[0].device.marketing_name, soc: .[0].device.soc,
-           cpu_ms: ([.[] | select(.metric == "latency_ms" and .ap_type == "cpu") | .value] | min),
-           gpu_ms: ([.[] | select(.metric == "latency_ms" and .ap_type == "gpu") | .value] | min),
-           npu_ms: ([.[] | select(.metric == "latency_ms" and .ap_type == "npu") | .value] | min),
-           snr_db: ([.[] | select(.metric == "snr_db") | .value] | max)}'
-```
-
-A real report is large — TinyLlama returns 5040 records over 50 devices. When a
-device table is too long to print in full, sort it, show the top rows, and state
-the count you left out and how to get them. Never let a truncated view read as
-the complete set.
-
-### Headline metrics
-
-```
-╭ Throughput ──╮╭ First token ─╮╭ Memory ──────╮╭ Model size ──╮
-│ up to        ││ as low as    ││ smallest as  ││ smaller by   │
-│ 286.30 TPS   ││ 13.13 ms     ││ 47.11 MB     ││ x4.63 vs ORG │
-╰──────────────╯╰──────────────╯╰──────────────╯╰──────────────╯
-```
-
-LLM reports (`--type llm`), each from `report view ... --json`:
-
-| Card | Value |
-|------|-------|
-| Throughput | `[.summary.quants[].best_tps] \| map(select(. != null)) \| max` |
-| First token | `[.summary.quants[].best_ttft_ms] \| map(select(. != null)) \| min` |
-| Memory | `[.summary.quants[].best_memory_mb] \| map(select(. != null)) \| min` |
-| Model size | ORG ÷ smallest quantized, from `model_size_bytes` records; when the report carries none, from `model targets` `download_size` |
-
-General reports (`--type general`) use the same panel with different cards:
-
-```
-╭ Latency ─────╮╭ NPU speedup ─╮╭ Memory ──────╮╭ Signal ──────╮
-│ as low as    ││ up to        ││ smallest as  ││ up to        │
-│ 23.51 ms     ││ x12.52       ││ 0.97 MB      ││ 85.19 dB     │
-╰──────────────╯╰──────────────╯╰──────────────╯╰──────────────╯
-```
-
-| Card | Value |
-|------|-------|
-| Latency | `.summary.latency_ms.all.min` |
-| NPU speedup | per device `min(cpu latency_ms) / min(npu latency_ms)`, then the max across devices |
-| Memory | `[.records[] \| select(.metric=="memory_inference_peak_mb") \| .value] \| min` |
-| Signal | `.summary.snr_db.all.max` |
-
-```sh
-# Model size, LLM — most reports carry no model_size_bytes records
-melange report view "$model_key" -R "$repo" --type llm --json \
-  --jq '[.records[] | select(.metric == "model_size_bytes")] as $s
-        | ([$s[] | select(.quant_type == "org") | .value] | max) as $org
-        | ([$s[] | select(.quant_type != "org") | .value] | min) as $small
-        | if $org and $small and $small > 0 then $org / $small else null end'
-
-# Fall back to the converted artifacts, which carry a size for every quant
-melange model targets "$model_key" -R "$repo" --json \
-  --jq '[.results[] | {quant: .quant_type, mb: (.download_size / 1048576)}] as $t
-        | ([$t[] | select(.quant == "org") | .mb] | max) as $org
-        | ([$t[] | select(.quant != "org") | .mb] | min) as $small
-        | if $org and $small and $small > 0
-          then {smallest_mb: $small, ratio: ($org / $small)} else null end'
-
-# NPU speedup, general models
-melange report view "$model_key" -R "$repo" --type general --json \
-  --jq '[[.records[] | select(.metric == "latency_ms" and .device != null)]
-         | group_by(.device.marketing_name)[]
-         | {device: .[0].device.marketing_name,
-            cpu: ([.[] | select(.ap_type == "cpu") | .value] | min),
-            npu: ([.[] | select(.ap_type == "npu") | .value] | min)}
-         | select(.cpu != null and .npu != null and .npu > 0)
-         | {device, gain: (.cpu / .npu)}] | max_by(.gain)'
-```
-
-Rules for the panel:
-
-- **Drop a card rather than estimate one.** Real reports are sparse:
-  `best_memory_mb` is often null, and accuracy scores and `model_size_bytes`
-  records are frequently absent. Follow the fallback chain first — for model
-  size, the report records, then `model targets`, then accuracy — and only
-  omit the card when every source is empty.
-- Name what a ratio compares. `x4.63 vs ORG` means the smallest quantization
-  against the original weights; the NPU speedup is CPU-versus-NPU latency on
-  one device. Never divide a value from one accelerator by a value from
-  another — the result is not a speedup.
-- `quant_type` is always lowercase in public output (`org`, `f16`, `bf16`,
-  `q8_0`, `q6_k`, `q4_k_m`, `q3_k_m`, `q2_k`, `iq2_s`).
-- `accuracy_score` and `model_size_bytes` records have `device: null` and
-  `ap_type: null`. Filter them out before grouping by device.
-- The dashboard shows a "deployability" percentage. It is a threshold widget in
-  the web UI, not an API field, and no melange command returns it. Say it is
-  not available rather than producing a number for it.
-- Every card is a model-wide best across all devices. Never caption the panel
-  with one device's name; if you want to say where a figure came from, look the
-  device up in `records[]` and attribute that figure alone.
-- Device counts are entitlement-limited, not model properties — the same model
-  reports far fewer devices on a smaller plan. Label any count as the devices
-  visible to the account.
+The dashboard's deployability percentage is a web-UI threshold widget with no API
+field behind it. Say it is unavailable rather than producing a number for it.
 
 ## Browse the public library and your usage
 
@@ -472,10 +313,9 @@ quota as `used/limit (pct%)`, or `unlimited` when the limit is null; its
 server will actually allow now (spike headroom included, floored at 0; null =
 unlimited). Prefer `remaining` over `limit - used` for preflight.
 
-`melange plan` reports the account's effective plan (`plan`, plus `is_trial`
-and `trial_ends_at`). It reflects what the server enforces: an account that
-bypasses quota limits reports `pro_plus` and unlimited quotas, exactly as the
-dashboard shows.
+`melange plan` reports the effective plan (`plan`, `is_trial`, `trial_ends_at`) —
+what the server enforces, matching the dashboard. An account that bypasses quota
+limits reports `pro_plus` with unlimited quotas.
 
 ### Entitlement disclosure (required)
 
@@ -504,7 +344,8 @@ key=$(melange model list -R "$repo" --jq '.results | (map(select(.is_default and
 melange report view "$key" -R "$repo" --json
 ```
 
-Never import a library model solely to read its public benchmarks.
+Reading a library model's public benchmarks needs no import or upload — the path
+above is the whole job.
 
 ## Get exact deployment code
 
@@ -522,10 +363,11 @@ melange deploy guide "$key" -R "$repo" --language ios-swift --mode speed --json
 ```
 
 The plain guide is ordered Markdown with copyable SDK install and inference
-snippets; JSON is the structured public response. The model repository coordinate, version,
-family, selected mode, and SDK language are already resolved. General-model
-tensor creation remains an explicit TODO because shapes and preprocessing are
-model-specific—inspect tensor I/O metadata rather than inventing inputs.
+snippets; `--json` is the structured response. Repository coordinate, version,
+family, mode, and SDK language are already resolved. General-model tensor
+creation is left an explicit TODO — shapes and preprocessing are model-specific,
+so inspect the tensor I/O metadata rather than inventing inputs. Ship the guide's
+own SDK fields and callbacks; do not add ones it does not name.
 
 Every guide uses `YOUR_PERSONAL_KEY`. The command never interpolates, prints,
 or persists the active PAT. Do not replace the placeholder in chat, logs,
@@ -574,19 +416,7 @@ one-line summary on stderr; pagination and polling are your job here.
 
 ## Pitfalls
 
-- `-R ACCOUNT/REPO` is required on all `melange model` commands; there
-  is no default repo.
 - Run uploads with `--dry-run` first to validate the manifest cheaply.
-- Never parse TTY tables — use `--json` or `--jq`. Plain `--json` is
-  the API response bytes with the terminator normalized to exactly one trailing
-  newline, except for waited upload/import composites and redacted model
-  download authorization URLs.
-- Exit 130 means the upload session is preserved; resume with the
-  printed `--resume` line instead of restarting the upload.
-- Exit 2 = your invocation is wrong (don't retry); exit 4 = credentials
-  (don't retry until fixed).
-- `--jq` output re-marshals (sorted keys); use plain `--json` when you
-  need the original server payload bytes.
 - `MELANGE_DEBUG=1` logs request/response lines to stderr (tokens and
   headers are never logged).
 - `MELANGE_API_TIMEOUT` bounds ordinary API requests (default `30s`);
@@ -594,13 +424,11 @@ one-line summary on stderr; pagination and polling are your job here.
 - Successful `melange api` output is committed only after the complete body
   is read. Increase `MELANGE_API_TIMEOUT` for legitimately slow or large
   responses; a failed read leaves stdout empty instead of emitting partial data.
-- Deployment guides accept repository model keys only. Never pass a Hugging
-  Face ID to `melange deploy guide`, and never invent SDK fields or callbacks.
 - Never run `--wait` in the foreground while a person is waiting; import or
   upload without it, report the phase, and monitor in the background.
-- Never present a metric the response did not carry. Drop the card, say the
-  value is unavailable, and never compare values measured on different
-  accelerators as if one were a speedup.
+- Never present a metric the response did not carry. Render it as `-` in a table
+  and `N/A` in a card so the gap stays visible, and never compare values measured
+  on different accelerators as if one were a speedup.
 - Report the whole model, not one device: summary values are bests across all
   devices, so labelling them with a device name misattributes the measurement.
   Print the report in your reply rather than saving it to a file.

@@ -21,7 +21,9 @@ merges all pages into one envelope.
 ## Agent presentation contract
 
 Applies when a person is waiting on the answer; scripts keep the blocking forms.
-See skills/melange-cli/SKILL.md for the panel templates these rules refer to.
+See skills/melange-cli/SKILL.md for the conversion pipeline panel, and
+skills/melange-cli/assets/report-llm.md or report-general.md for the model report
+templates these rules refer to.
 
 - Never foreground --wait. Run model import/upload WITHOUT --wait: it returns as
   soon as the model is registered, in state converting. Report the phase and what
@@ -35,8 +37,9 @@ See skills/melange-cli/SKILL.md for the panel templates these rules refer to.
   upload-session states.
 - Explain a model in this order: name and repository/model key; a short
   description; the headline metrics; then benchmarks.
-- On any request for details, a report, or benchmarks, print the full report in
-  the reply — not a file path, not a prose summary. Write a file only on request.
+- On any request for details, a report, or benchmarks, fill in the matching report
+  template and print it in the reply — not a file path, not a prose summary.
+  Missing values render as - in tables and N/A in cards; the row and card stay.
 - The report is the model's, like the dashboard model page: every quantization
   (LLM) and every device (general). .summary.quants and .summary.<metric>.all are
   bests across all devices, so never label them with one device's name. Filter
@@ -47,7 +50,8 @@ See skills/melange-cli/SKILL.md for the panel templates these rules refer to.
   smallest quantized size (model_size_bytes records, else model targets
   download_size). General: latency_ms.all.min, per-device min(cpu latency)/
   min(npu latency), min memory_inference_peak_mb, snr_db.all.max.
-- Render only metrics the response carried; drop a card rather than estimate it.
+- Never estimate a metric the response did not carry; render - in a table and N/A
+  in a card so the gap stays visible, keeping the row, column and card.
   Never divide values measured on different accelerators. "Deployability" is a
   web-UI widget, not an API field — say it is unavailable. Device counts reflect
   the account's entitlement, not the model.
