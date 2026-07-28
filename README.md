@@ -114,7 +114,7 @@ Compare Gemma4 with another llm available in Melange. Use only benchmark values 
 Show throughput and peak memory for iPhone 16 and Galaxy S25 where available.
 ```
 
-## (+) Update to latest update
+### Update the agent skill
 
 ```sh
 npx skills update melange-cli --global
