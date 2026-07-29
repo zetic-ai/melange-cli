@@ -114,14 +114,27 @@ Compare Gemma4 with another llm available in Melange. Use only benchmark values 
 Show throughput and peak memory for iPhone 16 and Galaxy S25 where available.
 ```
 
-### Update the agent skill
+## Update 
+
+### Update the CLI
+
+**Homebrew** (macOS or Linux):
 
 ```sh
 brew upgrade zetic-ai/tap/melange
-
-npx skills update melange-cli --global
 ```
 
+**npm** (macOS, Linux, or Windows):
+
+```sh
+npm update -g @zetic-ai/melange-cli
+```
+
+### Update the agent skill
+
+```sh
+npx skills update melange-cli --global
+```
 
 ## Documentation
 
