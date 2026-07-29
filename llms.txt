@@ -9,10 +9,14 @@ composite and `model download` redacts signed artifact URLs (credentials).
 Full docs: docs/reference/melange.md; live topics: `melange help environment`,
 `melange help exit-codes`, `melange help formatting`.
 
-Global flags: --no-color (disable color), --no-input (disable prompts).
+Global flags: --no-color (disable color), --no-input (disable prompts),
+--format auto|table|tsv (human output layout; default auto = table on a
+terminal, tab-separated otherwise. Agents should leave it at auto and read
+--json; --format table is for humans piping into a pager).
 Structured-output flags on data commands: --json, --jq EXPR (implies --json;
 re-marshals with sorted keys), --template TMPL (Go template; tablerow/timeago/
-json functions). Non-TTY human output is headerless tab-separated values;
+json functions). Non-TTY human output is headerless tab-separated values
+(no rule, no row count);
 backslash, tab, carriage return, and newline inside cells are escaped as
 \\, \t, \r, and \n.
 List envelope: {"results": [...], "count": N}; --paginate (alias --all)

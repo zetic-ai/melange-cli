@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
-	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 const metricTps = "tps"
@@ -138,8 +136,6 @@ func llmAccuracy(ios *iostreams.IOStreams, entries []gen.LlmAccuracyEntry) error
 	if len(entries) == 0 {
 		return nil
 	}
-	var b strings.Builder
-	fmt.Fprintln(&b, "\nAccuracy:")
 	sorted := append([]gen.LlmAccuracyEntry(nil), entries...)
 	sort.Slice(sorted, func(i, j int) bool {
 		leftDataset, rightDataset := deref(sorted[i].Dataset), deref(sorted[j].Dataset)
@@ -148,10 +144,17 @@ func llmAccuracy(ios *iostreams.IOStreams, entries []gen.LlmAccuracyEntry) error
 		}
 		return deref(sorted[i].QuantType) < deref(sorted[j].QuantType)
 	})
-	for _, e := range sorted {
-		fmt.Fprintf(&b, "  %-12s %-10s %s\n",
-			orDash(deref(e.Dataset)), orDash(deref(e.QuantType)), formatFloat(e.Score))
+
+	if _, err := fmt.Fprintln(ios.Out, "\nAccuracy:"); err != nil {
+		return err
 	}
-	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
-	return err
+	tp := tableprinter.New(ios)
+	tp.HeaderRow("dataset", "quant", "score")
+	for _, e := range sorted {
+		tp.AddField(orDash(deref(e.Dataset)))
+		tp.AddField(orDash(deref(e.QuantType)))
+		tp.AddField(formatFloat(e.Score))
+		tp.EndRow()
+	}
+	return tp.Render()
 }

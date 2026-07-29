@@ -88,7 +88,7 @@ func printQuotas(ios *iostreams.IOStreams, q *gen.UsageQuotasResponse) error {
 		{"prompts", "Prompts", q.Prompts},
 	}
 	var b strings.Builder
-	if ios.IsStdoutTTY() {
+	if ios.HumanOutput() {
 		for _, r := range rows {
 			fmt.Fprintf(&b, "%-16s %s\n", r.label+":", formatQuota(r.item))
 		}

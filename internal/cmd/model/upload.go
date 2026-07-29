@@ -360,7 +360,7 @@ func renderDryRun(opts *uploadOptions, specs []upload.FileSpec) error {
 
 	tp := tableprinter.New(ios)
 	tp.HeaderRow("role", "file", "size", "crc32c", "destination")
-	isTTY := ios.IsStdoutTTY()
+	isTTY := ios.HumanOutput()
 	for _, s := range specs {
 		tp.AddField(s.Role)
 		tp.AddField(s.Path, tableprinter.WithTruncate(false))
@@ -1262,13 +1262,13 @@ func runSessions(ctx context.Context, opts *uploadOptions) error {
 	}
 	sessions := resp.JSON200.Results
 	if len(sessions) == 0 {
-		if ios.IsStdoutTTY() {
+		if ios.HumanOutput() {
 			fmt.Fprintln(ios.ErrOut, "No upload sessions found")
 		}
 		return nil
 	}
 
-	isTTY := ios.IsStdoutTTY()
+	isTTY := ios.HumanOutput()
 	now := time.Now()
 	tp := tableprinter.New(ios)
 	tp.HeaderRow("id", "state", "created", "expires", "files")

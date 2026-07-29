@@ -169,13 +169,13 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				return exporter.Write(ios, envelope)
 			}
 			if len(models) == 0 {
-				if ios.IsStdoutTTY() {
+				if ios.HumanOutput() {
 					fmt.Fprintln(ios.ErrOut, "No models found")
 				}
 				return nil
 			}
 
-			isTTY := ios.IsStdoutTTY()
+			isTTY := ios.HumanOutput()
 			now := time.Now()
 			tp := tableprinter.New(ios)
 			tp.HeaderRow("model", "provider", "task", "type", "created")
@@ -191,6 +191,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				}
 				tp.EndRow()
 			}
+			tp.Caption(text.Pluralize(len(models), "model", "models"))
 			return tp.Render()
 		},
 	}

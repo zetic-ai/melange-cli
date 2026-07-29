@@ -112,7 +112,7 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 				return exporter.Write(ios, json.RawMessage(body))
 			}
 
-			isTTY := ios.IsStdoutTTY()
+			isTTY := ios.HumanOutput()
 			switch kind {
 			case kindGeneral:
 				return renderGeneral(ios, body, m, isTTY)

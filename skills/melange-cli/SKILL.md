@@ -57,7 +57,9 @@ explicitly selected config storage > OS keyring > legacy config fallback.
   re-marshaled with sorted object keys; bare strings print raw.
 - `--template TMPL` (implies `--json`): Go template with `tablerow`,
   `timeago`, `json` functions.
-- Read data through `--json`/`--jq`. On a TTY humans get aligned tables; when
+- Read data through `--json`/`--jq`. On a TTY humans get aligned tables under a
+  ruled header with a trailing row count (`--format table` forces that layout
+  when piping to a pager); when
   stdout is not a TTY you get headerless tab-separated values. Backslash,
   tab, carriage return, and newline inside cells are escaped as `\\`, `\t`,
   `\r`, and `\n`; for agents, always prefer `--json`/`--jq`.

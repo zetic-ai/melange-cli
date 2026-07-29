@@ -111,7 +111,7 @@ func printStatus(f *cmdutil.Factory, exporter *cmdutil.Exporter, s *gen.ModelSta
 		return exporter.Write(ios, json.RawMessage(raw))
 	}
 
-	if ios.IsStdoutTTY() {
+	if ios.HumanOutput() {
 		state := string(s.State)
 		if s.Stage != nil {
 			state += fmt.Sprintf(" (stage: %s)", *s.Stage)

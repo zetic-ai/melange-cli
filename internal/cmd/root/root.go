@@ -16,6 +16,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/cmd/usage"
 	"github.com/zetic-ai/melange-cli/internal/cmd/version"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
 
 // NewCmdRoot builds the root cobra.Command for the melange CLI.
@@ -60,6 +61,13 @@ melange help formatting.`,
 	var noInput bool
 	pf.BoolVar(&noInput, "no-input", false, "Disable interactive prompts")
 
+	// Presentation flag, like --no-color: it selects the layout of human output
+	// without changing what any command does. Structured output stays under
+	// --json/--jq/--template.
+	var format string
+	pf.StringVar(&format, "format", "auto",
+		"Human output layout `auto|table|tsv`; auto means table on a terminal, tab-separated otherwise")
+
 	var host string
 	pf.StringVar(&host, "host", "", "Override the Melange API host")
 	if err := pf.MarkHidden("host"); err != nil {
@@ -74,6 +82,11 @@ melange help formatting.`,
 		if noColor {
 			f.IOStreams.SetNoColor(true)
 		}
+		parsed, err := iostreams.ParseFormat(format)
+		if err != nil {
+			return cmdutil.FlagError{Err: err}
+		}
+		f.IOStreams.SetFormat(parsed)
 		f.NoInput = noInput
 		f.HostOverride = host
 		return nil

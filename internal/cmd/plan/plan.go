@@ -86,7 +86,7 @@ func printPlan(ios *iostreams.IOStreams, p *gen.BillingPlanResponse) error {
 	}
 
 	out := ios.Out
-	if ios.IsStdoutTTY() {
+	if ios.HumanOutput() {
 		fmt.Fprintf(out, "%-14s %s\n", "Plan:", plan)
 		if p.IsTrial {
 			if trialEnds != "" {

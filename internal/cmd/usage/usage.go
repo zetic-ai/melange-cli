@@ -87,7 +87,7 @@ func printUsage(ios *iostreams.IOStreams, u *gen.UsageResponse) error {
 		{"prompts", "Prompts", u.Prompts},
 	}
 	var b strings.Builder
-	if ios.IsStdoutTTY() {
+	if ios.HumanOutput() {
 		for _, r := range rows {
 			fmt.Fprintf(&b, "%-16s %d\n", r.label+":", r.value)
 		}

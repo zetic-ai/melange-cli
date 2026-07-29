@@ -59,8 +59,9 @@ melange library list [flags]
 ### Options inherited from parent commands
 
 ```
-      --no-color   Disable color output
-      --no-input   Disable interactive prompts
+      --format auto|table|tsv   Human output layout auto|table|tsv; auto means table on a terminal, tab-separated otherwise (default "auto")
+      --no-color                Disable color output
+      --no-input                Disable interactive prompts
 ```
 
 ### SEE ALSO

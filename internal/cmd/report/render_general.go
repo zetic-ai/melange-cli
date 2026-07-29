@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
-	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 // apPrecisionOrder is the stable column order: ap_type (cpu, gpu, npu) crossed
@@ -167,8 +165,8 @@ func displayDevice(dev string) string {
 // generalSummary prints the per-precision summary block from the response
 // summary: latency min/median/max, SNR range, memory range.
 func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error {
-	var b strings.Builder
-	fmt.Fprintln(&b, "\nSummary (latency ms, per precision):")
+	type summaryRow struct{ precision, latency, snr, memory string }
+	var rows []summaryRow
 	for _, prec := range precisionOrder {
 		lat := latencyStats(s.LatencyMs, prec)
 		snr := snrRange(s.SnrDb, prec)
@@ -176,10 +174,25 @@ func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error
 		if lat == "" && snr == "" && mem == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "  %-5s latency %s  snr %s  mem %s\n", prec, orDash(lat), orDash(snr), orDash(mem))
+		rows = append(rows, summaryRow{prec, orDash(lat), orDash(snr), orDash(mem)})
 	}
-	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
-	return err
+	if len(rows) == 0 {
+		return nil
+	}
+
+	if _, err := fmt.Fprintln(ios.Out, "\nSummary (latency ms, per precision):"); err != nil {
+		return err
+	}
+	tp := tableprinter.New(ios)
+	tp.HeaderRow("precision", "latency min/med/max", "snr", "memory")
+	for _, r := range rows {
+		tp.AddField(r.precision)
+		tp.AddField(r.latency)
+		tp.AddField(r.snr)
+		tp.AddField(r.memory)
+		tp.EndRow()
+	}
+	return tp.Render()
 }
 
 func latencyStats(s gen.GeneralLatencySummary, prec string) string {

@@ -13,8 +13,14 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
-// colSep separates columns in TTY mode.
-const colSep = "  "
+const (
+	// colSep separates columns in TTY mode.
+	colSep = "  "
+	// minColWidth is the narrowest a column may be squeezed to: enough for the
+	// ellipsis, so a shrunken cell still reads as truncated rather than as a
+	// stray letter.
+	minColWidth = len("...")
+)
 
 type field struct {
 	text     string
@@ -42,26 +48,31 @@ type TablePrinter struct {
 	isTTY        bool
 	maxWidth     int
 	colorEnabled bool
+	ruleChar     string
 
 	hasHeader bool
+	caption   string
 	rows      [][]field
 	current   []field
 }
 
-// New builds a TablePrinter bound to ios.Out, keyed off stdout TTY-ness.
+// New builds a TablePrinter bound to ios.Out, keyed off whether the caller
+// wants human output (a TTY, or --format table).
 func New(ios *iostreams.IOStreams) *TablePrinter {
 	return &TablePrinter{
 		ios:          ios,
-		isTTY:        ios.IsStdoutTTY(),
+		isTTY:        ios.HumanOutput(),
 		maxWidth:     ios.TerminalWidth(),
 		colorEnabled: ios.ColorEnabled(),
+		ruleChar:     ios.RuleChar(),
 	}
 }
 
 // HeaderRow sets the column headers. In TTY mode they render uppercased (and
-// dimmed when color is enabled); in non-TTY mode headers are omitted entirely.
-// The header row is prepended to the accumulated rows, so it may be called at
-// any point before Render, regardless of AddField/EndRow ordering.
+// dimmed when color is enabled) above a rule that separates them from the data;
+// in non-TTY mode headers are omitted entirely. The header row is prepended to
+// the accumulated rows, so it may be called at any point before Render,
+// regardless of AddField/EndRow ordering.
 func (t *TablePrinter) HeaderRow(cols ...string) {
 	if !t.isTTY || len(cols) == 0 {
 		return
@@ -73,6 +84,13 @@ func (t *TablePrinter) HeaderRow(cols ...string) {
 	}
 	t.rows = append([][]field{header}, t.rows...)
 	t.hasHeader = true
+}
+
+// Caption sets a one-line summary printed under the table, dimmed, in TTY mode
+// only — it tells a reader how much they are looking at without disturbing the
+// tab-separated machine contract.
+func (t *TablePrinter) Caption(s string) {
+	t.caption = s
 }
 
 // AddField appends a field to the current row.
@@ -105,7 +123,7 @@ func (t *TablePrinter) Render() error {
 }
 
 // renderTSV emits the machine contract: one row per line, tab-separated raw
-// values — no headers, no truncation, no color.
+// values — no headers, no truncation, no color, no caption.
 func (t *TablePrinter) renderTSV() error {
 	for _, row := range t.rows {
 		cells := make([]string, len(row))
@@ -119,38 +137,78 @@ func (t *TablePrinter) renderTSV() error {
 	return nil
 }
 
-// renderTTY emits padded columns sized to content, truncated to the terminal
-// width with the last column flexible.
+// renderTTY emits padded columns sized to fit the terminal, a rule under the
+// header, and the caption.
 func (t *TablePrinter) renderTTY() error {
 	widths := t.columnWidths()
-	for _, row := range t.rows {
-		var b strings.Builder
-		for i, f := range row {
-			if i > 0 {
-				b.WriteString(colSep)
-			}
-			cell := text.SanitizeTerminalInline(f.text)
-			if f.truncate && i < len(widths) {
-				cell = text.Truncate(widths[i], cell)
-			}
-			rendered := cell
-			if f.color != nil && t.colorEnabled {
-				rendered = f.color(cell)
-			}
-			b.WriteString(rendered)
-			if i < len(row)-1 { // last column carries no trailing padding
-				b.WriteString(strings.Repeat(" ", widths[i]-len([]rune(cell))))
-			}
-		}
-		if _, err := fmt.Fprintln(t.ios.Out, b.String()); err != nil {
+	for i, row := range t.rows {
+		if _, err := fmt.Fprintln(t.ios.Out, t.renderRow(row, widths)); err != nil {
 			return err
 		}
+		if i == 0 && t.hasHeader {
+			if _, err := fmt.Fprintln(t.ios.Out, t.renderRule(widths)); err != nil {
+				return err
+			}
+		}
 	}
-	return nil
+	if t.caption == "" {
+		return nil
+	}
+	caption := text.SanitizeTerminalInline(t.caption)
+	if t.colorEnabled {
+		caption = t.ios.ColorScheme().Dim(caption)
+	}
+	_, err := fmt.Fprintf(t.ios.Out, "\n%s\n", caption)
+	return err
 }
 
-// columnWidths sizes every column to its widest content, then shrinks the
-// last column so rows fit the terminal width (floor of 3 for the ellipsis).
+func (t *TablePrinter) renderRow(row []field, widths []int) string {
+	var b strings.Builder
+	for i, f := range row {
+		if i > 0 {
+			b.WriteString(colSep)
+		}
+		cell := text.SanitizeTerminalInline(f.text)
+		if f.truncate && i < len(widths) {
+			cell = text.Truncate(widths[i], cell)
+		}
+		rendered := cell
+		if f.color != nil && t.colorEnabled {
+			rendered = f.color(cell)
+		}
+		b.WriteString(rendered)
+		if i < len(row)-1 { // last column carries no trailing padding
+			b.WriteString(strings.Repeat(" ", max(widths[i]-text.DisplayWidth(cell), 0)))
+		}
+	}
+	return b.String()
+}
+
+// renderRule underlines the header. It carries the table's structure without
+// relying on color, which the dimmed header alone cannot do under NO_COLOR, a
+// "dumb" TERM, or a low-contrast theme.
+func (t *TablePrinter) renderRule(widths []int) string {
+	segments := make([]string, len(widths))
+	for i, w := range widths {
+		segments[i] = strings.Repeat(t.ruleChar, w)
+	}
+	rule := strings.Join(segments, colSep)
+	if t.colorEnabled {
+		rule = t.ios.ColorScheme().Dim(rule)
+	}
+	return rule
+}
+
+// columnWidths sizes every column to its widest cell, then shrinks the table to
+// the terminal width by repeatedly taking a column from whichever truncatable
+// column is currently widest.
+//
+// Shrinking the widest column spends the loss where the content is most
+// compressible and leaves narrow identifier columns intact. Sizing to content
+// and shrinking only the LAST column — the older rule — let any wide leading
+// column (a long device marketing name, a report's device column crossed with N
+// accelerator/precision columns) push the row past the terminal width, where it
+// wrapped and destroyed the alignment the table exists to provide.
 func (t *TablePrinter) columnWidths() []int {
 	numCols := 0
 	for _, row := range t.rows {
@@ -158,29 +216,80 @@ func (t *TablePrinter) columnWidths() []int {
 			numCols = len(row)
 		}
 	}
+	if numCols == 0 {
+		return nil
+	}
+
 	widths := make([]int, numCols)
+	shrinkable := make([]bool, numCols)
+	for i := range shrinkable {
+		shrinkable[i] = true
+	}
 	for _, row := range t.rows {
 		for i, f := range row {
-			if w := len([]rune(text.SanitizeTerminalInline(f.text))); w > widths[i] {
+			if w := text.DisplayWidth(text.SanitizeTerminalInline(f.text)); w > widths[i] {
 				widths[i] = w
+			}
+			// A single opted-out field pins the whole column: WithTruncate(false)
+			// marks values that are wrong when clipped, such as file paths.
+			if !f.truncate {
+				shrinkable[i] = false
 			}
 		}
 	}
-	if numCols == 0 {
+
+	available := t.maxWidth - len(colSep)*(numCols-1)
+	// Shrinking is only worth its cost when it can actually achieve a fit. When
+	// pinned columns alone already exceed the terminal, the rows will wrap
+	// whatever we do, so clipping the shrinkable columns would destroy content
+	// and still wrap. Leave the values whole in that case.
+	if floorTotal(widths, shrinkable) > available {
 		return widths
 	}
-	available := t.maxWidth - colSep2Width(numCols)
-	used := 0
-	for _, w := range widths[:numCols-1] {
-		used += w
-	}
-	if last := available - used; last < widths[numCols-1] {
-		widths[numCols-1] = max(last, len("..."))
+	for total(widths) > available {
+		i := widestShrinkable(widths, shrinkable)
+		if i < 0 {
+			break
+		}
+		widths[i]--
 	}
 	return widths
 }
 
-// colSep2Width is the total width consumed by column separators.
-func colSep2Width(numCols int) int {
-	return len(colSep) * (numCols - 1)
+func total(widths []int) int {
+	sum := 0
+	for _, w := range widths {
+		sum += w
+	}
+	return sum
+}
+
+// floorTotal is the narrowest the table can become: shrinkable columns squeezed
+// to minColWidth, pinned columns at their full content width.
+func floorTotal(widths []int, shrinkable []bool) int {
+	sum := 0
+	for i, w := range widths {
+		if shrinkable[i] {
+			sum += min(w, minColWidth)
+			continue
+		}
+		sum += w
+	}
+	return sum
+}
+
+// widestShrinkable returns the index of the widest column that may still give up
+// a column, or -1 when every column is at its floor. Ties go to the leftmost so
+// shrinking is deterministic.
+func widestShrinkable(widths []int, shrinkable []bool) int {
+	best := -1
+	for i, w := range widths {
+		if !shrinkable[i] || w <= minColWidth {
+			continue
+		}
+		if best < 0 || w > widths[best] {
+			best = i
+		}
+	}
+	return best
 }
