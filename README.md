@@ -117,6 +117,8 @@ Show throughput and peak memory for iPhone 16 and Galaxy S25 where available.
 ### Update the agent skill
 
 ```sh
+brew upgrade zetic-ai/tap/melange
+
 npx skills update melange-cli --global
 ```
 
