@@ -65,6 +65,19 @@ explicitly selected config storage > OS keyring > legacy config fallback.
   with the same response-byte contract. `--paginate` (alias `--all`) merges
   all pages into one envelope (top-level keys then re-marshaled in sorted order).
 
+## Identifiers — do not interchange these
+
+| Identifier | What it is | How to get it |
+|------------|------------|---------------|
+| `ACCOUNT/REPO` | A Melange repository address | `melange repo list` |
+| `MODEL_KEY` | One converted model version in a repository | `melange model list -R ACCOUNT/REPO` |
+| `TARGET_ID` | One downloadable converted artifact; opaque `tm_…`/`ltm_…` | `melange model targets MODEL_KEY -R ACCOUNT/REPO` |
+
+They chain in that order: repo → model key → target id. `ACCOUNT/NAME` in
+`melange library view` addresses a **public library** model and is not a
+`MODEL_KEY`. Never substitute a repository name, a display name, or a Hugging
+Face id for `MODEL_KEY` or `TARGET_ID`, and never parse a `TARGET_ID`.
+
 ## Core workflow: create repo → upload → wait → status
 
 ```sh
@@ -406,8 +419,9 @@ melange api /v1/models -F name=demo -H 'Idempotency-Key: 0698c9b1'
 melange api -X GET /v1/repos -f search=whisper --include  # query params
 ```
 
-Paths must be relative to the configured host (absolute URLs are
-rejected — credentials never leave the configured host). `-f` adds a
+Paths must be relative to the configured host and resolve under `/v1`
+(absolute URLs and anything outside `/v1` are rejected with exit 2 —
+credentials never leave the configured host or its public API). `-f` adds a
 string field, `-F` a typed field (`true`/`false`/`null`/ints; `@path`
 inserts file contents; `key[sub]=v` nests; `key[]=v` appends arrays).
 Fields switch the method to POST unless you pass `-X GET` (then they

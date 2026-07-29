@@ -18,6 +18,15 @@ backslash, tab, carriage return, and newline inside cells are escaped as
 List envelope: {"results": [...], "count": N}; --paginate (alias --all)
 merges all pages into one envelope.
 
+Identifiers (not interchangeable):
+  ACCOUNT/REPO  a Melange repository address       <- melange repo list
+  MODEL_KEY     one converted model version        <- melange model list -R ACCOUNT/REPO
+  TARGET_ID     one downloadable artifact, opaque  <- melange model targets MODEL_KEY -R ACCOUNT/REPO
+                (tm_/ltm_ prefixed; never parse it)
+ACCOUNT/NAME addresses a public library model (melange library view), which is
+not a MODEL_KEY. Never substitute a repository or display name for MODEL_KEY or
+TARGET_ID.
+
 ## Agent presentation contract
 
 Applies when a person is waiting on the answer; scripts keep the blocking forms.
@@ -334,8 +343,10 @@ stdout (also on non-2xx, with a one-line summary on stderr).
 
 melange api <path> [-X METHOD] [-f key=value] [-F key=value] [-H 'Name: v']
     [--input FILE|-] [-q JQ] [-t TEMPLATE] [-i|--include] [--silent]
-  Paths are host-relative ("/v1/me"; query strings allowed); absolute URLs are
-  rejected. Default method GET; fields or --input switch it to POST. With
+  Paths are host-relative and must resolve under /v1 ("/v1/me"; query strings
+  allowed); absolute URLs and paths outside /v1 are rejected (exit 2), as are
+  ones that leave /v1 only after dot segments or percent-escapes resolve.
+  Default method GET; fields or --input switch it to POST. With
   explicit -X GET, fields become query parameters. -f = string field; -F =
   typed (true/false/null/int; @path file contents; @- stdin); key[sub]=v
   nests one level; key[]=v appends arrays. Fields imply a JSON body.

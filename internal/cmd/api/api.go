@@ -1,6 +1,7 @@
 // Package api implements `melange api`, the authenticated raw-request escape
 // hatch: any /v1 endpoint is callable through the standard transport chain
-// even when no dedicated command wraps it yet.
+// even when no dedicated command wraps it yet. Paths that resolve outside /v1
+// are refused — see publicAPIPath.
 package api
 
 import (
@@ -11,7 +12,9 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strings"
 
@@ -62,11 +65,13 @@ automatic retries for idempotent requests (GET/HEAD, or any request
 carrying an Idempotency-Key header), and standard error-envelope
 handling.
 
-The path must be relative to the configured host ("/v1/me" and "v1/me"
-are equivalent; a query string like "/v1/repos?limit=5" is allowed).
-Absolute URLs are rejected: credentials are bound to the configured
-host and are never sent anywhere else. Run "melange auth status" to see
-that host; set MELANGE_HOST to target a different one.
+The path must be relative to the configured host and must resolve under
+/v1 ("/v1/me" and "v1/me" are equivalent; a query string like
+"/v1/repos?limit=5" is allowed). Absolute URLs and paths outside /v1 are
+rejected, including ones that only leave /v1 after dot segments or
+percent-escapes resolve: credentials are bound to the configured host
+and to its public API. Run "melange auth status" to see that host; set
+MELANGE_HOST to target a different one.
 
 The default method is GET, switching to POST when fields or --input are
 given. With an explicit "-X GET", fields become URL query parameters
@@ -141,9 +146,9 @@ func runAPI(f *cmdutil.Factory, cmd *cobra.Command, opts *options, pathArg strin
 	if pathArg == "" {
 		return cmdutil.FlagError{Err: errors.New("a path is required, e.g. /v1/me")}
 	}
-	path := pathArg
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	reqPath, err := publicAPIPath(pathArg)
+	if err != nil {
+		return err
 	}
 
 	if opts.input != "" && len(opts.rawFields)+len(opts.fields) > 0 {
@@ -178,7 +183,7 @@ func runAPI(f *cmdutil.Factory, cmd *cobra.Command, opts *options, pathArg strin
 	var body io.Reader
 	switch {
 	case params != nil && method == http.MethodGet:
-		if path, err = appendQuery(path, params); err != nil {
+		if reqPath, err = appendQuery(reqPath, params); err != nil {
 			return cmdutil.FlagError{Err: err}
 		}
 	case params != nil:
@@ -201,7 +206,7 @@ func runAPI(f *cmdutil.Factory, cmd *cobra.Command, opts *options, pathArg strin
 	if err != nil {
 		return err
 	}
-	resp, err := client.Do(cmd.Context(), method, path, body, headers)
+	resp, err := client.Do(cmd.Context(), method, reqPath, body, headers)
 	if err != nil {
 		return err
 	}
@@ -444,6 +449,52 @@ func hasURLScheme(s string) bool {
 		}
 	}
 	return false
+}
+
+// publicAPIPrefix is the only path space melange api may reach. The escape
+// hatch exists for public v1 endpoints no command wraps yet; every other route
+// on the host is outside the contract this CLI is built against.
+const publicAPIPrefix = "/v1"
+
+// publicAPIPath normalizes pathArg into the request path, rejecting anything
+// that does not land under /v1.
+//
+// The check runs against where the request RESOLVES, not how it is spelled,
+// because two later stages rewrite the path: the transport joins and cleans it
+// (url.URL.JoinPath resolves dot segments), and servers routinely decode
+// percent-escapes before routing. So "/v1/../admin" and "/v1/%2e%2e/admin"
+// must both be judged by their destination — a prefix test on the raw string
+// would pass both and still reach /admin.
+func publicAPIPath(pathArg string) (string, error) {
+	raw, query, hasQuery := strings.Cut(pathArg, "?")
+	if !strings.HasPrefix(raw, "/") {
+		raw = "/" + raw
+	}
+	decoded, err := url.PathUnescape(raw)
+	if err != nil {
+		return "", cmdutil.FlagError{Err: fmt.Errorf("invalid path %q: %w", pathArg, err)}
+	}
+	// path.Clean resolves "." and ".." and collapses repeated slashes, so a
+	// protocol-relative "//host/x" is judged as the path "/host/x" it becomes.
+	if resolved := path.Clean(decoded); !withinPublicAPI(resolved) {
+		detail := ""
+		if resolved != raw {
+			detail = fmt.Sprintf(" (resolves to %q)", resolved)
+		}
+		return "", cmdutil.FlagError{Err: fmt.Errorf(
+			"invalid path %q%s: melange api reaches only the public %s API — pass a path under %s like /v1/me",
+			pathArg, detail, publicAPIPrefix, publicAPIPrefix)}
+	}
+	// The raw spelling is forwarded unchanged (minus the scope verdict) so
+	// escaping and any trailing slash reach the server exactly as written.
+	if hasQuery {
+		return raw + "?" + query, nil
+	}
+	return raw, nil
+}
+
+func withinPublicAPI(resolved string) bool {
+	return resolved == publicAPIPrefix || strings.HasPrefix(resolved, publicAPIPrefix+"/")
 }
 
 // readInput loads the raw request body from a file, or from stdin for "-".

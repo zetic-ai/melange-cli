@@ -117,9 +117,43 @@ chmod +x "${tmpdir}/${BINARY}"
 mv "${tmpdir}/${BINARY}" "${install_dir}/${BINARY}"
 echo "Installed ${install_dir}/${BINARY} (${version})." >&2
 
+# When the install directory is not on PATH, `melange` will not resolve in this
+# shell or the next one — so an unqualified "run melange auth login" is not a
+# runnable instruction. Print the exact line that fixes the current shell, the
+# persistent equivalent for the shell actually in use, and qualify the next step
+# with the full path so it works either way.
+next_cmd="$BINARY"
 case ":${PATH}:" in
     *":${install_dir}:"*) ;;
-    *) echo "Note: ${install_dir} is not on your PATH; add it to your shell profile." >&2 ;;
+    *)
+        next_cmd="${install_dir}/${BINARY}"
+        # Keep $HOME symbolic in the printed lines so a shared dotfile stays
+        # portable across machines.
+        display_dir="$install_dir"
+        case "$install_dir" in
+            "${HOME}"/*) display_dir="\$HOME${install_dir#"${HOME}"}" ;;
+        esac
+        path_line="export PATH=\"${display_dir}:\$PATH\""
+
+        case "${SHELL##*/}" in
+            zsh)  persist="echo '${path_line}' >> ~/.zshrc" ;;
+            fish) persist="fish_add_path ${display_dir}" ;;
+            bash)
+                if [ "$(uname -s)" = "Darwin" ]; then
+                    persist="echo '${path_line}' >> ~/.bash_profile"
+                else
+                    persist="echo '${path_line}' >> ~/.bashrc"
+                fi
+                ;;
+            *)    persist="add that line to your shell profile" ;;
+        esac
+
+        echo "" >&2
+        echo "${install_dir} is not on your PATH." >&2
+        echo "  For this shell:  ${path_line}" >&2
+        echo "  To persist:      ${persist}" >&2
+        echo "" >&2
+        ;;
 esac
 
-echo "Next step: run '${BINARY} auth login' (or export MELANGE_API_KEY) to authenticate." >&2
+echo "Next step: run '${next_cmd} auth login' (or export MELANGE_API_KEY) to authenticate." >&2
