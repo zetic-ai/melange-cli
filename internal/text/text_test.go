@@ -26,10 +26,38 @@ func TestTruncate(t *testing.T) {
 		{"negative max", -1, "hello", ""},
 		{"multibyte runes not split", 5, "héllo wörld", "hé..."},
 		{"multibyte fits", 4, "héll", "héll"},
+		// Budgets are columns, not runes: three wide runes already fill six.
+		{"wide runes counted as two columns", 6, "갤럭시", "갤럭시"},
+		{"wide runes truncated by column budget", 5, "갤럭시", "갤..."},
+		{"wide rune straddling the limit is dropped", 6, "갤럭시S24", "갤..."},
+		// Decomposed: five base letters plus five combining acutes still fit 5.
+		{"combining marks are free", 5, "ééééé", "ééééé"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, text.Truncate(tt.max, tt.in))
+		})
+	}
+}
+
+func TestDisplayWidth(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"empty", "", 0},
+		{"ascii", "Galaxy S24", 10},
+		{"narrow multibyte", "héllo", 5},
+		{"east asian wide", "갤럭시", 6},
+		{"fullwidth forms", "ＡＢ", 4},
+		{"mixed", "갤럭시S24", 9},
+		{"combining mark adds nothing", "é", 1},
+		{"zero width space", "a\u200bb", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, text.DisplayWidth(tt.in))
 		})
 	}
 }

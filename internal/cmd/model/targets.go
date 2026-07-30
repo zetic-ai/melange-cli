@@ -74,13 +74,13 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 			}
 			targets := resp.JSON200.Results
 			if len(targets) == 0 {
-				if ios.IsStdoutTTY() {
+				if ios.HumanOutput() {
 					fmt.Fprintln(ios.ErrOut, "No targets found")
 				}
 				return nil
 			}
 
-			isTTY := ios.IsStdoutTTY()
+			human := ios.HumanOutput()
 			tp := tableprinter.New(ios)
 			tp.HeaderRow("target_id", "kind", "target", "quant", "compatibility", "size")
 			for _, tgt := range targets {
@@ -89,13 +89,14 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				tp.AddField(tgt.Target)
 				tp.AddField(orDash(deref(tgt.QuantType)))
 				tp.AddField(compatString(tgt.Compatibility))
-				if isTTY {
+				if human {
 					tp.AddField(text.FormatBytes(int64(tgt.DownloadSize)))
 				} else {
 					tp.AddField(strconv.Itoa(tgt.DownloadSize))
 				}
 				tp.EndRow()
 			}
+			tp.Caption(text.Pluralize(len(targets), "target", "targets"))
 			return tp.Render()
 		},
 	}

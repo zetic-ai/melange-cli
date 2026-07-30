@@ -5,24 +5,22 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
-	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 const metricTps = "tps"
 
 // renderLLM prints the LLM report: rows=devices, columns=quant_types, cells=tps
 // on a TTY, plus a per-dataset accuracy section; flat TSV otherwise.
-func renderLLM(ios *iostreams.IOStreams, body []byte, isTTY bool) error {
+func renderLLM(ios *iostreams.IOStreams, body []byte, human bool) error {
 	var resp gen.LlmReportResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return fmt.Errorf("decoding llm report: %w", err)
 	}
-	if !isTTY {
+	if !human {
 		return llmTSV(ios, resp.Records)
 	}
 	return llmTable(ios, &resp)
@@ -138,8 +136,6 @@ func llmAccuracy(ios *iostreams.IOStreams, entries []gen.LlmAccuracyEntry) error
 	if len(entries) == 0 {
 		return nil
 	}
-	var b strings.Builder
-	fmt.Fprintln(&b, "\nAccuracy:")
 	sorted := append([]gen.LlmAccuracyEntry(nil), entries...)
 	sort.Slice(sorted, func(i, j int) bool {
 		leftDataset, rightDataset := deref(sorted[i].Dataset), deref(sorted[j].Dataset)
@@ -148,10 +144,15 @@ func llmAccuracy(ios *iostreams.IOStreams, entries []gen.LlmAccuracyEntry) error
 		}
 		return deref(sorted[i].QuantType) < deref(sorted[j].QuantType)
 	})
+
+	tp := tableprinter.New(ios)
+	tp.Heading("Accuracy:")
+	tp.HeaderRow("dataset", "quant", "score")
 	for _, e := range sorted {
-		fmt.Fprintf(&b, "  %-12s %-10s %s\n",
-			orDash(deref(e.Dataset)), orDash(deref(e.QuantType)), formatFloat(e.Score))
+		tp.AddField(orDash(deref(e.Dataset)))
+		tp.AddField(orDash(deref(e.QuantType)))
+		tp.AddField(formatFloat(e.Score))
+		tp.EndRow()
 	}
-	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
-	return err
+	return tp.Render()
 }

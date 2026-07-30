@@ -14,11 +14,13 @@ automatic retries for idempotent requests (GET/HEAD, or any request
 carrying an Idempotency-Key header), and standard error-envelope
 handling.
 
-The path must be relative to the configured host ("/v1/me" and "v1/me"
-are equivalent; a query string like "/v1/repos?limit=5" is allowed).
-Absolute URLs are rejected: credentials are bound to the configured
-host and are never sent anywhere else. Run "melange auth status" to see
-that host; set MELANGE_HOST to target a different one.
+The path must be relative to the configured host and must resolve under
+/v1 ("/v1/me" and "v1/me" are equivalent; a query string like
+"/v1/repos?limit=5" is allowed). Absolute URLs and paths outside /v1 are
+rejected, including ones that only leave /v1 after dot segments or
+percent-escapes resolve: credentials are bound to the configured host
+and to its public API. Run "melange auth status" to see that host; set
+MELANGE_HOST to target a different one.
 
 The default method is GET, switching to POST when fields or --input are
 given. With an explicit "-X GET", fields become URL query parameters
@@ -91,8 +93,9 @@ melange api <path> [flags]
 ### Options inherited from parent commands
 
 ```
-      --no-color   Disable color output
-      --no-input   Disable interactive prompts
+      --format auto|table|tsv   Human output layout auto|table|tsv; auto means table on a terminal, tab-separated otherwise (default "auto")
+      --no-color                Disable color output
+      --no-input                Disable interactive prompts
 ```
 
 ### SEE ALSO
