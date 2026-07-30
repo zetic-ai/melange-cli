@@ -73,7 +73,7 @@ retried by the CLI), and 130 as cancellation.
 	},
 	{
 		name:  "formatting",
-		short: "Output layout: --format, --json, --jq, and --template",
+		short: "Structured output with --json, --jq, and --template",
 		long: `Structured output flags shared by melange commands:
 
 --json emits the complete documented result as JSON. For server-backed
@@ -94,29 +94,10 @@ quotes.
 (compact relative time), json (marshal a value).
 
 Human output adapts to the terminal: on a TTY, tables print aligned
-columns under an uppercase header row and a rule, followed by a count of
-the rows; when stdout is not a TTY, rows are
-tab-separated values with no header, no rule, and no count — stable for
-scripts. Backslash and control characters inside cells use
-reversible backslash escapes: \\, \t, \r, and \n respectively.
-
-Table columns are sized to their content and, when the rows would exceed
-the terminal width, the widest column is shortened first (with "...")
-until they fit, so a long value never wraps a row. Column widths count
-terminal columns, so full-width characters stay aligned. Detail views
-(repo view, library view) print aligned Label: value blocks instead of a
-table.
-
---format selects that layout explicitly rather than by detection:
-
-  auto   table on a terminal, tab-separated values otherwise (default)
-  table  force the table, e.g. when piping into a pager
-  tsv    force tab-separated values on a terminal
-
---format also governs value formatting, so a forced table shows relative
-times and human byte sizes, and forced tsv shows RFC 3339 timestamps and
-raw byte counts. It never adds color to a non-terminal; color remains
-governed by --no-color, NO_COLOR, and CLICOLOR_FORCE.
+columns under an uppercase header row; when stdout is not a TTY, rows
+are tab-separated values with no header — stable for scripts. Backslash
+and control characters inside cells use reversible backslash escapes:
+\\, \t, \r, and \n respectively.
 
 List commands preserve the API page envelope {"results": [...], "count": N}
 and add exactly one trailing newline. --paginate fetches every page and

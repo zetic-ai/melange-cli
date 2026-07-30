@@ -17,16 +17,6 @@ set -eu
 REPO="zetic-ai/melange-cli"
 BINARY="melange"
 
-# shell_quote wraps a string in single quotes for safe reuse inside another
-# shell command, escaping any embedded single quote. Install paths are usually
-# boring, but a path with a space or an apostrophe must not produce a
-# remediation line that breaks when pasted.
-shell_quote() {
-    printf "'"
-    printf '%s' "$1" | sed "s/'/'\\\\''/g"
-    printf "'"
-}
-
 err() {
     echo "install.sh: $*" >&2
     exit 1
@@ -127,56 +117,9 @@ chmod +x "${tmpdir}/${BINARY}"
 mv "${tmpdir}/${BINARY}" "${install_dir}/${BINARY}"
 echo "Installed ${install_dir}/${BINARY} (${version})." >&2
 
-# When the install directory is not on PATH, `melange` will not resolve in this
-# shell or the next one — so an unqualified "run melange auth login" is not a
-# runnable instruction. Print the exact line that fixes the current shell, the
-# persistent equivalent for the shell actually in use, and qualify the next step
-# with the full path so it works either way.
-next_cmd="$BINARY"
 case ":${PATH}:" in
     *":${install_dir}:"*) ;;
-    *)
-        next_cmd="${install_dir}/${BINARY}"
-        # Keep $HOME symbolic in the printed lines so a shared dotfile stays
-        # portable across machines.
-        display_dir="$install_dir"
-        case "$install_dir" in
-            "${HOME}"/*) display_dir="\$HOME${install_dir#"${HOME}"}" ;;
-        esac
-        posix_line="export PATH=\"${display_dir}:\$PATH\""
-
-        case "${SHELL##*/}" in
-            fish)
-                # fish has no `export`, and $PATH there is a list that "$PATH"
-                # would flatten into one space-joined entry — the POSIX line
-                # corrupts PATH rather than extending it.
-                path_line="set -gx PATH \"${display_dir}\" \$PATH"
-                persist="fish_add_path \"${display_dir}\""
-                ;;
-            zsh)
-                path_line="$posix_line"
-                persist="echo $(shell_quote "$posix_line") >> ~/.zshrc"
-                ;;
-            bash)
-                path_line="$posix_line"
-                if [ "$(uname -s)" = "Darwin" ]; then
-                    persist="echo $(shell_quote "$posix_line") >> ~/.bash_profile"
-                else
-                    persist="echo $(shell_quote "$posix_line") >> ~/.bashrc"
-                fi
-                ;;
-            *)
-                path_line="$posix_line"
-                persist="add that line to your shell profile"
-                ;;
-        esac
-
-        echo "" >&2
-        echo "${install_dir} is not on your PATH." >&2
-        echo "  For this shell:  ${path_line}" >&2
-        echo "  To persist:      ${persist}" >&2
-        echo "" >&2
-        ;;
+    *) echo "Note: ${install_dir} is not on your PATH; add it to your shell profile." >&2 ;;
 esac
 
-echo "Next step: run '${next_cmd} auth login' (or export MELANGE_API_KEY) to authenticate." >&2
+echo "Next step: run '${BINARY} auth login' (or export MELANGE_API_KEY) to authenticate." >&2

@@ -80,43 +80,6 @@ melange auth login
 melange auth status
 ```
 
-## Use the CLI directly
-
-A read-only path to confirm the install works. Nothing here creates anything or
-counts against a quota:
-
-```sh
-melange auth login                        # or export MELANGE_API_KEY
-melange library list --search whisper     # browse the public model library
-melange library view zetic/whisper-tiny   # one model in detail
-melange repo list                         # your own repositories
-```
-
-Add `--json` (optionally with `--jq`) to any command for machine-readable output.
-
-### Identifiers
-
-Three different identifiers appear in command arguments, and they are not
-interchangeable — passing a repository or display name where a `MODEL_KEY` or
-`TARGET_ID` belongs is the most common mistake:
-
-| Identifier | What it is | How to get it |
-| --- | --- | --- |
-| `ACCOUNT/REPO` | A Melange repository address | `melange repo list` |
-| `MODEL_KEY` | One converted model version inside a repository | `melange model list -R ACCOUNT/REPO` |
-| `TARGET_ID` | One downloadable converted artifact; opaque (`tm_…`/`ltm_…`) | `melange model targets MODEL_KEY -R ACCOUNT/REPO` |
-
-They chain in that order:
-
-```sh
-melange model list -R zetic/whisper-tiny
-melange model targets MODEL_KEY -R zetic/whisper-tiny
-melange model download MODEL_KEY -R zetic/whisper-tiny --target TARGET_ID --yes
-```
-
-`melange model download` is billable, so it requires `--yes` when it cannot ask
-interactively.
-
 ## Build with AI
 
 ### What's supported

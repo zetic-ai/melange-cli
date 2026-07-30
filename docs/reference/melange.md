@@ -30,10 +30,9 @@ melange help formatting.
 ### Options
 
 ```
-      --format auto|table|tsv   Human output layout auto|table|tsv; auto means table on a terminal, tab-separated otherwise (default "auto")
-  -h, --help                    help for melange
-      --no-color                Disable color output
-      --no-input                Disable interactive prompts
+  -h, --help       help for melange
+      --no-color   Disable color output
+      --no-input   Disable interactive prompts
 ```
 
 ### SEE ALSO

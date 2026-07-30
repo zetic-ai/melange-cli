@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
+	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 // apPrecisionOrder is the stable column order: ap_type (cpu, gpu, npu) crossed
@@ -28,12 +30,12 @@ func (c column) header() string { return c.apType + "/" + c.precision }
 
 // renderGeneral prints the general report: the dashboard table on a TTY, or the
 // flat one-record-per-line TSV otherwise.
-func renderGeneral(ios *iostreams.IOStreams, body []byte, m mode, human bool) error {
+func renderGeneral(ios *iostreams.IOStreams, body []byte, m mode, isTTY bool) error {
 	var resp gen.GeneralReportResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return fmt.Errorf("decoding general report: %w", err)
 	}
-	if !human {
+	if !isTTY {
 		return generalTSV(ios, resp.Records)
 	}
 	return generalTable(ios, &resp, m)
@@ -165,8 +167,8 @@ func displayDevice(dev string) string {
 // generalSummary prints the per-precision summary block from the response
 // summary: latency min/median/max, SNR range, memory range.
 func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error {
-	type summaryRow struct{ precision, latency, snr, memory string }
-	var rows []summaryRow
+	var b strings.Builder
+	fmt.Fprintln(&b, "\nSummary (latency ms, per precision):")
 	for _, prec := range precisionOrder {
 		lat := latencyStats(s.LatencyMs, prec)
 		snr := snrRange(s.SnrDb, prec)
@@ -174,23 +176,10 @@ func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error
 		if lat == "" && snr == "" && mem == "" {
 			continue
 		}
-		rows = append(rows, summaryRow{prec, orDash(lat), orDash(snr), orDash(mem)})
+		fmt.Fprintf(&b, "  %-5s latency %s  snr %s  mem %s\n", prec, orDash(lat), orDash(snr), orDash(mem))
 	}
-	if len(rows) == 0 {
-		return nil
-	}
-
-	tp := tableprinter.New(ios)
-	tp.Heading("Summary (latency ms, per precision):")
-	tp.HeaderRow("precision", "latency min/med/max", "snr", "memory")
-	for _, r := range rows {
-		tp.AddField(r.precision)
-		tp.AddField(r.latency)
-		tp.AddField(r.snr)
-		tp.AddField(r.memory)
-		tp.EndRow()
-	}
-	return tp.Render()
+	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
+	return err
 }
 
 func latencyStats(s gen.GeneralLatencySummary, prec string) string {

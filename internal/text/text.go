@@ -10,9 +10,6 @@ import (
 
 const ellipsis = "..."
 
-// ellipsisWidth is the marker's cost in terminal columns.
-var ellipsisWidth = DisplayWidth(ellipsis)
-
 var tsvEscaper = strings.NewReplacer(
 	`\`, `\\`,
 	"\t", `\t`,
@@ -107,33 +104,21 @@ func skipControlString(runes []rune, start int) int {
 	return len(runes) - 1
 }
 
-// Truncate shortens s to at most max terminal columns (see DisplayWidth),
-// appending "..." when content is cut. It never splits a multibyte rune. A max
-// at or below the width of the ellipsis truncates without the suffix;
-// max <= 0 yields "".
+// Truncate shortens s to at most max runes, appending "..." when content is
+// cut. It never splits a multibyte rune. A max at or below the width of the
+// ellipsis truncates without the suffix; max <= 0 yields "".
 func Truncate(max int, s string) string {
 	if max <= 0 {
 		return ""
 	}
-	if DisplayWidth(s) <= max {
+	runes := []rune(s)
+	if len(runes) <= max {
 		return s
 	}
-	// ellipsisWidth, not len(ellipsis): the budget is terminal columns, and
-	// the two coincide only while the marker stays ASCII.
-	if max <= ellipsisWidth {
-		return cutToWidth(s, max)
+	if max <= len(ellipsis) {
+		return string(runes[:max])
 	}
-	return cutToWidth(s, max-ellipsisWidth) + ellipsis
-}
-
-// Pluralize renders a count with its noun: "1 repository", "3 repositories".
-// Both forms are spelled out by the caller because English plurals the CLI
-// needs are not all formed by appending "s".
-func Pluralize(n int, singular, plural string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, singular)
-	}
-	return fmt.Sprintf("%d %s", n, plural)
+	return string(runes[:max-len(ellipsis)]) + ellipsis
 }
 
 // RelativeTime renders t relative to now in a compact form: "just now",

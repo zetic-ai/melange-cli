@@ -145,54 +145,6 @@ func TestAPIPathWithURLValuedQueryParamAccepted(t *testing.T) {
 	assert.Equal(t, "callback=https://x", e.reg.Requests[0].URL.RawQuery)
 }
 
-// The escape hatch is documented as reaching the public /v1 API. Credentials
-// are sent with every one of these requests, so a path that leaves /v1 must be
-// refused locally rather than handed an authenticated request to an
-// unintended route.
-func TestAPIPathOutsideV1Rejected(t *testing.T) {
-	cases := map[string]string{
-		"unversioned route":        "/admin",
-		"another API version":      "/v2/me",
-		"root":                     "/",
-		"traversal out of v1":      "/v1/../admin",
-		"encoded traversal":        "/v1/%2e%2e/admin",
-		"double-encoded traversal": "/v1/%252e%252e/admin",
-		"protocol-relative host":   "//evil.example.com/v1/me",
-		"v1 as a path segment":     "/internal/v1/me",
-		"v1 prefix collision":      "/v1beta/me",
-	}
-	for name, arg := range cases {
-		t.Run(name, func(t *testing.T) {
-			e := setup(t)
-			err := run(t, e, "api", arg)
-			require.Error(t, err)
-			assert.Equal(t, 2, cmdutil.ExitCode(err), "leaving /v1 is a usage error")
-			assert.Contains(t, err.Error(), "/v1")
-			assert.Empty(t, e.reg.Requests,
-				"no authenticated request may be sent outside the public API")
-		})
-	}
-}
-
-func TestAPIPathWithinV1Accepted(t *testing.T) {
-	cases := map[string]struct{ arg, wantPath string }{
-		"bare prefix":              {"/v1", "/v1"},
-		"trailing slash kept":      {"/v1/repos/", "/v1/repos/"},
-		"interior dot segment":     {"/v1/repos/./whisper", "/v1/repos/whisper"},
-		"traversal staying inside": {"/v1/repos/../me", "/v1/me"},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			e := setup(t)
-			e.reg.Register(httpmock.REST("GET", tc.wantPath), httpmock.StatusStringResponse(200, "{}"))
-
-			require.NoError(t, run(t, e, "api", tc.arg))
-			require.Len(t, e.reg.Requests, 1)
-			assert.Equal(t, tc.wantPath, e.reg.Requests[0].URL.Path)
-		})
-	}
-}
-
 // ---------------------------------------------------------------------------
 // body construction
 // ---------------------------------------------------------------------------

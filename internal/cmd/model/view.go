@@ -76,7 +76,7 @@ error, 4 not authenticated.`,
 			if exporter != nil {
 				return exporter.Write(ios, json.RawMessage(resp.Body))
 			}
-			if ios.HumanOutput() {
+			if ios.IsStdoutTTY() {
 				return printModelTTY(f, m, account+"/"+name)
 			}
 			return printModelTSV(f, m)

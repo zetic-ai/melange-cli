@@ -360,11 +360,11 @@ func renderDryRun(opts *uploadOptions, specs []upload.FileSpec) error {
 
 	tp := tableprinter.New(ios)
 	tp.HeaderRow("role", "file", "size", "crc32c", "destination")
-	human := ios.HumanOutput()
+	isTTY := ios.IsStdoutTTY()
 	for _, s := range specs {
 		tp.AddField(s.Role)
 		tp.AddField(s.Path, tableprinter.WithTruncate(false))
-		if human {
+		if isTTY {
 			tp.AddField(text.FormatBytes(s.Size))
 		} else {
 			tp.AddField(strconv.FormatInt(s.Size, 10))
@@ -1262,20 +1262,20 @@ func runSessions(ctx context.Context, opts *uploadOptions) error {
 	}
 	sessions := resp.JSON200.Results
 	if len(sessions) == 0 {
-		if ios.HumanOutput() {
+		if ios.IsStdoutTTY() {
 			fmt.Fprintln(ios.ErrOut, "No upload sessions found")
 		}
 		return nil
 	}
 
-	human := ios.HumanOutput()
+	isTTY := ios.IsStdoutTTY()
 	now := time.Now()
 	tp := tableprinter.New(ios)
 	tp.HeaderRow("id", "state", "created", "expires", "files")
 	for _, s := range sessions {
 		tp.AddField(s.Id)
 		tp.AddField(string(s.State))
-		if human {
+		if isTTY {
 			tp.AddField(text.RelativeTime(s.CreatedAt, now))
 		} else {
 			tp.AddField(s.CreatedAt.Format(time.RFC3339))
@@ -1284,7 +1284,6 @@ func runSessions(ctx context.Context, opts *uploadOptions) error {
 		tp.AddField(strconv.Itoa(s.FileCount))
 		tp.EndRow()
 	}
-	tp.Caption(text.Pluralize(len(sessions), "upload session", "upload sessions"))
 	return tp.Render()
 }
 
