@@ -149,13 +149,13 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				return exporter.Write(ios, envelope)
 			}
 			if len(repos) == 0 {
-				if ios.HumanOutput() {
+				if ios.IsStdoutTTY() {
 					fmt.Fprintln(ios.ErrOut, "No repositories found")
 				}
 				return nil
 			}
 
-			human := ios.HumanOutput()
+			isTTY := ios.IsStdoutTTY()
 			cs := ios.ColorScheme()
 			now := time.Now()
 			tp := tableprinter.New(ios)
@@ -168,14 +168,13 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 					tp.AddField("public")
 				}
 				tp.AddField(r.ModelType)
-				if human {
+				if isTTY {
 					tp.AddField(text.RelativeTime(r.UpdatedAt, now))
 				} else {
 					tp.AddField(r.UpdatedAt.Format(time.RFC3339))
 				}
 				tp.EndRow()
 			}
-			tp.Caption(text.Pluralize(len(repos), "repository", "repositories"))
 			return tp.Render()
 		},
 	}

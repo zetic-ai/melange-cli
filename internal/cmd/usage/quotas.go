@@ -11,7 +11,6 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
-	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 )
 
 func newCmdQuotas(f *cmdutil.Factory) *cobra.Command {
@@ -88,16 +87,15 @@ func printQuotas(ios *iostreams.IOStreams, q *gen.UsageQuotasResponse) error {
 		{"model_uploads", "Model uploads", q.ModelUploads},
 		{"prompts", "Prompts", q.Prompts},
 	}
-	if ios.HumanOutput() {
-		p := tableprinter.NewFields(ios)
-		for _, r := range rows {
-			p.Add(r.label, formatQuota(r.item))
-		}
-		return p.Render()
-	}
 	var b strings.Builder
-	for _, r := range rows {
-		fmt.Fprintf(&b, "%s\t%s\n", r.key, formatQuota(r.item))
+	if ios.IsStdoutTTY() {
+		for _, r := range rows {
+			fmt.Fprintf(&b, "%-16s %s\n", r.label+":", formatQuota(r.item))
+		}
+	} else {
+		for _, r := range rows {
+			fmt.Fprintf(&b, "%s\t%s\n", r.key, formatQuota(r.item))
+		}
 	}
 	_, err := fmt.Fprint(ios.Out, b.String())
 	return err

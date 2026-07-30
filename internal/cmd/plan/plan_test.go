@@ -66,9 +66,11 @@ func TestPlanTTYNonTrial(t *testing.T) {
 	e.f.IOStreams.SetStdoutTTY(true)
 	e.reg.Register(httpmock.REST("GET", planPath), jsonStub(200, proBody))
 
-	require.NoError(t, run(t, e, "--no-color", "plan"))
-	// Labels align to the longest of them, not to a hardcoded column.
-	assert.Equal(t, "Plan:   pro\nTrial:  no\n", e.out.String())
+	require.NoError(t, run(t, e, "plan"))
+	out := e.out.String()
+	assert.Contains(t, out, "Plan:")
+	assert.Contains(t, out, "pro")
+	assert.Contains(t, out, "Trial:         no")
 }
 
 func TestPlanTTYTrialShowsEnd(t *testing.T) {
@@ -76,9 +78,10 @@ func TestPlanTTYTrialShowsEnd(t *testing.T) {
 	e.f.IOStreams.SetStdoutTTY(true)
 	e.reg.Register(httpmock.REST("GET", planPath), jsonStub(200, trialBody))
 
-	require.NoError(t, run(t, e, "--no-color", "plan"))
-	assert.Equal(t, "Plan:   pro_plus\nTrial:  yes (ends 2026-08-01T00:00:00Z)\n",
-		e.out.String())
+	require.NoError(t, run(t, e, "plan"))
+	out := e.out.String()
+	assert.Contains(t, out, "pro_plus")
+	assert.Contains(t, out, "Trial:         yes (ends 2026-08-01T00:00:00Z)")
 }
 
 func TestPlanNonTTYTabSeparated(t *testing.T) {

@@ -10,7 +10,6 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
-	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
@@ -83,7 +82,7 @@ Exit codes: 0 success, 1 API error (including not found), 2 usage error,
 			if exporter != nil {
 				return exporter.Write(ios, json.RawMessage(resp.Body))
 			}
-			if ios.HumanOutput() {
+			if ios.IsStdoutTTY() {
 				return printModelTTY(f, m)
 			}
 			return printModelTSV(f, m)
@@ -98,27 +97,32 @@ Exit codes: 0 success, 1 API error (including not found), 2 usage error,
 // printModelTTY renders the human block, including a readme excerpt.
 func printModelTTY(f *cmdutil.Factory, m *gen.LibraryModelDetailResponse) error {
 	now := time.Now()
-	p := tableprinter.NewFields(f.IOStreams)
-	p.Title(m.FullName)
-	p.Add("Provider", providerName(m.Provider))
-	p.Add("Task", deref(m.UseCase))
-	p.Add("Type", m.ModelType)
-	p.Add("Tags", strings.Join(m.Tags, ", "))
-	p.Add("Created", text.RelativeTime(m.CreatedAt, now))
-	p.Paragraph(deref(m.Description))
-
-	if excerpt, truncated := readmeExcerpt(deref(m.Readme)); excerpt != "" {
-		readme := "Readme:\n" + excerpt
-		if truncated {
-			readme += "\n... (readme truncated; use --json for the full text)"
-		}
-		p.Paragraph(readme)
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", m.FullName)
+	if p := providerName(m.Provider); p != "" {
+		fmt.Fprintf(&b, "Provider:  %s\n", p)
 	}
-	p.Paragraph(fmt.Sprintf(
-		"Next: list converted model keys with `melange model list -R %s`.\n"+
-			"Then render code with `melange deploy guide MODEL_KEY -R %s`.",
-		m.FullName, m.FullName))
-	return p.Render()
+	if uc := deref(m.UseCase); uc != "" {
+		fmt.Fprintf(&b, "Task:      %s\n", uc)
+	}
+	fmt.Fprintf(&b, "Type:      %s\n", m.ModelType)
+	if len(m.Tags) > 0 {
+		fmt.Fprintf(&b, "Tags:      %s\n", strings.Join(m.Tags, ", "))
+	}
+	fmt.Fprintf(&b, "Created:   %s\n", text.RelativeTime(m.CreatedAt, now))
+	if d := deref(m.Description); d != "" {
+		fmt.Fprintf(&b, "\n%s\n", d)
+	}
+	if excerpt, truncated := readmeExcerpt(deref(m.Readme)); excerpt != "" {
+		fmt.Fprintf(&b, "\nReadme:\n%s\n", excerpt)
+		if truncated {
+			fmt.Fprintf(&b, "... (readme truncated; use --json for the full text)\n")
+		}
+	}
+	fmt.Fprintf(&b, "\nNext: list converted model keys with `melange model list -R %s`.\n", m.FullName)
+	fmt.Fprintf(&b, "Then render code with `melange deploy guide MODEL_KEY -R %s`.\n", m.FullName)
+	_, err := fmt.Fprint(f.IOStreams.Out, text.SanitizeTerminal(b.String()))
+	return err
 }
 
 // readmeExcerpt returns the first readmeExcerptLines lines of the readme and

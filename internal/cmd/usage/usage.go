@@ -13,7 +13,6 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
-	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 )
 
 // NewCmdUsage builds the `melange usage` command (with a `quotas` subcommand).
@@ -87,16 +86,15 @@ func printUsage(ios *iostreams.IOStreams, u *gen.UsageResponse) error {
 		{"model_uploads", "Model uploads", u.ModelUploads},
 		{"prompts", "Prompts", u.Prompts},
 	}
-	if ios.HumanOutput() {
-		p := tableprinter.NewFields(ios)
-		for _, r := range rows {
-			p.Add(r.label, strconv.Itoa(r.value))
-		}
-		return p.Render()
-	}
 	var b strings.Builder
-	for _, r := range rows {
-		fmt.Fprintf(&b, "%s\t%s\n", r.key, strconv.Itoa(r.value))
+	if ios.IsStdoutTTY() {
+		for _, r := range rows {
+			fmt.Fprintf(&b, "%-16s %d\n", r.label+":", r.value)
+		}
+	} else {
+		for _, r := range rows {
+			fmt.Fprintf(&b, "%s\t%s\n", r.key, strconv.Itoa(r.value))
+		}
 	}
 	_, err := fmt.Fprint(ios.Out, b.String())
 	return err

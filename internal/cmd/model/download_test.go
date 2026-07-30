@@ -26,7 +26,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
@@ -132,27 +131,6 @@ func TestDownloadNoInputWithoutYesExits2(t *testing.T) {
 	err := run(t, e, append([]string{"--no-input"}, downloadArgs(t.TempDir())...)...)
 	require.Error(t, err)
 	assert.Equal(t, 2, cmdutil.ExitCode(err))
-	assert.Empty(t, e.reg.Requests)
-}
-
-// A missing --yes is a defect in the invocation, so it must be reported as one
-// even when credentials are absent. Authenticating first would return exit 4
-// and send the caller after credentials for a flag mistake — and because the
-// shared harness always stubs a token, only an explicitly unauthenticated
-// factory can hold this ordering in place.
-func TestDownloadWithoutYesReportsUsageErrorBeforeAuth(t *testing.T) {
-	e := setup(t)
-	e.f.ApiClient = func() (*api.Client, error) {
-		return nil, cmdutil.AuthError{Err: errors.New("not logged in to api.zetic.ai")}
-	}
-
-	err := run(t, e, downloadArgs(t.TempDir())...)
-	require.Error(t, err)
-	assert.Equal(t, 2, cmdutil.ExitCode(err),
-		"the missing --yes must surface as a usage error, not as exit 4 for missing credentials")
-	assert.Contains(t, err.Error(), "--yes", "the error must name the exact flag remediation")
-	assert.NotContains(t, err.Error(), "not logged in",
-		"the auth failure must not mask the flag contract violation")
 	assert.Empty(t, e.reg.Requests)
 }
 

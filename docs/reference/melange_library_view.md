@@ -58,9 +58,8 @@ melange library view ACCOUNT/NAME [flags]
 ### Options inherited from parent commands
 
 ```
-      --format auto|table|tsv   Human output layout auto|table|tsv; auto means table on a terminal, tab-separated otherwise (default "auto")
-      --no-color                Disable color output
-      --no-input                Disable interactive prompts
+      --no-color   Disable color output
+      --no-input   Disable interactive prompts
 ```
 
 ### SEE ALSO

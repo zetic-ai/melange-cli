@@ -9,7 +9,6 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
-	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 func newCmdProviders(f *cmdutil.Factory) *cobra.Command {
@@ -60,7 +59,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 
 			providers := resp.JSON200.Results
 			if len(providers) == 0 {
-				if ios.HumanOutput() {
+				if ios.IsStdoutTTY() {
 					fmt.Fprintln(ios.ErrOut, "No providers found")
 				}
 				return nil
@@ -73,7 +72,6 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				tp.AddField(strconv.Itoa(p.ModelCount))
 				tp.EndRow()
 			}
-			tp.Caption(text.Pluralize(len(providers), "provider", "providers"))
 			return tp.Render()
 		},
 	}

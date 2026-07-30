@@ -169,10 +169,8 @@ func TestRepoListTableTTY(t *testing.T) {
 	require.NoError(t, run(t, e, "--no-color", "repo", "list"))
 
 	want := "REPO                VISIBILITY  TYPE     UPDATED\n" +
-		"──────────────────  ──────────  ───────  ───────\n" +
 		"zetic/whisper-tiny  private     general  3h ago\n" +
-		"acme/detr           public      llm      2d ago\n" +
-		"\n2 repositories\n"
+		"acme/detr           public      llm      2d ago\n"
 	assert.Equal(t, want, e.out.String())
 
 	require.Len(t, e.reg.Requests, 1)

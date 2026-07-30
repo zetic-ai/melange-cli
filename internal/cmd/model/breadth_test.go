@@ -129,10 +129,8 @@ func TestModelListTableTTY(t *testing.T) {
 	require.NoError(t, run(t, e, "--no-color", "model", "list", "-R", "zetic/whisper"))
 
 	want := "KEY    VERSION  TYPE  STATE   DEFAULT  CREATED\n" +
-		"─────  ───────  ────  ──────  ───────  ───────\n" +
 		"m_new  3        onnx  ready   ✓        2h ago\n" +
-		"m_old  1        onnx  failed           3d ago\n" +
-		"\n2 models\n"
+		"m_old  1        onnx  failed           3d ago\n"
 	assert.Equal(t, want, e.out.String())
 
 	require.Len(t, e.reg.Requests, 1)
@@ -369,10 +367,8 @@ func TestModelTargetsTableTTY(t *testing.T) {
 	require.NoError(t, run(t, e, "--no-color", "model", "targets", "m_ab12cd", "-R", "zetic/whisper"))
 
 	want := "TARGET_ID  KIND     TARGET     QUANT   COMPATIBILITY   SIZE\n" +
-		"─────────  ───────  ─────────  ──────  ──────────────  ────────\n" +
 		"tm_71      general  qnn        fp16    sm8650/android  50.0 MiB\n" +
-		"ltm_9      llm      llama-cpp  q4_k_m  -               1.0 GiB\n" +
-		"\n2 targets\n"
+		"ltm_9      llm      llama-cpp  q4_k_m  -               1.0 GiB\n"
 	assert.Equal(t, want, e.out.String())
 }
 

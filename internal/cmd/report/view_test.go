@@ -155,9 +155,8 @@ func TestReportGeneralHeaderAndSummary(t *testing.T) {
 	// cpu/fp16 sorts before npu/fp32 in the stable column order.
 	assert.Less(t, strings.Index(out, "CPU/FP16"), strings.Index(out, "NPU/FP32"))
 	assert.Contains(t, out, "Summary (latency ms, per precision):")
-	fp32Line := lineWith(t, out, "fp32")
-	assert.Contains(t, fp32Line, "5.0/8.0/8.0", "per-precision latency min/median/max")
-	assert.Contains(t, fp32Line, "15.0–30.0 dB", "the snr range belongs on its precision's row")
+	assert.Contains(t, out, "fp32  latency 5.0/8.0/8.0", "per-precision latency min/median/max")
+	assert.Contains(t, out, "snr 15.0–30.0 dB")
 }
 
 func TestReportGeneralDevicesSortedAlphabetically(t *testing.T) {
