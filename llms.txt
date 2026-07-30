@@ -206,6 +206,9 @@ melange model view MODEL_KEY -R ACCOUNT/REPO [--json|--jq|--template]
 
 melange model targets MODEL_KEY -R ACCOUNT/REPO [--json|--jq]
   List a model's converted targets. TTY table; non-TTY TSV; --json passthrough.
+  Columns/fields: target_id, kind, precision, quant_type, compatibility, size.
+  The runtime engine is NOT published (no `target` field as of v0.3.0): select a
+  target on precision, quant_type and compatibility.ap_types (cpu/gpu/npu).
   Example: melange model targets "$model_key" -R acme/whisper --json
 
 melange model set-default MODEL_KEY -R ACCOUNT/REPO [--json]
@@ -268,7 +271,10 @@ melange report view MODEL_KEY -R ACCOUNT/REPO [--type general|llm|package]
   a per-precision summary block follows. LLM: rows=devices, columns=quant_types,
   cells=tps, plus a per-dataset accuracy section. Package: a mode x metric table.
   Non-TTY: one raw record per line (flat measurement fields) — scripts get the
-  measurements, not the derived table. --json follows the raw response-byte
+  measurements, not the derived table. Records carry `variant`, an OPAQUE
+  per-response token that replaced the engine name in v0.3.0 — never parse it,
+  and never present it as an engine. It exists so records can be grouped back
+  into runs: one run = same (device, variant, ap_type[, quant_type], run). --json follows the raw response-byte
   contract described above.
   Example: melange report view "$model_key" -R acme/whisper --json \
     --jq '[.records[]|select(.ap_type=="npu" and .metric=="latency_ms")]|min_by(.value)'

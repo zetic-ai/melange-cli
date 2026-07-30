@@ -1145,7 +1145,7 @@
         "type": "object"
       },
       "GeneralReportRecord": {
-        "description": "`run` is the opaque 0-based source-row ordinal within the record's\n(device, target, ap_type) group (derivation rule D9): records sharing\n(device, target, ap_type, run) form one run's metric set.",
+        "description": "`variant` is an OPAQUE token distinguishing the artifacts measured on\none device \u2014 clients must not parse it. `run` is the opaque 0-based\nsource-row ordinal within the record's (device, variant, ap_type) group\n(derivation rule D9): records sharing (device, variant, ap_type, run)\nform one run's metric set, so `variant` is required to pair a latency\nwith the snr and memory measured in the same run.",
         "properties": {
           "ap_type": {
             "anyOf": [
@@ -1192,17 +1192,6 @@
             "title": "Run",
             "type": "integer"
           },
-          "target": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target"
-          },
           "unit": {
             "enum": [
               "ms",
@@ -1215,12 +1204,23 @@
           "value": {
             "title": "Value",
             "type": "number"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
           }
         },
         "required": [
           "device",
           "ap_type",
-          "target",
+          "variant",
           "precision",
           "run",
           "metric",
@@ -1763,21 +1763,9 @@
           "score": {
             "title": "Score",
             "type": "number"
-          },
-          "target": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target"
           }
         },
         "required": [
-          "target",
           "quant_type",
           "dataset",
           "score"
@@ -1842,7 +1830,7 @@
         "type": "object"
       },
       "LlmReportRecord": {
-        "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `run` is the opaque\n0-based source-row ordinal within the record's (device, target,\nap_type, quant_type) group (derivation rule D9).",
+        "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `variant` is an OPAQUE\ntoken distinguishing the artifacts measured on one device. `run` is the\nopaque 0-based source-row ordinal within the record's (device, variant,\nap_type, quant_type) group (derivation rule D9).",
         "properties": {
           "ap_type": {
             "anyOf": [
@@ -1912,17 +1900,6 @@
             "title": "Run",
             "type": "integer"
           },
-          "target": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target"
-          },
           "unit": {
             "enum": [
               "tokens_per_s",
@@ -1938,12 +1915,23 @@
           "value": {
             "title": "Value",
             "type": "number"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
           }
         },
         "required": [
           "device",
           "ap_type",
-          "target",
+          "variant",
           "quant_type",
           "dataset",
           "run",
@@ -2541,7 +2529,7 @@
         "type": "object"
       },
       "ModelTargetItem": {
-        "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable \u2014 clients must not parse it. `target`\nand `quant_type` are stable lowercase names derived from the internal\nenums; `compatibility` is null when the row carries no device\ncompatibility information (LLM targets and the all-null sentinel).",
+        "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable \u2014 clients must not parse it; pass it\nback to the download endpoints to select this artifact.\n\nThe runtime engine that produced the artifact is deliberately NOT\npublished. Choose between targets on the properties that describe the\nartifact to its consumer: `precision` for general targets, `quant_type`\nfor LLM targets, and `compatibility` for the device it was built for \u2014\nincluding `compatibility.ap_types`, the accelerator classes (cpu/gpu/npu)\nit can run on.\n\n`compatibility` is null when the row carries no device compatibility\ninformation: LLM targets and the all-null sentinel. For those rows no\naccelerator information is published at all, and two artifacts alike in\n`precision` and `quant_type` are distinguishable only by `target_id` and\n`download_size`.",
         "properties": {
           "compatibility": {
             "anyOf": [
@@ -2570,6 +2558,22 @@
             "title": "Kind",
             "type": "string"
           },
+          "precision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fp32",
+                  "fp16",
+                  "int8"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
           "quant_type": {
             "anyOf": [
               {
@@ -2581,10 +2585,6 @@
             ],
             "title": "Quant Type"
           },
-          "target": {
-            "title": "Target",
-            "type": "string"
-          },
           "target_id": {
             "title": "Target Id",
             "type": "string"
@@ -2593,7 +2593,6 @@
         "required": [
           "target_id",
           "kind",
-          "target",
           "download_size",
           "created_at"
         ],

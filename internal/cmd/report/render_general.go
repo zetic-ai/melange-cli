@@ -39,7 +39,7 @@ func renderGeneral(ios *iostreams.IOStreams, body []byte, m mode, human bool) er
 	return generalTable(ios, &resp, m)
 }
 
-// generalTSV emits one record per line: device fields, ap_type, target,
+// generalTSV emits one record per line: device fields, ap_type, variant,
 // precision, run, metric, value, unit.
 func generalTSV(ios *iostreams.IOStreams, records []gen.GeneralReportRecord) error {
 	tp := tableprinter.New(ios) // non-TTY: raw tab-separated, no header.
@@ -49,7 +49,7 @@ func generalTSV(ios *iostreams.IOStreams, records []gen.GeneralReportRecord) err
 		tp.AddField(deref(r.Device.Soc))
 		tp.AddField(deref(r.Device.Os))
 		tp.AddField(deref(r.ApType))
-		tp.AddField(deref(r.Target))
+		tp.AddField(deref(r.Variant))
 		tp.AddField(string(r.Precision))
 		tp.AddField(strconv.Itoa(r.Run))
 		tp.AddField(string(r.Metric))

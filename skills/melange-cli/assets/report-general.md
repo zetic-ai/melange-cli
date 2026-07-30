@@ -152,7 +152,7 @@ melange report view "$model_key" -R "$repo" --type general --json \
   --jq '[.records[] | select(.device != null)]
         | group_by(.device.marketing_name)
         | map({ device: .[0].device.marketing_name,
-                runs: (group_by([.ap_type, .target, .precision, .run])
+                runs: (group_by([.ap_type, .variant, .precision, .run])
                        | map({ lat: ([.[] | select(.metric == "latency_ms") | .value] | first),
                                snr: ([.[] | select(.metric == "snr_db") | .value] | first) })
                        | map(select(.lat != null))) })
@@ -186,6 +186,6 @@ melange report view "$model_key" -R "$repo" --type general --json \
   --jq '[.records[] | select(.metric == "latency_ms"
          and .device.marketing_name == "Google Pixel 10")]
         | group_by(.ap_type + "_" + .precision)[]
-        | {target: (.[0].ap_type + "_" + .[0].precision),
+        | {bucket: (.[0].ap_type + "_" + .[0].precision),
            best_ms: (map(.value) | min | .*100|round/100)}'
 ```

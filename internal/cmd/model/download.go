@@ -475,7 +475,10 @@ func confirmBillableDownload(ctx context.Context, opts *downloadOptions, g *gen.
 			opts.target, opts.key, opts.repo, opts.key, opts.repo)
 	}
 
-	desc := string(target.Kind) + "/" + target.Target
+	desc := string(target.Kind)
+	if target.Precision != nil && *target.Precision != "" {
+		desc += "/" + string(*target.Precision)
+	}
 	if quant := deref(target.QuantType); quant != "" {
 		desc += ", " + quant
 	}

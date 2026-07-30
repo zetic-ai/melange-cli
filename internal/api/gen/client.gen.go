@@ -484,19 +484,19 @@ func (e GeneralReportRecordMetric) Valid() bool {
 
 // Defines values for GeneralReportRecordPrecision.
 const (
-	Fp16 GeneralReportRecordPrecision = "fp16"
-	Fp32 GeneralReportRecordPrecision = "fp32"
-	Int8 GeneralReportRecordPrecision = "int8"
+	GeneralReportRecordPrecisionFp16 GeneralReportRecordPrecision = "fp16"
+	GeneralReportRecordPrecisionFp32 GeneralReportRecordPrecision = "fp32"
+	GeneralReportRecordPrecisionInt8 GeneralReportRecordPrecision = "int8"
 )
 
 // Valid indicates whether the value is a known member of the GeneralReportRecordPrecision enum.
 func (e GeneralReportRecordPrecision) Valid() bool {
 	switch e {
-	case Fp16:
+	case GeneralReportRecordPrecisionFp16:
 		return true
-	case Fp32:
+	case GeneralReportRecordPrecisionFp32:
 		return true
-	case Int8:
+	case GeneralReportRecordPrecisionInt8:
 		return true
 	default:
 		return false
@@ -785,6 +785,27 @@ func (e ModelTargetItemKind) Valid() bool {
 	case ModelTargetItemKindGeneral:
 		return true
 	case ModelTargetItemKindLlm:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ModelTargetItemPrecision.
+const (
+	ModelTargetItemPrecisionFp16 ModelTargetItemPrecision = "fp16"
+	ModelTargetItemPrecisionFp32 ModelTargetItemPrecision = "fp32"
+	ModelTargetItemPrecisionInt8 ModelTargetItemPrecision = "int8"
+)
+
+// Valid indicates whether the value is a known member of the ModelTargetItemPrecision enum.
+func (e ModelTargetItemPrecision) Valid() bool {
+	switch e {
+	case ModelTargetItemPrecisionFp16:
+		return true
+	case ModelTargetItemPrecisionFp32:
+		return true
+	case ModelTargetItemPrecisionInt8:
 		return true
 	default:
 		return false
@@ -1333,9 +1354,12 @@ type GeneralMemorySummary struct {
 	Int8 *ReportMemoryBounds `json:"int8"`
 }
 
-// GeneralReportRecord `run` is the opaque 0-based source-row ordinal within the record's
-// (device, target, ap_type) group (derivation rule D9): records sharing
-// (device, target, ap_type, run) form one run's metric set.
+// GeneralReportRecord `variant` is an OPAQUE token distinguishing the artifacts measured on
+// one device — clients must not parse it. `run` is the opaque 0-based
+// source-row ordinal within the record's (device, variant, ap_type) group
+// (derivation rule D9): records sharing (device, variant, ap_type, run)
+// form one run's metric set, so `variant` is required to pair a latency
+// with the snr and memory measured in the same run.
 type GeneralReportRecord struct {
 	ApType *GeneralReportRecordApType `json:"ap_type"`
 
@@ -1344,9 +1368,9 @@ type GeneralReportRecord struct {
 	Metric    GeneralReportRecordMetric    `json:"metric"`
 	Precision GeneralReportRecordPrecision `json:"precision"`
 	Run       int                          `json:"run"`
-	Target    *string                      `json:"target"`
 	Unit      GeneralReportRecordUnit      `json:"unit"`
 	Value     float32                      `json:"value"`
+	Variant   *string                      `json:"variant"`
 }
 
 // GeneralReportRecordApType defines model for GeneralReportRecord.ApType.
@@ -1485,7 +1509,6 @@ type LlmAccuracyEntry struct {
 	Dataset   *string `json:"dataset"`
 	QuantType *string `json:"quant_type"`
 	Score     float32 `json:"score"`
-	Target    *string `json:"target"`
 }
 
 // LlmQuantAggregates defines model for LlmQuantAggregates.
@@ -1497,8 +1520,9 @@ type LlmQuantAggregates struct {
 }
 
 // LlmReportRecord `device`/`ap_type` are null on server-side accuracy records;
-// `dataset` is only set on accuracy_score records. `run` is the opaque
-// 0-based source-row ordinal within the record's (device, target,
+// `dataset` is only set on accuracy_score records. `variant` is an OPAQUE
+// token distinguishing the artifacts measured on one device. `run` is the
+// opaque 0-based source-row ordinal within the record's (device, variant,
 // ap_type, quant_type) group (derivation rule D9).
 type LlmReportRecord struct {
 	ApType    *LlmReportRecordApType `json:"ap_type"`
@@ -1507,9 +1531,9 @@ type LlmReportRecord struct {
 	Metric    LlmReportRecordMetric  `json:"metric"`
 	QuantType *string                `json:"quant_type"`
 	Run       int                    `json:"run"`
-	Target    *string                `json:"target"`
 	Unit      LlmReportRecordUnit    `json:"unit"`
 	Value     float32                `json:"value"`
+	Variant   *string                `json:"variant"`
 }
 
 // LlmReportRecordApType defines model for LlmReportRecord.ApType.
@@ -1663,22 +1687,36 @@ type ModelTargetCompatibilityApTypes string
 
 // ModelTargetItem One converted target artifact of a model.
 //
-// `target_id` is OPAQUE and stable — clients must not parse it. `target`
-// and `quant_type` are stable lowercase names derived from the internal
-// enums; `compatibility` is null when the row carries no device
-// compatibility information (LLM targets and the all-null sentinel).
+// `target_id` is OPAQUE and stable — clients must not parse it; pass it
+// back to the download endpoints to select this artifact.
+//
+// The runtime engine that produced the artifact is deliberately NOT
+// published. Choose between targets on the properties that describe the
+// artifact to its consumer: `precision` for general targets, `quant_type`
+// for LLM targets, and `compatibility` for the device it was built for —
+// including `compatibility.ap_types`, the accelerator classes (cpu/gpu/npu)
+// it can run on.
+//
+// `compatibility` is null when the row carries no device compatibility
+// information: LLM targets and the all-null sentinel. For those rows no
+// accelerator information is published at all, and two artifacts alike in
+// `precision` and `quant_type` are distinguishable only by `target_id` and
+// `download_size`.
 type ModelTargetItem struct {
 	Compatibility *ModelTargetCompatibility `json:"compatibility,omitempty"`
 	CreatedAt     time.Time                 `json:"created_at"`
 	DownloadSize  int                       `json:"download_size"`
 	Kind          ModelTargetItemKind       `json:"kind"`
+	Precision     *ModelTargetItemPrecision `json:"precision,omitempty"`
 	QuantType     *string                   `json:"quant_type,omitempty"`
-	Target        string                    `json:"target"`
 	TargetId      string                    `json:"target_id"`
 }
 
 // ModelTargetItemKind defines model for ModelTargetItem.Kind.
 type ModelTargetItemKind string
+
+// ModelTargetItemPrecision defines model for ModelTargetItem.Precision.
+type ModelTargetItemPrecision string
 
 // ModelUploadDetailResponse defines model for ModelUploadDetailResponse.
 type ModelUploadDetailResponse struct {

@@ -162,6 +162,12 @@ melange model upload -R acme/whisper-tiny \
 
 ## Browse models and targets
 
+The runtime engine that produced an artifact is not part of the public API.
+`melange model targets` reports `precision`, `quant_type` and
+`compatibility.ap_types` (cpu/gpu/npu) instead, and report records carry an
+opaque `variant` token in place of the engine. Never parse a `variant`, and
+never describe a target by an engine name — you do not have one.
+
 Once a model exists you can inspect it and its converted targets:
 
 ```sh

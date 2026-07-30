@@ -26,8 +26,8 @@ func renderLLM(ios *iostreams.IOStreams, body []byte, human bool) error {
 	return llmTable(ios, &resp)
 }
 
-// llmTSV emits one record per line: device fields, ap_type, target, quant_type,
-// dataset, run, metric, value, unit.
+// llmTSV emits one record per line: device fields, ap_type, variant,
+// quant_type, dataset, run, metric, value, unit.
 func llmTSV(ios *iostreams.IOStreams, records []gen.LlmReportRecord) error {
 	tp := tableprinter.New(ios)
 	for _, r := range records {
@@ -40,7 +40,7 @@ func llmTSV(ios *iostreams.IOStreams, records []gen.LlmReportRecord) error {
 		tp.AddField(deref(device.Soc))
 		tp.AddField(deref(device.Os))
 		tp.AddField(deref(r.ApType))
-		tp.AddField(deref(r.Target))
+		tp.AddField(deref(r.Variant))
 		tp.AddField(deref(r.QuantType))
 		tp.AddField(deref(r.Dataset))
 		tp.AddField(strconv.Itoa(r.Run))

@@ -22,8 +22,8 @@
           "created_at": "<datetime>",
           "download_size": 1234,
           "kind": "general",
+          "precision": "fp32",
           "quant_type": null,
-          "target": "qnn",
           "target_id": "<target_id>"
         }
       ]

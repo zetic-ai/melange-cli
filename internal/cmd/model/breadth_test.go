@@ -353,10 +353,10 @@ const targetsPath = "/v1/repos/zetic/whisper/models/m_ab12cd/targets"
 
 func targetsBody() string {
 	return `{"results":[` +
-		`{"target_id":"tm_71","kind":"general","target":"qnn","quant_type":"fp16",` +
+		`{"target_id":"tm_71","kind":"general","precision":"fp16","quant_type":null,` +
 		`"compatibility":{"ap_types":["npu"],"soc_manufacturer":"qualcomm","soc_model":"sm8650","os":"android"},` +
 		`"download_size":52428800,"created_at":"` + ts(testNow.Add(-24*time.Hour)) + `"},` +
-		`{"target_id":"ltm_9","kind":"llm","target":"llama-cpp","quant_type":"q4_k_m",` +
+		`{"target_id":"ltm_9","kind":"llm","precision":null,"quant_type":"q4_k_m",` +
 		`"compatibility":null,"download_size":1073741824,"created_at":"` + ts(testNow.Add(-48*time.Hour)) + `"}` +
 		`],"count":2}`
 }
@@ -368,10 +368,12 @@ func TestModelTargetsTableTTY(t *testing.T) {
 
 	require.NoError(t, run(t, e, "--no-color", "model", "targets", "m_ab12cd", "-R", "zetic/whisper"))
 
-	want := "TARGET_ID  KIND     TARGET     QUANT   COMPATIBILITY   SIZE\n" +
+	// The engine that built each artifact is no longer published; PRECISION
+	// and QUANT are what distinguish them.
+	want := "TARGET_ID  KIND     PRECISION  QUANT   COMPATIBILITY   SIZE\n" +
 		"─────────  ───────  ─────────  ──────  ──────────────  ────────\n" +
-		"tm_71      general  qnn        fp16    sm8650/android  50.0 MiB\n" +
-		"ltm_9      llm      llama-cpp  q4_k_m  -               1.0 GiB\n" +
+		"tm_71      general  fp16       -       sm8650/android  50.0 MiB\n" +
+		"ltm_9      llm      -          q4_k_m  -               1.0 GiB\n" +
 		"\n2 targets\n"
 	assert.Equal(t, want, e.out.String())
 }
@@ -382,8 +384,8 @@ func TestModelTargetsNonTTYRawBytes(t *testing.T) {
 
 	require.NoError(t, run(t, e, "model", "targets", "m_ab12cd", "-R", "zetic/whisper"))
 
-	want := "tm_71\tgeneral\tqnn\tfp16\tsm8650/android\t52428800\n" +
-		"ltm_9\tllm\tllama-cpp\tq4_k_m\t-\t1073741824\n"
+	want := "tm_71\tgeneral\tfp16\t-\tsm8650/android\t52428800\n" +
+		"ltm_9\tllm\t-\tq4_k_m\t-\t1073741824\n"
 	assert.Equal(t, want, e.out.String())
 }
 

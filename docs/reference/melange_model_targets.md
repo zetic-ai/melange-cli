@@ -8,10 +8,13 @@ List the converted target artifacts of a model, newest first. Each
 target is identified by an opaque, stable TARGET_ID — pass it to
 "melange model download --target".
 
-On a terminal this prints a table (TARGET_ID, KIND, TARGET, QUANT,
+On a terminal this prints a table (TARGET_ID, KIND, PRECISION, QUANT,
 COMPATIBILITY, SIZE) with human-readable sizes; COMPATIBILITY is a
 compact soc/os string, or "-" when the target carries no device
-compatibility (LLM targets). When stdout is not a terminal, rows are
+compatibility (LLM targets). PRECISION is "-" for LLM targets, whose
+QUANT states the numeric format instead. The runtime engine that built
+an artifact is not published: choose between targets on PRECISION,
+QUANT and COMPATIBILITY. When stdout is not a terminal, rows are
 tab-separated with sizes in raw bytes and no header. With --json, all API
 target metadata is preserved and output ends with exactly one trailing
 newline.
