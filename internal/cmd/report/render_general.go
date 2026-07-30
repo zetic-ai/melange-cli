@@ -28,12 +28,12 @@ func (c column) header() string { return c.apType + "/" + c.precision }
 
 // renderGeneral prints the general report: the dashboard table on a TTY, or the
 // flat one-record-per-line TSV otherwise.
-func renderGeneral(ios *iostreams.IOStreams, body []byte, m mode, isTTY bool) error {
+func renderGeneral(ios *iostreams.IOStreams, body []byte, m mode, human bool) error {
 	var resp gen.GeneralReportResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return fmt.Errorf("decoding general report: %w", err)
 	}
-	if !isTTY {
+	if !human {
 		return generalTSV(ios, resp.Records)
 	}
 	return generalTable(ios, &resp, m)
@@ -180,10 +180,8 @@ func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error
 		return nil
 	}
 
-	if _, err := fmt.Fprintln(ios.Out, "\nSummary (latency ms, per precision):"); err != nil {
-		return err
-	}
 	tp := tableprinter.New(ios)
+	tp.Heading("Summary (latency ms, per precision):")
 	tp.HeaderRow("precision", "latency min/med/max", "snr", "memory")
 	for _, r := range rows {
 		tp.AddField(r.precision)

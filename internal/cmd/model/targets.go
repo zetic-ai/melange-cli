@@ -80,7 +80,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				return nil
 			}
 
-			isTTY := ios.HumanOutput()
+			human := ios.HumanOutput()
 			tp := tableprinter.New(ios)
 			tp.HeaderRow("target_id", "kind", "target", "quant", "compatibility", "size")
 			for _, tgt := range targets {
@@ -89,7 +89,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				tp.AddField(tgt.Target)
 				tp.AddField(orDash(deref(tgt.QuantType)))
 				tp.AddField(compatString(tgt.Compatibility))
-				if isTTY {
+				if human {
 					tp.AddField(text.FormatBytes(int64(tgt.DownloadSize)))
 				} else {
 					tp.AddField(strconv.Itoa(tgt.DownloadSize))

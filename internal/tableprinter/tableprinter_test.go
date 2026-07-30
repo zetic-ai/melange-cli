@@ -194,6 +194,33 @@ func TestTTYAlignsWideCharactersByDisplayWidth(t *testing.T) {
 	}
 }
 
+func TestTTYHeadingPrintedAboveTable(t *testing.T) {
+	ios, out := ttyStreams(t, 80)
+
+	tp := tableprinter.New(ios)
+	tp.Heading("Accuracy:")
+	tp.HeaderRow("dataset")
+	tp.AddField("mmlu")
+	tp.EndRow()
+	require.NoError(t, tp.Render())
+
+	assert.True(t, strings.HasPrefix(out.String(), "\nAccuracy:\nDATASET\n"),
+		"the heading names the table it sits above, got %q", out.String())
+}
+
+func TestNonTTYHeadingOmitted(t *testing.T) {
+	ios, _, out, _ := iostreams.Test()
+
+	tp := tableprinter.New(ios)
+	tp.Heading("Accuracy:")
+	tp.AddField("mmlu")
+	tp.EndRow()
+	require.NoError(t, tp.Render())
+
+	assert.Equal(t, "mmlu\n", out.String(),
+		"the machine contract carries data rows only")
+}
+
 func TestTTYCaptionPrintedDimmedAfterTable(t *testing.T) {
 	ios, out := ttyStreams(t, 80)
 

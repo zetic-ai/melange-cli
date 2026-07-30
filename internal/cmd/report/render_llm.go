@@ -15,12 +15,12 @@ const metricTps = "tps"
 
 // renderLLM prints the LLM report: rows=devices, columns=quant_types, cells=tps
 // on a TTY, plus a per-dataset accuracy section; flat TSV otherwise.
-func renderLLM(ios *iostreams.IOStreams, body []byte, isTTY bool) error {
+func renderLLM(ios *iostreams.IOStreams, body []byte, human bool) error {
 	var resp gen.LlmReportResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return fmt.Errorf("decoding llm report: %w", err)
 	}
-	if !isTTY {
+	if !human {
 		return llmTSV(ios, resp.Records)
 	}
 	return llmTable(ios, &resp)
@@ -145,10 +145,8 @@ func llmAccuracy(ios *iostreams.IOStreams, entries []gen.LlmAccuracyEntry) error
 		return deref(sorted[i].QuantType) < deref(sorted[j].QuantType)
 	})
 
-	if _, err := fmt.Fprintln(ios.Out, "\nAccuracy:"); err != nil {
-		return err
-	}
 	tp := tableprinter.New(ios)
+	tp.Heading("Accuracy:")
 	tp.HeaderRow("dataset", "quant", "score")
 	for _, e := range sorted {
 		tp.AddField(orDash(deref(e.Dataset)))

@@ -10,6 +10,9 @@ import (
 
 const ellipsis = "..."
 
+// ellipsisWidth is the marker's cost in terminal columns.
+var ellipsisWidth = DisplayWidth(ellipsis)
+
 var tsvEscaper = strings.NewReplacer(
 	`\`, `\\`,
 	"\t", `\t`,
@@ -115,10 +118,12 @@ func Truncate(max int, s string) string {
 	if DisplayWidth(s) <= max {
 		return s
 	}
-	if max <= len(ellipsis) {
+	// ellipsisWidth, not len(ellipsis): the budget is terminal columns, and
+	// the two coincide only while the marker stays ASCII.
+	if max <= ellipsisWidth {
 		return cutToWidth(s, max)
 	}
-	return cutToWidth(s, max-len(ellipsis)) + ellipsis
+	return cutToWidth(s, max-ellipsisWidth) + ellipsis
 }
 
 // Pluralize renders a count with its noun: "1 repository", "3 repositories".

@@ -456,6 +456,11 @@ func hasURLScheme(s string) bool {
 // on the host is outside the contract this CLI is built against.
 const publicAPIPrefix = "/v1"
 
+// maxPathDecodes bounds the percent-decoding loop below. Two rounds cover every
+// spelling seen in practice; the cap only stops a pathological input from
+// spinning.
+const maxPathDecodes = 4
+
 // publicAPIPath normalizes pathArg into the request path, rejecting anything
 // that does not land under /v1.
 //
@@ -470,9 +475,20 @@ func publicAPIPath(pathArg string) (string, error) {
 	if !strings.HasPrefix(raw, "/") {
 		raw = "/" + raw
 	}
-	decoded, err := url.PathUnescape(raw)
-	if err != nil {
-		return "", cmdutil.FlagError{Err: fmt.Errorf("invalid path %q: %w", pathArg, err)}
+	// Decode to a fixed point rather than once. A single decode leaves
+	// "/v1/%252e%252e/admin" looking like "/v1/%2e%2e/admin", which is still
+	// under /v1 — but a server that decodes twice lands on /admin. Judging the
+	// fully-decoded form costs nothing and removes the question.
+	decoded := raw
+	for range maxPathDecodes {
+		next, err := url.PathUnescape(decoded)
+		if err != nil {
+			return "", cmdutil.FlagError{Err: fmt.Errorf("invalid path %q: %w", pathArg, err)}
+		}
+		if next == decoded {
+			break
+		}
+		decoded = next
 	}
 	// path.Clean resolves "." and ".." and collapses repeated slashes, so a
 	// protocol-relative "//host/x" is judged as the path "/host/x" it becomes.

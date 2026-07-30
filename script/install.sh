@@ -17,6 +17,16 @@ set -eu
 REPO="zetic-ai/melange-cli"
 BINARY="melange"
 
+# shell_quote wraps a string in single quotes for safe reuse inside another
+# shell command, escaping any embedded single quote. Install paths are usually
+# boring, but a path with a space or an apostrophe must not produce a
+# remediation line that breaks when pasted.
+shell_quote() {
+    printf "'"
+    printf '%s' "$1" | sed "s/'/'\\\\''/g"
+    printf "'"
+}
+
 err() {
     echo "install.sh: $*" >&2
     exit 1
@@ -133,19 +143,32 @@ case ":${PATH}:" in
         case "$install_dir" in
             "${HOME}"/*) display_dir="\$HOME${install_dir#"${HOME}"}" ;;
         esac
-        path_line="export PATH=\"${display_dir}:\$PATH\""
+        posix_line="export PATH=\"${display_dir}:\$PATH\""
 
         case "${SHELL##*/}" in
-            zsh)  persist="echo '${path_line}' >> ~/.zshrc" ;;
-            fish) persist="fish_add_path ${display_dir}" ;;
+            fish)
+                # fish has no `export`, and $PATH there is a list that "$PATH"
+                # would flatten into one space-joined entry — the POSIX line
+                # corrupts PATH rather than extending it.
+                path_line="set -gx PATH \"${display_dir}\" \$PATH"
+                persist="fish_add_path \"${display_dir}\""
+                ;;
+            zsh)
+                path_line="$posix_line"
+                persist="echo $(shell_quote "$posix_line") >> ~/.zshrc"
+                ;;
             bash)
+                path_line="$posix_line"
                 if [ "$(uname -s)" = "Darwin" ]; then
-                    persist="echo '${path_line}' >> ~/.bash_profile"
+                    persist="echo $(shell_quote "$posix_line") >> ~/.bash_profile"
                 else
-                    persist="echo '${path_line}' >> ~/.bashrc"
+                    persist="echo $(shell_quote "$posix_line") >> ~/.bashrc"
                 fi
                 ;;
-            *)    persist="add that line to your shell profile" ;;
+            *)
+                path_line="$posix_line"
+                persist="add that line to your shell profile"
+                ;;
         esac
 
         echo "" >&2

@@ -112,14 +112,14 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 				return exporter.Write(ios, json.RawMessage(body))
 			}
 
-			isTTY := ios.HumanOutput()
+			human := ios.HumanOutput()
 			switch kind {
 			case kindGeneral:
-				return renderGeneral(ios, body, m, isTTY)
+				return renderGeneral(ios, body, m, human)
 			case kindLLM:
-				return renderLLM(ios, body, isTTY)
+				return renderLLM(ios, body, human)
 			case kindPackage:
-				return renderPackage(ios, body, isTTY)
+				return renderPackage(ios, body, human)
 			}
 			return fmt.Errorf("unexpected report kind %q", kind)
 		},

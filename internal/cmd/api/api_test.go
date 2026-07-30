@@ -151,14 +151,15 @@ func TestAPIPathWithURLValuedQueryParamAccepted(t *testing.T) {
 // unintended route.
 func TestAPIPathOutsideV1Rejected(t *testing.T) {
 	cases := map[string]string{
-		"unversioned route":      "/admin",
-		"another API version":    "/v2/me",
-		"root":                   "/",
-		"traversal out of v1":    "/v1/../admin",
-		"encoded traversal":      "/v1/%2e%2e/admin",
-		"protocol-relative host": "//evil.example.com/v1/me",
-		"v1 as a path segment":   "/internal/v1/me",
-		"v1 prefix collision":    "/v1beta/me",
+		"unversioned route":        "/admin",
+		"another API version":      "/v2/me",
+		"root":                     "/",
+		"traversal out of v1":      "/v1/../admin",
+		"encoded traversal":        "/v1/%2e%2e/admin",
+		"double-encoded traversal": "/v1/%252e%252e/admin",
+		"protocol-relative host":   "//evil.example.com/v1/me",
+		"v1 as a path segment":     "/internal/v1/me",
+		"v1 prefix collision":      "/v1beta/me",
 	}
 	for name, arg := range cases {
 		t.Run(name, func(t *testing.T) {

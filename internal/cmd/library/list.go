@@ -175,7 +175,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				return nil
 			}
 
-			isTTY := ios.HumanOutput()
+			human := ios.HumanOutput()
 			now := time.Now()
 			tp := tableprinter.New(ios)
 			tp.HeaderRow("model", "provider", "task", "type", "created")
@@ -184,7 +184,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				tp.AddField(providerName(m.Provider))
 				tp.AddField(deref(m.UseCase))
 				tp.AddField(m.ModelType)
-				if isTTY {
+				if human {
 					tp.AddField(text.RelativeTime(m.CreatedAt, now))
 				} else {
 					tp.AddField(m.CreatedAt.Format(time.RFC3339))

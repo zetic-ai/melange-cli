@@ -155,7 +155,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				return nil
 			}
 
-			isTTY := ios.HumanOutput()
+			human := ios.HumanOutput()
 			cs := ios.ColorScheme()
 			now := time.Now()
 			tp := tableprinter.New(ios)
@@ -168,7 +168,7 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 					tp.AddField("public")
 				}
 				tp.AddField(r.ModelType)
-				if isTTY {
+				if human {
 					tp.AddField(text.RelativeTime(r.UpdatedAt, now))
 				} else {
 					tp.AddField(r.UpdatedAt.Format(time.RFC3339))

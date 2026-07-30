@@ -1,8 +1,17 @@
-// Package tableprinter renders rows of fields either as a padded, truncated
-// table for terminals or as stable tab-separated lines for machine consumers.
-// It is THE list-output primitive for melange commands: TTY output may evolve,
-// non-TTY output is a contract (tab-separated, no headers, no truncation, no
-// color).
+// Package tableprinter renders a command's result for a reader or for a
+// machine. It holds the two layout primitives melange commands use:
+//
+//   - TablePrinter (this file) for lists: a padded, width-fitted table with a
+//     ruled header for humans, or stable tab-separated lines for machines.
+//   - Fields (fields.go) for one record: aligned "Label  value" blocks. A
+//     single object laid out as a one-row table pushes every value off the
+//     right edge, so detail views need their own shape. It is human-only —
+//     callers keep their own tab-separated branch.
+//
+// Which layout a caller gets follows IOStreams.HumanOutput (a terminal, or
+// --format table), not TTY-ness directly. Human output may evolve; the
+// tab-separated form is a contract (no headers, no rule, no truncation, no
+// color, no caption).
 package tableprinter
 
 import (
@@ -18,8 +27,8 @@ const (
 	colSep = "  "
 	// minColWidth is the narrowest a column may be squeezed to: enough for the
 	// ellipsis, so a shrunken cell still reads as truncated rather than as a
-	// stray letter.
-	minColWidth = len("...")
+	// stray letter. Measured in terminal columns, like every width here.
+	minColWidth = 3
 )
 
 type field struct {
@@ -45,12 +54,13 @@ func WithTruncate(v bool) FieldOption {
 // TablePrinter accumulates rows and renders them on Render.
 type TablePrinter struct {
 	ios          *iostreams.IOStreams
-	isTTY        bool
+	human        bool
 	maxWidth     int
 	colorEnabled bool
 	ruleChar     string
 
 	hasHeader bool
+	heading   string
 	caption   string
 	rows      [][]field
 	current   []field
@@ -61,7 +71,7 @@ type TablePrinter struct {
 func New(ios *iostreams.IOStreams) *TablePrinter {
 	return &TablePrinter{
 		ios:          ios,
-		isTTY:        ios.HumanOutput(),
+		human:        ios.HumanOutput(),
 		maxWidth:     ios.TerminalWidth(),
 		colorEnabled: ios.ColorEnabled(),
 		ruleChar:     ios.RuleChar(),
@@ -74,7 +84,7 @@ func New(ios *iostreams.IOStreams) *TablePrinter {
 // the accumulated rows, so it may be called at any point before Render,
 // regardless of AddField/EndRow ordering.
 func (t *TablePrinter) HeaderRow(cols ...string) {
-	if !t.isTTY || len(cols) == 0 {
+	if !t.human || len(cols) == 0 {
 		return
 	}
 	dim := t.ios.ColorScheme().Dim
@@ -84,6 +94,14 @@ func (t *TablePrinter) HeaderRow(cols ...string) {
 	}
 	t.rows = append([][]field{header}, t.rows...)
 	t.hasHeader = true
+}
+
+// Heading sets a label printed above the table, preceded by a blank line, in
+// human mode only. Reports stack several tables in one response and each needs
+// naming; without this the callers hand-print the label and the table primitive
+// owns only half of its own layout.
+func (t *TablePrinter) Heading(s string) {
+	t.heading = s
 }
 
 // Caption sets a one-line summary printed under the table, dimmed, in TTY mode
@@ -116,7 +134,7 @@ func (t *TablePrinter) Render() error {
 	if len(t.rows) == 0 {
 		return nil
 	}
-	if !t.isTTY {
+	if !t.human {
 		return t.renderTSV()
 	}
 	return t.renderTTY()
@@ -140,6 +158,12 @@ func (t *TablePrinter) renderTSV() error {
 // renderTTY emits padded columns sized to fit the terminal, a rule under the
 // header, and the caption.
 func (t *TablePrinter) renderTTY() error {
+	if t.heading != "" {
+		heading := text.SanitizeTerminalInline(t.heading)
+		if _, err := fmt.Fprintf(t.ios.Out, "\n%s\n", heading); err != nil {
+			return err
+		}
+	}
 	widths := t.columnWidths()
 	for i, row := range t.rows {
 		if _, err := fmt.Fprintln(t.ios.Out, t.renderRow(row, widths)); err != nil {
