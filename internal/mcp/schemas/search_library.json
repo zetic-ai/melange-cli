@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "properties": {
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "results": {
+          "items": {
+            "description": "One public library model (a public repo, browsed cross-account).",
+            "properties": {
+              "account": {
+                "title": "Account",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "description": {
+                "title": "Description",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "full_name": {
+                "title": "Full Name",
+                "type": "string"
+              },
+              "model_type": {
+                "title": "Model Type",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "description": "The provider (company) that published a library model.",
+                    "properties": {
+                      "logo_url": {
+                        "title": "Logo Url",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "name": {
+                        "title": "Name",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "title": "LibraryProviderRef",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tags": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Tags",
+                "type": "array"
+              },
+              "use_case": {
+                "title": "Use Case",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "account",
+              "name",
+              "full_name",
+              "tags",
+              "model_type",
+              "created_at"
+            ],
+            "title": "LibraryModelItem",
+            "type": "object"
+          },
+          "title": "Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "results",
+        "count"
+      ],
+      "title": "PagedLibraryModelItem",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "search_library envelope returned when include_providers is true.",
+      "properties": {
+        "models": {
+          "properties": {
+            "count": {
+              "title": "Count",
+              "type": "integer"
+            },
+            "results": {
+              "items": {
+                "description": "One public library model (a public repo, browsed cross-account).",
+                "properties": {
+                  "account": {
+                    "title": "Account",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "description": {
+                    "title": "Description",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "full_name": {
+                    "title": "Full Name",
+                    "type": "string"
+                  },
+                  "model_type": {
+                    "title": "Model Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "anyOf": [
+                      {
+                        "description": "The provider (company) that published a library model.",
+                        "properties": {
+                          "logo_url": {
+                            "title": "Logo Url",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "title": "Name",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "title": "LibraryProviderRef",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Tags",
+                    "type": "array"
+                  },
+                  "use_case": {
+                    "title": "Use Case",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "account",
+                  "name",
+                  "full_name",
+                  "tags",
+                  "model_type",
+                  "created_at"
+                ],
+                "title": "LibraryModelItem",
+                "type": "object"
+              },
+              "title": "Results",
+              "type": "array"
+            }
+          },
+          "required": [
+            "results",
+            "count"
+          ],
+          "title": "PagedLibraryModelItem",
+          "type": "object"
+        },
+        "providers": {
+          "properties": {
+            "count": {
+              "title": "Count",
+              "type": "integer"
+            },
+            "results": {
+              "items": {
+                "properties": {
+                  "logo_url": {
+                    "title": "Logo Url",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "model_count": {
+                    "title": "Model Count",
+                    "type": "integer"
+                  },
+                  "name": {
+                    "title": "Name",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "model_count"
+                ],
+                "title": "LibraryProviderItem",
+                "type": "object"
+              },
+              "title": "Results",
+              "type": "array"
+            }
+          },
+          "required": [
+            "results",
+            "count"
+          ],
+          "title": "ListLibraryProvidersResponse",
+          "type": "object"
+        }
+      },
+      "required": [
+        "models",
+        "providers"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope."
+}

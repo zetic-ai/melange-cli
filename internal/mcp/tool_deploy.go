@@ -21,7 +21,8 @@ func registerDeploy(s *mcp.Server, d Deps) {
 			"code — optionally narrowed by language and inference_mode. Guides carry the " +
 			"literal YOUR_PERSONAL_KEY placeholder; no real credential is ever emitted, " +
 			"so tell the user to substitute their own key.",
-		InputSchema: inputSchemaFor[deploymentInfoArgs](withDeploymentEnums),
+		InputSchema:  inputSchemaFor[deploymentInfoArgs](withDeploymentEnums),
+		OutputSchema: outputSchema("get_deployment_info"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,

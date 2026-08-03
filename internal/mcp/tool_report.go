@@ -30,7 +30,8 @@ func registerReport(s *mcp.Server, d Deps) {
 			"report types its model type produces, so a not-found error means that shape " +
 			"does not exist for it — try another report_type. Public library models can " +
 			"be benchmarked this way without importing them.",
-		InputSchema: inputSchemaFor[modelReportArgs](withReportTypeEnum),
+		InputSchema:  inputSchemaFor[modelReportArgs](withReportTypeEnum),
+		OutputSchema: outputSchema("get_model_report"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,

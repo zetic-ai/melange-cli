@@ -19,10 +19,16 @@ import (
 // and carry them, and json.Marshal rewrites them as &lt; and &amp; whenever it
 // re-emits a json.RawMessage.
 const (
-	repoListBody    = `{"results":[{"full_name":"zetic/whisper-tiny","visibility":"public","model_type":"onnx"}],"count":1}`
-	repoBody        = `{"name":"whisper-tiny","visibility":"public","model_type":"onnx","description":"tiny"}`
-	writtenRepoBody = `{"full_name":"zetic/whisper-tiny","visibility":"private","model_type":"general",` +
-		`"description":"speech <-> text & subtitles"}`
+	repoListBody = `{"results":[{"full_name":"zetic/whisper-tiny","account":"zetic","name":"whisper-tiny",` +
+		`"is_private":false,"model_type":"general","tags":["speech"],` +
+		`"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}],"count":1}`
+	repoBody = `{"name":"whisper-tiny","account":"zetic","full_name":"zetic/whisper-tiny",` +
+		`"is_private":false,"model_type":"general","tags":["speech"],"description":"tiny",` +
+		`"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`
+	writtenRepoBody = `{"full_name":"zetic/whisper-tiny","account":"zetic","name":"whisper-tiny",` +
+		`"is_private":true,"model_type":"general","tags":[],` +
+		`"description":"speech <-> text & subtitles",` +
+		`"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`
 )
 
 // requestBody returns the exact bytes a recorded request carried.
@@ -37,11 +43,16 @@ func requestBody(t *testing.T, req *http.Request) string {
 	return string(raw)
 }
 
-// callTool runs one tool call over the in-memory transport.
+// callTool runs one tool call over the in-memory transport. Every successful
+// result is additionally validated against the tool's advertised output
+// schema, so each passthrough test doubles as a schema-conformance test (the
+// SDK itself never validates a manually set StructuredContent — see
+// assertConformsToOutputSchema).
 func callTool(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
 	require.NoError(t, err, "API and argument failures are tool errors, not protocol errors")
+	assertConformsToOutputSchema(t, name, res)
 	return res
 }
 
@@ -74,7 +85,7 @@ func assertMutatingAnnotations(t *testing.T, cs *mcp.ClientSession, name string,
 	require.NotNil(t, tool.Annotations.DestructiveHint,
 		"DestructiveHint must be set explicitly (SDK default is true)")
 	assert.Equal(t, destructive, *tool.Annotations.DestructiveHint, "%s destructive hint", name)
-	assert.Nil(t, tool.OutputSchema, "no output schema until Task 5 (Out = any)")
+	assert.NotNil(t, tool.OutputSchema, "%s advertises its OpenAPI-derived output schema", name)
 }
 
 // assertReadOnlyAnnotations checks the annotation contract every read tool in
@@ -91,7 +102,7 @@ func assertReadOnlyAnnotations(t *testing.T, cs *mcp.ClientSession, name string)
 	require.NotNil(t, tool.Annotations.DestructiveHint,
 		"DestructiveHint must be set explicitly (SDK default is true)")
 	assert.False(t, *tool.Annotations.DestructiveHint)
-	assert.Nil(t, tool.OutputSchema, "no output schema until Task 5 (Out = any)")
+	assert.NotNil(t, tool.OutputSchema, "%s advertises its OpenAPI-derived output schema", name)
 }
 
 func TestListReposPassesResponseBytesThroughAndDefaultsThePage(t *testing.T) {

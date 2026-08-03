@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "account": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "MeAccount",
+      "type": "object"
+    },
+    "token": {
+      "properties": {
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_used_at": {
+          "format": "date-time",
+          "title": "Last Used At",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "scopes"
+      ],
+      "title": "MeToken",
+      "type": "object"
+    },
+    "user": {
+      "properties": {
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "nickname": {
+          "title": "Nickname",
+          "type": "string"
+        }
+      },
+      "required": [
+        "email",
+        "nickname"
+      ],
+      "title": "MeUser",
+      "type": "object"
+    }
+  },
+  "required": [
+    "user",
+    "account",
+    "token"
+  ],
+  "title": "MeResponse",
+  "type": "object"
+}

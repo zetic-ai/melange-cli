@@ -1,0 +1,1330 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "properties": {
+        "derivation_version": {
+          "title": "Derivation Version",
+          "type": "integer"
+        },
+        "model": {
+          "properties": {
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "version"
+          ],
+          "title": "ReportModelRef",
+          "type": "object"
+        },
+        "records": {
+          "items": {
+            "description": "`run` is the opaque 0-based source-row ordinal within the record's\n(device, target, ap_type) group (derivation rule D9): records sharing\n(device, target, ap_type, run) form one run's metric set.",
+            "properties": {
+              "ap_type": {
+                "enum": [
+                  "cpu",
+                  "gpu",
+                  "npu",
+                  null
+                ],
+                "title": "Ap Type",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "device": {
+                "description": "Locked ADR-4 device identity; persisted blanks are published as null.",
+                "properties": {
+                  "marketing_name": {
+                    "title": "Marketing Name",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "title": "Name",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "os": {
+                    "title": "Os",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "soc": {
+                    "title": "Soc",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "marketing_name",
+                  "soc",
+                  "os"
+                ],
+                "title": "ReportDevice",
+                "type": "object"
+              },
+              "metric": {
+                "enum": [
+                  "latency_ms",
+                  "tensor_copy_latency_ms",
+                  "snr_db",
+                  "memory_load_peak_mb",
+                  "memory_load_min_mb",
+                  "memory_inference_peak_mb",
+                  "memory_inference_min_mb"
+                ],
+                "title": "Metric",
+                "type": "string"
+              },
+              "precision": {
+                "enum": [
+                  "fp32",
+                  "fp16",
+                  "int8"
+                ],
+                "title": "Precision",
+                "type": "string"
+              },
+              "run": {
+                "title": "Run",
+                "type": "integer"
+              },
+              "target": {
+                "title": "Target",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "unit": {
+                "enum": [
+                  "ms",
+                  "db",
+                  "mb"
+                ],
+                "title": "Unit",
+                "type": "string"
+              },
+              "value": {
+                "title": "Value",
+                "type": "number"
+              }
+            },
+            "required": [
+              "device",
+              "ap_type",
+              "target",
+              "precision",
+              "run",
+              "metric",
+              "value",
+              "unit"
+            ],
+            "title": "GeneralReportRecord",
+            "type": "object"
+          },
+          "title": "Records",
+          "type": "array"
+        },
+        "summary": {
+          "properties": {
+            "latency_ms": {
+              "properties": {
+                "all": {
+                  "anyOf": [
+                    {
+                      "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                      "properties": {
+                        "avg": {
+                          "title": "Avg",
+                          "type": "number"
+                        },
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "median": {
+                          "title": "Median",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max",
+                        "median",
+                        "avg"
+                      ],
+                      "title": "ReportStats",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fp16": {
+                  "anyOf": [
+                    {
+                      "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                      "properties": {
+                        "avg": {
+                          "title": "Avg",
+                          "type": "number"
+                        },
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "median": {
+                          "title": "Median",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max",
+                        "median",
+                        "avg"
+                      ],
+                      "title": "ReportStats",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fp32": {
+                  "anyOf": [
+                    {
+                      "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                      "properties": {
+                        "avg": {
+                          "title": "Avg",
+                          "type": "number"
+                        },
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "median": {
+                          "title": "Median",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max",
+                        "median",
+                        "avg"
+                      ],
+                      "title": "ReportStats",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "int8": {
+                  "anyOf": [
+                    {
+                      "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                      "properties": {
+                        "avg": {
+                          "title": "Avg",
+                          "type": "number"
+                        },
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "median": {
+                          "title": "Median",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max",
+                        "median",
+                        "avg"
+                      ],
+                      "title": "ReportStats",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "fp32",
+                "fp16",
+                "int8",
+                "all"
+              ],
+              "title": "GeneralLatencySummary",
+              "type": "object"
+            },
+            "memory_mb": {
+              "properties": {
+                "all": {
+                  "anyOf": [
+                    {
+                      "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                      "properties": {
+                        "inference_max": {
+                          "title": "Inference Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "inference_min": {
+                          "title": "Inference Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_max": {
+                          "title": "Load Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_min": {
+                          "title": "Load Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "load_min",
+                        "load_max",
+                        "inference_min",
+                        "inference_max"
+                      ],
+                      "title": "ReportMemoryBounds",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fp16": {
+                  "anyOf": [
+                    {
+                      "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                      "properties": {
+                        "inference_max": {
+                          "title": "Inference Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "inference_min": {
+                          "title": "Inference Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_max": {
+                          "title": "Load Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_min": {
+                          "title": "Load Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "load_min",
+                        "load_max",
+                        "inference_min",
+                        "inference_max"
+                      ],
+                      "title": "ReportMemoryBounds",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fp32": {
+                  "anyOf": [
+                    {
+                      "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                      "properties": {
+                        "inference_max": {
+                          "title": "Inference Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "inference_min": {
+                          "title": "Inference Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_max": {
+                          "title": "Load Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_min": {
+                          "title": "Load Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "load_min",
+                        "load_max",
+                        "inference_min",
+                        "inference_max"
+                      ],
+                      "title": "ReportMemoryBounds",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "int8": {
+                  "anyOf": [
+                    {
+                      "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                      "properties": {
+                        "inference_max": {
+                          "title": "Inference Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "inference_min": {
+                          "title": "Inference Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_max": {
+                          "title": "Load Max",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "load_min": {
+                          "title": "Load Min",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "load_min",
+                        "load_max",
+                        "inference_min",
+                        "inference_max"
+                      ],
+                      "title": "ReportMemoryBounds",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "fp32",
+                "fp16",
+                "int8",
+                "all"
+              ],
+              "title": "GeneralMemorySummary",
+              "type": "object"
+            },
+            "snr_db": {
+              "properties": {
+                "all": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max"
+                      ],
+                      "title": "ReportMinMax",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fp16": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max"
+                      ],
+                      "title": "ReportMinMax",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fp32": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max"
+                      ],
+                      "title": "ReportMinMax",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "int8": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "max": {
+                          "title": "Max",
+                          "type": "number"
+                        },
+                        "min": {
+                          "title": "Min",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "min",
+                        "max"
+                      ],
+                      "title": "ReportMinMax",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "fp32",
+                "fp16",
+                "int8",
+                "all"
+              ],
+              "title": "GeneralSnrSummary",
+              "type": "object"
+            }
+          },
+          "required": [
+            "latency_ms",
+            "snr_db",
+            "memory_mb"
+          ],
+          "title": "GeneralReportSummary",
+          "type": "object"
+        }
+      },
+      "required": [
+        "derivation_version",
+        "model",
+        "records",
+        "summary"
+      ],
+      "title": "GeneralReportResponse",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "derivation_version": {
+          "title": "Derivation Version",
+          "type": "integer"
+        },
+        "model": {
+          "properties": {
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "version"
+          ],
+          "title": "ReportModelRef",
+          "type": "object"
+        },
+        "records": {
+          "items": {
+            "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `run` is the opaque\n0-based source-row ordinal within the record's (device, target,\nap_type, quant_type) group (derivation rule D9).",
+            "properties": {
+              "ap_type": {
+                "enum": [
+                  "cpu",
+                  "gpu",
+                  "npu",
+                  null
+                ],
+                "title": "Ap Type",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dataset": {
+                "title": "Dataset",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "device": {
+                "anyOf": [
+                  {
+                    "description": "Locked ADR-4 device identity; persisted blanks are published as null.",
+                    "properties": {
+                      "marketing_name": {
+                        "title": "Marketing Name",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "name": {
+                        "title": "Name",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "os": {
+                        "title": "Os",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "soc": {
+                        "title": "Soc",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "marketing_name",
+                      "soc",
+                      "os"
+                    ],
+                    "title": "ReportDevice",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "metric": {
+                "enum": [
+                  "tps",
+                  "ttft_ms",
+                  "prompt_tokens",
+                  "generated_tokens",
+                  "memory_load_peak_mb",
+                  "memory_load_min_mb",
+                  "memory_inference_peak_mb",
+                  "memory_inference_min_mb",
+                  "accuracy_score",
+                  "model_size_bytes"
+                ],
+                "title": "Metric",
+                "type": "string"
+              },
+              "quant_type": {
+                "title": "Quant Type",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "run": {
+                "title": "Run",
+                "type": "integer"
+              },
+              "target": {
+                "title": "Target",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "unit": {
+                "enum": [
+                  "tokens_per_s",
+                  "ms",
+                  "count",
+                  "mb",
+                  "score",
+                  "bytes"
+                ],
+                "title": "Unit",
+                "type": "string"
+              },
+              "value": {
+                "title": "Value",
+                "type": "number"
+              }
+            },
+            "required": [
+              "device",
+              "ap_type",
+              "target",
+              "quant_type",
+              "dataset",
+              "run",
+              "metric",
+              "value",
+              "unit"
+            ],
+            "title": "LlmReportRecord",
+            "type": "object"
+          },
+          "title": "Records",
+          "type": "array"
+        },
+        "summary": {
+          "properties": {
+            "accuracy": {
+              "items": {
+                "properties": {
+                  "dataset": {
+                    "title": "Dataset",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quant_type": {
+                    "title": "Quant Type",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "score": {
+                    "title": "Score",
+                    "type": "number"
+                  },
+                  "target": {
+                    "title": "Target",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "target",
+                  "quant_type",
+                  "dataset",
+                  "score"
+                ],
+                "title": "LlmAccuracyEntry",
+                "type": "object"
+              },
+              "title": "Accuracy",
+              "type": "array"
+            },
+            "quants": {
+              "additionalProperties": {
+                "properties": {
+                  "best_accuracy": {
+                    "title": "Best Accuracy",
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "best_memory_mb": {
+                    "title": "Best Memory Mb",
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "best_tps": {
+                    "title": "Best Tps",
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "best_ttft_ms": {
+                    "title": "Best Ttft Ms",
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "best_tps",
+                  "best_ttft_ms",
+                  "best_memory_mb",
+                  "best_accuracy"
+                ],
+                "title": "LlmQuantAggregates",
+                "type": "object"
+              },
+              "title": "Quants",
+              "type": "object"
+            }
+          },
+          "required": [
+            "quants",
+            "accuracy"
+          ],
+          "title": "LlmReportSummary",
+          "type": "object"
+        }
+      },
+      "required": [
+        "derivation_version",
+        "model",
+        "records",
+        "summary"
+      ],
+      "title": "LlmReportResponse",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "derivation_version": {
+          "title": "Derivation Version",
+          "type": "integer"
+        },
+        "model": {
+          "properties": {
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "version"
+          ],
+          "title": "ReportModelRef",
+          "type": "object"
+        },
+        "records": {
+          "items": {
+            "properties": {
+              "device": {
+                "description": "Locked ADR-4 device identity; persisted blanks are published as null.",
+                "properties": {
+                  "marketing_name": {
+                    "title": "Marketing Name",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "title": "Name",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "os": {
+                    "title": "Os",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "soc": {
+                    "title": "Soc",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "marketing_name",
+                  "soc",
+                  "os"
+                ],
+                "title": "ReportDevice",
+                "type": "object"
+              },
+              "metric": {
+                "enum": [
+                  "latency_ms",
+                  "tensor_copy_latency_ms",
+                  "snr_db",
+                  "memory_load_peak_mb",
+                  "memory_load_min_mb",
+                  "memory_inference_peak_mb",
+                  "memory_inference_min_mb",
+                  "tps",
+                  "ttft_ms",
+                  "prompt_tokens",
+                  "generated_tokens"
+                ],
+                "title": "Metric",
+                "type": "string"
+              },
+              "run_configuration": {
+                "description": "`configuration` is the SANITIZED producer payload (derivation rule\nP1): only pinned safe scalar config keys and per-module maps survive;\nunknown keys, nested junk and path/secret-looking strings are\ndropped. null when the producer sent none or nothing safe remains.",
+                "properties": {
+                  "configuration": {
+                    "title": "Configuration",
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "id": {
+                    "title": "Id",
+                    "type": "integer"
+                  },
+                  "package": {
+                    "title": "Package",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "package",
+                  "id",
+                  "configuration"
+                ],
+                "title": "PackageRunConfiguration",
+                "type": "object"
+              },
+              "unit": {
+                "enum": [
+                  "ms",
+                  "db",
+                  "mb",
+                  "tokens_per_s",
+                  "count"
+                ],
+                "title": "Unit",
+                "type": "string"
+              },
+              "value": {
+                "title": "Value",
+                "type": "number"
+              }
+            },
+            "required": [
+              "device",
+              "run_configuration",
+              "metric",
+              "value",
+              "unit"
+            ],
+            "title": "PackageReportRecord",
+            "type": "object"
+          },
+          "title": "Records",
+          "type": "array"
+        },
+        "summary": {
+          "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
+          "properties": {
+            "auto": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "memory_inference_peak_mb": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tps": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ttft_ms": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tps",
+                    "ttft_ms",
+                    "memory_inference_peak_mb"
+                  ],
+                  "title": "PackageModeAggregates",
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "speed": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "memory_inference_peak_mb": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tps": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ttft_ms": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tps",
+                    "ttft_ms",
+                    "memory_inference_peak_mb"
+                  ],
+                  "title": "PackageModeAggregates",
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "auto",
+            "speed"
+          ],
+          "title": "PackageReportSummary",
+          "type": "object"
+        }
+      },
+      "required": [
+        "derivation_version",
+        "model",
+        "records",
+        "summary"
+      ],
+      "title": "PackageReportResponse",
+      "type": "object"
+    }
+  ],
+  "description": "One of the three report shapes, selected by report_type: general, llm, or package."
+}

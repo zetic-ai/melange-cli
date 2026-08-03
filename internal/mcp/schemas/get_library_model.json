@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The list item plus the repo's readme (public content).",
+  "properties": {
+    "account": {
+      "title": "Account",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "full_name": {
+      "title": "Full Name",
+      "type": "string"
+    },
+    "model_type": {
+      "title": "Model Type",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "provider": {
+      "anyOf": [
+        {
+          "description": "The provider (company) that published a library model.",
+          "properties": {
+            "logo_url": {
+              "title": "Logo Url",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "LibraryProviderRef",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "readme": {
+      "title": "Readme",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "use_case": {
+      "title": "Use Case",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "account",
+    "name",
+    "full_name",
+    "tags",
+    "model_type",
+    "created_at"
+  ],
+  "title": "LibraryModelDetailResponse",
+  "type": "object"
+}

@@ -21,10 +21,14 @@ import (
 // whenever it re-emits a json.RawMessage. An envelope built with HTML
 // escaping fails on these bodies.
 const (
-	modelListBody = `{"results":[{"key":"whisper-tiny-1","version":1,"type":"onnx","is_default":true}],"count":1}`
-	modelBody     = `{"key":"whisper-tiny-1","version":1,"type":"onnx","state":"ready","is_default":true,` +
+	modelListBody = `{"results":[{"key":"whisper-tiny-1","version":1,"type":"onnx","state":"ready",` +
+		`"is_default":true,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}],"count":1}`
+	modelBody = `{"key":"whisper-tiny-1","version":1,"type":"onnx","state":"ready","is_default":true,` +
+		`"terminal":true,"download_ready":true,"source_type":"manual",` +
+		`"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",` +
 		`"description":"speech <-> text & subtitles"}`
-	targetsBody = `{"results":[{"target_id":"tgt_abc","target":"cpu","quant_type":"q4_k_m",` +
+	targetsBody = `{"results":[{"target_id":"tgt_abc","kind":"general","target":"cpu","quant_type":"q4_k_m",` +
+		`"download_size":5368709120,"created_at":"2026-01-01T00:00:00Z",` +
 		`"label":"CPU <fp16> & NPU"}],"count":1}`
 	importedModelBody = `{"key":"llama-3-2-1b-1","version":1,"state":"converting","is_default":false,` +
 		`"source":"hf:meta-llama/Llama-3.2-1B","description":"instruct <chat> & tools"}`

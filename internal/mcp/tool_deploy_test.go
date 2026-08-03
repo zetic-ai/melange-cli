@@ -13,10 +13,12 @@ import (
 // Bodies use non-alphabetical key order so any re-marshal through a typed
 // struct (which would sort keys) breaks the byte-equality assertions.
 const (
-	deployOptionsBody = `{"languages":[{"id":"android-kotlin","label":"Android (Kotlin)"}],` +
+	deployOptionsBody = `{"languages":[{"id":"android-kotlin","label":"Android (Kotlin)","code_language":"kotlin"}],` +
 		`"inference_modes":[{"id":"auto","label":"Auto","description":"pick per device"}],` +
 		`"default_language":"android-kotlin","default_inference_mode":"auto","guide_version":1}`
 	deployGuideBody = `{"guide_version":1,"language":"ios-swift","inference_mode":"speed",` +
+		`"model":{"repository":"zetic/whisper-tiny","key":"whisper-tiny-1","version":1,` +
+		`"type":"general","state":"ready","download_ready":true},` +
 		`"credential_placeholder":"YOUR_PERSONAL_KEY","sdk":{"name":"zetic-mlange","version":"1.2.3"},` +
 		`"steps":[{"title":"Install","code_language":"swift","code":"import ZeticMLange"}]}`
 )

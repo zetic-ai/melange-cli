@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Public conversion status of a model (the CLI `--wait` poll target).\n\n`state` is a STABLE public enum (lowercase snake) mapped from the\ninternal model status; `failure_code` is always a sanitized stable code,\nnever raw pipeline exception text.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "download_ready": {
+      "title": "Download Ready",
+      "type": "boolean"
+    },
+    "failure_code": {
+      "title": "Failure Code",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "progress": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Progress",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "retry_after": {
+      "maximum": 300,
+      "minimum": 1,
+      "title": "Retry After",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "stage": {
+      "enum": [
+        "convert",
+        "benchmark",
+        null
+      ],
+      "title": "Stage",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "state": {
+      "enum": [
+        "converting",
+        "optimizing",
+        "ready",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "terminal": {
+      "title": "Terminal",
+      "type": "boolean"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "state",
+    "terminal",
+    "download_ready",
+    "created_at",
+    "updated_at",
+    "failure_code",
+    "stage",
+    "progress",
+    "retry_after"
+  ],
+  "title": "ModelStatusResponse",
+  "type": "object"
+}

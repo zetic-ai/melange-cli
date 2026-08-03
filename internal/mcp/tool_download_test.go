@@ -107,7 +107,8 @@ func TestRequestModelDownloadRedactionPreservesNumericLiterals(t *testing.T) {
 	// 2^53+1 cannot survive a float64 round trip: decoding the body through
 	// json.Number is what keeps an artifact size exactly as the API sent it.
 	body := `{"artifacts":[{"name":"big.zmc","size":9007199254740993,` +
-		`"url":"https://storage.example/big.zmc?sig=xyz"}],"authorization_id":"dla_2"}`
+		`"url":"https://storage.example/big.zmc?sig=xyz"}],"authorization_id":"dla_2",` +
+		`"expires_at":"2026-01-01T00:00:00Z"}`
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("POST", downloadPath), jsonBody(http.StatusCreated, body))
 
@@ -116,7 +117,8 @@ func TestRequestModelDownloadRedactionPreservesNumericLiterals(t *testing.T) {
 
 	assert.False(t, res.IsError)
 	assert.Equal(t,
-		`{"artifacts":[{"name":"big.zmc","size":9007199254740993,"url":"<redacted>"}],"authorization_id":"dla_2"}`,
+		`{"artifacts":[{"name":"big.zmc","size":9007199254740993,"url":"<redacted>"}],`+
+			`"authorization_id":"dla_2","expires_at":"2026-01-01T00:00:00Z"}`,
 		textOf(t, res))
 	reg.Verify(t)
 }

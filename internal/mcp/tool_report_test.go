@@ -13,9 +13,35 @@ import (
 // reportBody renders a report response; the kind marker proves which endpoint
 // answered. Keys are in non-alphabetical order so any re-marshal through a
 // typed struct (which would sort them) breaks the byte-equality assertions.
+// Each body carries the shape the spec declares for its report type, so it
+// also passes the get_model_report output schema the tool advertises.
 func reportBody(kind string) string {
-	return `{"report_type":"` + kind + `","model":{"key":"whisper-tiny-1","version":1},` +
-		`"records":[{"device":{"marketing_name":"Pixel 8"},"metric":"latency_ms","value":12.5}]}`
+	device := `{"name":"Pixel 8","marketing_name":"Pixel 8 Pro","soc":"Tensor G3","os":"Android 14"}`
+	switch kind {
+	case "general":
+		stats := `{"min":12.5,"max":12.5,"median":12.5,"avg":12.5}`
+		return `{"derivation_version":2,"model":{"key":"whisper-tiny-1","version":1},` +
+			`"records":[{"device":` + device + `,"ap_type":"cpu","target":"tflite","precision":"fp32",` +
+			`"run":0,"metric":"latency_ms","value":12.5,"unit":"ms"}],` +
+			`"summary":{"latency_ms":{"fp32":` + stats + `,"fp16":null,"int8":null,"all":` + stats + `},` +
+			`"snr_db":{"fp32":null,"fp16":null,"int8":null,"all":null},` +
+			`"memory_mb":{"fp32":null,"fp16":null,"int8":null,"all":null}}}`
+	case "llm":
+		return `{"derivation_version":2,"model":{"key":"whisper-tiny-1","version":1},` +
+			`"records":[{"device":` + device + `,"ap_type":"cpu","target":"llama.cpp","quant_type":"q4_k_m",` +
+			`"dataset":null,"run":0,"metric":"tps","value":42.5,"unit":"tokens_per_s"}],` +
+			`"summary":{"quants":{"q4_k_m":{"best_tps":42.5,"best_ttft_ms":null,` +
+			`"best_memory_mb":null,"best_accuracy":0.61}},` +
+			`"accuracy":[{"target":"llama.cpp","quant_type":"q4_k_m","dataset":"mmlu","score":0.61}]}}`
+	case "package":
+		aggregates := `{"tps":{"min":42.5,"max":42.5,"median":42.5,"avg":42.5},"ttft_ms":null,` +
+			`"memory_inference_peak_mb":null}`
+		return `{"derivation_version":2,"model":{"key":"whisper-tiny-1","version":1},` +
+			`"records":[{"device":` + device + `,"run_configuration":{"package":"com.zetic.demo","id":3,` +
+			`"configuration":null},"metric":"tps","value":42.5,"unit":"tokens_per_s"}],` +
+			`"summary":{"auto":` + aggregates + `,"speed":` + aggregates + `}}`
+	}
+	panic("unknown report kind " + kind)
 }
 
 const reportPathPrefix = "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1/reports/"

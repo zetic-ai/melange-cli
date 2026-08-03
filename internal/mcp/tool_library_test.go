@@ -18,11 +18,14 @@ import (
 // them as <, >, and & whenever it re-emits a json.RawMessage.
 // An envelope built with HTML escaping fails on these bodies.
 const (
-	libraryListBody = `{"results":[{"full_name":"zetic/whisper-tiny","provider":{"name":"Zetic"},` +
-		`"use_case":"speech","model_type":"onnx","description":"speech <-> text & subtitles"}],"count":1}`
+	libraryListBody = `{"results":[{"full_name":"zetic/whisper-tiny","account":"zetic","name":"whisper-tiny",` +
+		`"provider":{"name":"Zetic"},"use_case":"speech","model_type":"onnx",` +
+		`"tags":["speech"],"created_at":"2026-01-01T00:00:00Z",` +
+		`"description":"speech <-> text & subtitles"}],"count":1}`
 	libraryProvidersBody = `{"results":[{"name":"Zetic & Partners <labs>","model_count":12}],"count":1}`
 	libraryModelBody     = `{"full_name":"zetic/whisper-tiny","account":"zetic","name":"whisper-tiny",` +
 		`"provider":{"name":"Zetic"},"use_case":"speech","model_type":"onnx",` +
+		`"tags":["speech"],"created_at":"2026-01-01T00:00:00Z",` +
 		`"readme":"# whisper\n<img src=\"logo.png\"> speech & text"}`
 )
 

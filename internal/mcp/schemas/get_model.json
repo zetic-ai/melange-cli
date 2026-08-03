@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "description": "ModelSummary plus the status endpoint's terminal/download fields and\nthe (lowercase) source type — still NO job args, URIs or HF fields.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "download_ready": {
+          "title": "Download Ready",
+          "type": "boolean"
+        },
+        "failure_code": {
+          "title": "Failure Code",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_default": {
+          "title": "Is Default",
+          "type": "boolean"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "source_type": {
+          "title": "Source Type",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "converting",
+            "optimizing",
+            "ready",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "terminal": {
+          "title": "Terminal",
+          "type": "boolean"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "version",
+        "type",
+        "state",
+        "is_default",
+        "created_at",
+        "updated_at",
+        "terminal",
+        "download_ready",
+        "source_type"
+      ],
+      "title": "ModelDetailResponse",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "get_model envelope returned when include_targets is true.",
+      "properties": {
+        "model": {
+          "description": "ModelSummary plus the status endpoint's terminal/download fields and\nthe (lowercase) source type — still NO job args, URIs or HF fields.",
+          "properties": {
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "download_ready": {
+              "title": "Download Ready",
+              "type": "boolean"
+            },
+            "failure_code": {
+              "title": "Failure Code",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "is_default": {
+              "title": "Is Default",
+              "type": "boolean"
+            },
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "source_type": {
+              "title": "Source Type",
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "converting",
+                "optimizing",
+                "ready",
+                "failed"
+              ],
+              "title": "State",
+              "type": "string"
+            },
+            "terminal": {
+              "title": "Terminal",
+              "type": "boolean"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "version",
+            "type",
+            "state",
+            "is_default",
+            "created_at",
+            "updated_at",
+            "terminal",
+            "download_ready",
+            "source_type"
+          ],
+          "title": "ModelDetailResponse",
+          "type": "object"
+        },
+        "targets": {
+          "properties": {
+            "count": {
+              "title": "Count",
+              "type": "integer"
+            },
+            "results": {
+              "items": {
+                "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable — clients must not parse it. `target`\nand `quant_type` are stable lowercase names derived from the internal\nenums; `compatibility` is null when the row carries no device\ncompatibility information (LLM targets and the all-null sentinel).",
+                "properties": {
+                  "compatibility": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "ap_types": {
+                            "items": {
+                              "enum": [
+                                "cpu",
+                                "gpu",
+                                "npu"
+                              ],
+                              "type": "string"
+                            },
+                            "title": "Ap Types",
+                            "type": "array"
+                          },
+                          "os": {
+                            "title": "Os",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "soc_manufacturer": {
+                            "title": "Soc Manufacturer",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "soc_model": {
+                            "title": "Soc Model",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "ap_types"
+                        ],
+                        "title": "ModelTargetCompatibility",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "download_size": {
+                    "title": "Download Size",
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "enum": [
+                      "general",
+                      "llm"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quant_type": {
+                    "title": "Quant Type",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "target": {
+                    "title": "Target",
+                    "type": "string"
+                  },
+                  "target_id": {
+                    "title": "Target Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "target_id",
+                  "kind",
+                  "target",
+                  "download_size",
+                  "created_at"
+                ],
+                "title": "ModelTargetItem",
+                "type": "object"
+              },
+              "title": "Results",
+              "type": "array"
+            }
+          },
+          "required": [
+            "results",
+            "count"
+          ],
+          "title": "ListModelTargetsResponse",
+          "type": "object"
+        }
+      },
+      "required": [
+        "model",
+        "targets"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope."
+}

@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "properties": {
+        "default_inference_mode": {
+          "enum": [
+            "auto",
+            "speed",
+            "accuracy"
+          ],
+          "title": "Default Inference Mode",
+          "type": "string"
+        },
+        "default_language": {
+          "enum": [
+            "android-kotlin",
+            "android-java",
+            "ios-swift",
+            "flutter"
+          ],
+          "title": "Default Language",
+          "type": "string"
+        },
+        "guide_version": {
+          "title": "Guide Version",
+          "type": "integer"
+        },
+        "inference_modes": {
+          "items": {
+            "properties": {
+              "description": {
+                "title": "Description",
+                "type": "string"
+              },
+              "id": {
+                "enum": [
+                  "auto",
+                  "speed",
+                  "accuracy"
+                ],
+                "title": "Id",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "description"
+            ],
+            "title": "DeploymentInferenceModeOption",
+            "type": "object"
+          },
+          "title": "Inference Modes",
+          "type": "array"
+        },
+        "languages": {
+          "items": {
+            "properties": {
+              "code_language": {
+                "title": "Code Language",
+                "type": "string"
+              },
+              "id": {
+                "enum": [
+                  "android-kotlin",
+                  "android-java",
+                  "ios-swift",
+                  "flutter"
+                ],
+                "title": "Id",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "code_language"
+            ],
+            "title": "DeploymentLanguageOption",
+            "type": "object"
+          },
+          "title": "Languages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "guide_version",
+        "default_language",
+        "default_inference_mode",
+        "languages",
+        "inference_modes"
+      ],
+      "title": "DeploymentOptionsResponse",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "credential_placeholder": {
+          "title": "Credential Placeholder",
+          "type": "string"
+        },
+        "guide_version": {
+          "title": "Guide Version",
+          "type": "integer"
+        },
+        "inference_mode": {
+          "enum": [
+            "auto",
+            "speed",
+            "accuracy"
+          ],
+          "title": "Inference Mode",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "android-kotlin",
+            "android-java",
+            "ios-swift",
+            "flutter"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "model": {
+          "properties": {
+            "download_ready": {
+              "title": "Download Ready",
+              "type": "boolean"
+            },
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "repository": {
+              "title": "Repository",
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "converting",
+                "optimizing",
+                "ready",
+                "failed"
+              ],
+              "title": "State",
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "general",
+                "llm"
+              ],
+              "title": "Type",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "repository",
+            "key",
+            "version",
+            "type",
+            "state",
+            "download_ready"
+          ],
+          "title": "DeploymentGuideModel",
+          "type": "object"
+        },
+        "sdk": {
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "title": "DeploymentGuideSDK",
+          "type": "object"
+        },
+        "steps": {
+          "items": {
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "code_language": {
+                "title": "Code Language",
+                "type": "string"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "code_language",
+              "code"
+            ],
+            "title": "DeploymentGuideStep",
+            "type": "object"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "guide_version",
+        "language",
+        "inference_mode",
+        "model",
+        "sdk",
+        "credential_placeholder",
+        "steps"
+      ],
+      "title": "DeploymentGuideResponse",
+      "type": "object"
+    }
+  ],
+  "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key)."
+}

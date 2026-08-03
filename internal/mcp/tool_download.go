@@ -33,6 +33,7 @@ func registerDownload(s *mcp.Server, d Deps) {
 			"When the user is on the machine that should hold the files, tell them to run " +
 			"'melange model download' instead: it verifies checksums and writes the files for them. " +
 			"Take model_key from list_models and target_id from get_model with include_targets.",
+		OutputSchema: outputSchema("request_model_download"),
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  false,
 			DestructiveHint: falsePtr(),

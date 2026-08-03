@@ -24,6 +24,7 @@ func registerAccount(s *mcp.Server, d Deps) {
 		Description: "Verify credentials and report the identity behind them: " +
 			"user, account, and token name/scopes. Call this first to confirm " +
 			"authentication before using the other melange tools.",
+		OutputSchema: outputSchema("whoami"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -39,7 +40,8 @@ func registerAccount(s *mcp.Server, d Deps) {
 			"'include' narrows it to the sections you need — the returned object then " +
 			"carries only those keys. Check quotas before an upload or conversion: each " +
 			"counter's 'remaining' is what enforcement actually permits right now.",
-		InputSchema: inputSchemaFor[accountInfoArgs](withSectionEnum),
+		InputSchema:  inputSchemaFor[accountInfoArgs](withSectionEnum),
+		OutputSchema: outputSchema("get_account_info"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,

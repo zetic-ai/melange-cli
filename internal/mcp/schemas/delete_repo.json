@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Synthesized by delete_repo: the API acknowledges the deletion with 204 and no body.",
+  "properties": {
+    "deleted": {
+      "const": true,
+      "type": "boolean"
+    },
+    "repo": {
+      "description": "The deleted repository, as ACCOUNT/NAME.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "deleted",
+    "repo"
+  ],
+  "type": "object"
+}

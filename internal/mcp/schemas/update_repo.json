@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Public shape of a repository. Thin on purpose: internal fields\n(readme, embedding, metadata, ids, ...) must never leak here.",
+  "properties": {
+    "account": {
+      "title": "Account",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "full_name": {
+      "title": "Full Name",
+      "type": "string"
+    },
+    "is_private": {
+      "title": "Is Private",
+      "type": "boolean"
+    },
+    "model_type": {
+      "title": "Model Type",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "use_case": {
+      "title": "Use Case",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "account",
+    "name",
+    "full_name",
+    "is_private",
+    "model_type",
+    "tags",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "RepoResponse",
+  "type": "object"
+}

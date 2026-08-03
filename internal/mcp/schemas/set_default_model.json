@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Public shape of a model. `key` is the model's globally-unique tag.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "is_default": {
+      "title": "Is Default",
+      "type": "boolean"
+    },
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "converting",
+        "optimizing",
+        "ready",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "key",
+    "version",
+    "type",
+    "state",
+    "is_default",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "ModelSummary",
+  "type": "object"
+}

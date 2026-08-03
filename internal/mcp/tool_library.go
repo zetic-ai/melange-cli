@@ -24,7 +24,8 @@ func registerLibrary(s *mcp.Server, d Deps) {
 			"full_name is a repository coordinate usable directly with get_model_report " +
 			"and get_deployment_info — never import a library model just to read its " +
 			"public benchmarks.",
-		InputSchema: inputSchemaFor[searchLibraryArgs](withLibraryFilters),
+		InputSchema:  inputSchemaFor[searchLibraryArgs](withLibraryFilters),
+		OutputSchema: outputSchema("search_library"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -38,6 +39,7 @@ func registerLibrary(s *mcp.Server, d Deps) {
 			"model type, tags, description, and the complete readme. Take the ACCOUNT/NAME " +
 			"coordinate from search_library, then list its converted model keys with " +
 			"list_models.",
+		OutputSchema: outputSchema("get_library_model"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,

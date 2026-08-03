@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "get_account_info envelope. Each section is present exactly when requested via include; an omitted include returns all three.",
+  "properties": {
+    "plan": {
+      "description": "The account's effective billing plan identity.",
+      "properties": {
+        "is_trial": {
+          "title": "Is Trial",
+          "type": "boolean"
+        },
+        "plan": {
+          "enum": [
+            "free",
+            "lite",
+            "pro",
+            "pro_plus",
+            "enterprise"
+          ],
+          "title": "Plan",
+          "type": "string"
+        },
+        "trial_ends_at": {
+          "format": "date-time",
+          "title": "Trial Ends At",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "plan",
+        "is_trial"
+      ],
+      "title": "BillingPlanResponse",
+      "type": "object"
+    },
+    "quotas": {
+      "properties": {
+        "active_devices": {
+          "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+          "properties": {
+            "limit": {
+              "title": "Limit",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "remaining": {
+              "title": "Remaining",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "used": {
+              "title": "Used",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "used"
+          ],
+          "title": "QuotaItem",
+          "type": "object"
+        },
+        "bandwidth": {
+          "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+          "properties": {
+            "limit": {
+              "title": "Limit",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "remaining": {
+              "title": "Remaining",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "used": {
+              "title": "Used",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "used"
+          ],
+          "title": "QuotaItem",
+          "type": "object"
+        },
+        "model_uploads": {
+          "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+          "properties": {
+            "limit": {
+              "title": "Limit",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "remaining": {
+              "title": "Remaining",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "used": {
+              "title": "Used",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "used"
+          ],
+          "title": "QuotaItem",
+          "type": "object"
+        },
+        "prompts": {
+          "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+          "properties": {
+            "limit": {
+              "title": "Limit",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "remaining": {
+              "title": "Remaining",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "used": {
+              "title": "Used",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "used"
+          ],
+          "title": "QuotaItem",
+          "type": "object"
+        }
+      },
+      "required": [
+        "bandwidth",
+        "model_uploads",
+        "active_devices",
+        "prompts"
+      ],
+      "title": "UsageQuotasResponse",
+      "type": "object"
+    },
+    "usage": {
+      "description": "Current-month usage totals for the PAT's account.\n\n`bandwidth` is bytes; the other counters are counts. The window is the\ncurrent billing month (an account-level usage reset inside the month\nmoves the window start to the reset time).",
+      "properties": {
+        "active_devices": {
+          "title": "Active Devices",
+          "type": "integer"
+        },
+        "bandwidth": {
+          "title": "Bandwidth",
+          "type": "integer"
+        },
+        "model_uploads": {
+          "title": "Model Uploads",
+          "type": "integer"
+        },
+        "prompts": {
+          "title": "Prompts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bandwidth",
+        "model_uploads",
+        "active_devices",
+        "prompts"
+      ],
+      "title": "UsageResponse",
+      "type": "object"
+    }
+  },
+  "type": "object"
+}

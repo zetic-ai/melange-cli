@@ -39,7 +39,8 @@ func registerModel(s *mcp.Server, d Deps) {
 		Description: "List a repository's models, newest first, with each model's key, " +
 			"version, type, state, and whether it is the repository default. Model keys are " +
 			"opaque — always take one from this listing instead of constructing it.",
-		InputSchema: inputSchemaFor[listModelsArgs](withPageBounds),
+		InputSchema:  inputSchemaFor[listModelsArgs](withPageBounds),
+		OutputSchema: outputSchema("list_models"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -54,6 +55,7 @@ func registerModel(s *mcp.Server, d Deps) {
 			"include_targets the result is instead the composite object " +
 			`{"model": <model>, "targets": <target list>}, which adds the converted ` +
 			"target artifacts and their opaque target_ids in a single call.",
+		OutputSchema: outputSchema("get_model"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -68,7 +70,8 @@ func registerModel(s *mcp.Server, d Deps) {
 			"processing failed. Returns immediately by default; wait_seconds polls with " +
 			"backoff and still returns the latest status when that budget runs out, so " +
 			"prefer short waits and call again rather than blocking on one long request.",
-		InputSchema: inputSchemaFor[conversionStatusArgs](withWaitBounds),
+		InputSchema:  inputSchemaFor[conversionStatusArgs](withWaitBounds),
+		OutputSchema: outputSchema("get_conversion_status"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
@@ -81,6 +84,7 @@ func registerModel(s *mcp.Server, d Deps) {
 		Description: "Make one model the repository's default. Exactly one model per repository " +
 			"is the default, so this also clears the previous one; repeating the call returns the " +
 			"same result. Take model_key from list_models.",
+		OutputSchema: outputSchema("set_default_model"),
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
@@ -94,6 +98,7 @@ func registerModel(s *mcp.Server, d Deps) {
 			"key while conversion continues in the background — follow with get_conversion_status " +
 			"rather than assuming the model is ready. Each call starts a new import; the revision " +
 			"is always the HuggingFace repository's current default-branch head.",
+		OutputSchema: outputSchema("import_model"),
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  false,
 			DestructiveHint: falsePtr(),

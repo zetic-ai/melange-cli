@@ -113,6 +113,7 @@ func TestWhoamiRoundTripPassesResponseBytesThrough(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, res.IsError)
+	assertConformsToOutputSchema(t, "whoami", res)
 	assert.Equal(t, meBody, textOf(t, res), "text mirror carries the exact body")
 
 	structured, merr := json.Marshal(res.StructuredContent)
@@ -171,7 +172,9 @@ func TestWhoamiNoTokenResolvedIsToolErrorWithRemediation(t *testing.T) {
 const (
 	usageBody  = `{"prompts":120,"model_uploads":3,"active_devices":7,"bandwidth":204800}`
 	quotasBody = `{"prompts":{"used":120,"limit":1000,"remaining":880},` +
-		`"model_uploads":{"used":3,"limit":null,"remaining":null},"note":"spikes & bursts included"}`
+		`"model_uploads":{"used":3,"limit":null,"remaining":null},` +
+		`"bandwidth":{"used":204800,"limit":10737418240,"remaining":10737213440},` +
+		`"active_devices":{"used":7,"limit":50,"remaining":43},"note":"spikes & bursts included"}`
 	planBody = `{"plan":"pro","label":"Pro & Team <beta>","is_trial":false,"trial_ends_at":null}`
 )
 
@@ -340,5 +343,5 @@ func TestWhoamiToolAnnotations(t *testing.T) {
 	assert.True(t, whoami.Annotations.IdempotentHint)
 	require.NotNil(t, whoami.Annotations.DestructiveHint, "DestructiveHint must be set explicitly (SDK default is true)")
 	assert.False(t, *whoami.Annotations.DestructiveHint)
-	assert.Nil(t, whoami.OutputSchema, "no output schema until Task 5 (Out = any)")
+	assert.NotNil(t, whoami.OutputSchema, "whoami advertises its OpenAPI-derived output schema")
 }
