@@ -119,9 +119,22 @@ func TestListModelsRejectsOversizedPageBeforeCallingTheAPI(t *testing.T) {
 	reg := &httpmock.Registry{}
 	cs, _ := connect(t, registryProvider(t, reg))
 
+	// The bounds must reach the client, not just the handler. Asserting on the
+	// advertised schema is what makes this test fail if withPageBounds is
+	// dropped: an unbounded limit would otherwise reach the empty registry,
+	// which reports a transport error that also surfaces as IsError.
+	schema, err := json.Marshal(toolNamed(t, cs, "list_models").InputSchema)
+	require.NoError(t, err)
+	assert.Contains(t, string(schema), `"maximum":100`, "the page size cap is advertised")
+	assert.Contains(t, string(schema), `"minimum":1`, "a page of zero rows is refused")
+
 	res := callTool(t, cs, "list_models", map[string]any{"repo": "zetic/whisper-tiny", "limit": 101})
 
 	assert.True(t, res.IsError)
+	// The SDK prefixes schema-validation failures this way; without it, an
+	// IsError result could just as well be the unmatched-stub transport error.
+	assert.Contains(t, textOf(t, res), `validating "arguments"`,
+		"the argument is rejected by the schema, not by a failed request")
 	assert.Empty(t, reg.Requests)
 }
 

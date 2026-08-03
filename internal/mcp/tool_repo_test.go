@@ -73,7 +73,7 @@ func TestListReposPassesResponseBytesThroughAndDefaultsThePage(t *testing.T) {
 	assert.Equal(t, repoListBody, textOf(t, res))
 
 	query := reg.Requests[0].URL.Query()
-	assert.Equal(t, "30", query.Get("limit"), "an omitted limit takes the schema default")
+	assert.Equal(t, "30", query.Get("limit"), "an omitted limit takes the default page size")
 	assert.Equal(t, "0", query.Get("offset"))
 	assert.False(t, query.Has("search"), "an omitted search is not sent as an empty filter")
 
@@ -102,6 +102,17 @@ func TestListReposForwardsSearchAndPagination(t *testing.T) {
 }
 
 func TestListReposRejectsOutOfRangePageBeforeCallingTheAPI(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+
+	// The bounds must reach the client, not just the handler. Asserting on the
+	// advertised schema is what makes this test fail if withPageBounds is
+	// dropped: an unbounded argument would otherwise reach the empty registry,
+	// which reports a transport error that also surfaces as IsError.
+	schema, err := json.Marshal(toolNamed(t, cs, "list_repos").InputSchema)
+	require.NoError(t, err)
+	assert.Contains(t, string(schema), `"maximum":100`, "the page size cap is advertised")
+	assert.Contains(t, string(schema), `"minimum":1`, "a page of zero rows is refused")
+
 	for _, tc := range []struct {
 		name string
 		args map[string]any
@@ -118,6 +129,11 @@ func TestListReposRejectsOutOfRangePageBeforeCallingTheAPI(t *testing.T) {
 			res := callTool(t, cs, "list_repos", tc.args)
 
 			assert.True(t, res.IsError, "the input schema bounds the page before any request")
+			// The SDK prefixes schema-validation failures this way; without it,
+			// an IsError result could just as well be the unmatched-stub
+			// transport error, which would pass even with no bounds at all.
+			assert.Contains(t, textOf(t, res), `validating "arguments"`,
+				"the argument is rejected by the schema, not by a failed request")
 			assert.Empty(t, reg.Requests, "no API call is made for invalid arguments")
 		})
 	}
