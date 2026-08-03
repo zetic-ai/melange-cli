@@ -5,6 +5,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"sync"
 	"time"
@@ -199,8 +200,9 @@ func clientKey(r *http.Request) string {
 }
 
 // remoteIPKey derives the pre-auth limiter key from the transport-level peer
-// address, port stripped so one client's ephemeral ports cannot mint fresh
-// buckets.
+// address, aggregated to the smallest unit that one host cannot multiply (see
+// aggregateHost). The port is stripped so one client's ephemeral ports cannot
+// mint fresh buckets.
 //
 // Proxy headers are deliberately ignored. On a directly-exposed listener
 // X-Forwarded-For and friends are attacker-settable, so honoring them would
@@ -215,5 +217,37 @@ func remoteIPKey(r *http.Request) string {
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	return "ip:" + host
+	return "ip:" + aggregateHost(host)
+}
+
+// aggregateHost reduces a peer address to its limiter identity.
+//
+// IPv6 is keyed on the /64 prefix, not the address. A single IPv6 host is
+// routinely given a whole /64 (SLAAC), and privacy extensions rotate its
+// address natively — so per-address keying would let one machine mint ~2^64
+// full-burst buckets and, worse, churn the bounded bucket map hard enough to
+// evict the legitimate clients it is meant to protect. /64 is the smallest
+// unit an end host cannot multiply, and it is what operators actually block
+// on. The cost is that hosts sharing a /64 share a budget, which is the same
+// trade IPv4 NAT already makes and why ipRateLimitPerMinute is generous.
+//
+// IPv4 keeps per-address keying (a /24 would sweep in unrelated networks),
+// v4-mapped-v6 peers (::ffff:a.b.c.d, what a dual-stack listener reports for
+// an IPv4 client) collapse to their IPv4 form so the two spellings cannot be
+// two budgets, and an unparseable host keys on its literal text — the
+// malformed-RemoteAddr fallback above must never fail open.
+func aggregateHost(host string) string {
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return host
+	}
+	if addr.Is4In6() {
+		addr = addr.Unmap()
+	}
+	if addr.Is4() {
+		return addr.String()
+	}
+	// PrefixFrom drops any zone, so a link-local peer cannot buy extra
+	// buckets by varying the zone either.
+	return netip.PrefixFrom(addr, 64).Masked().String()
 }

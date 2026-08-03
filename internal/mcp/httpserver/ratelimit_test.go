@@ -160,6 +160,44 @@ func initializeMCP(h http.Handler, remoteAddr, token string) *httptest.ResponseR
 	return sprayRequest(h, remoteAddr, token, "application/json")
 }
 
+// TestRemoteIPKeyAggregatesIPv6 pins the unit the pre-auth limiter treats as
+// one client. Keying IPv6 per address would be no limit at all: a single host
+// holds a whole /64 (SLAAC) and privacy extensions rotate its address
+// natively, so it could mint a full-burst bucket per request and churn the
+// bounded map hard enough to evict everyone else. /64 is the smallest unit an
+// end host cannot multiply.
+func TestRemoteIPKeyAggregatesIPv6(t *testing.T) {
+	tests := []struct {
+		name       string
+		remoteAddr string
+		want       string
+	}{
+		{"ipv4 keeps per-address keying", "203.0.113.9:4321", "ip:203.0.113.9"},
+		{"ipv6 keys on the /64", "[2001:db8:1:2::1]:443", "ip:2001:db8:1:2::/64"},
+		{"another address in that /64 is the same client",
+			"[2001:db8:1:2:dead:beef:cafe:9]:443", "ip:2001:db8:1:2::/64"},
+		{"a different /64 is a different client", "[2001:db8:1:3::1]:443", "ip:2001:db8:1:3::/64"},
+		{"v4-mapped v6 keys like its ipv4 form", "[::ffff:203.0.113.9]:443", "ip:203.0.113.9"},
+		{"a zone cannot buy a second budget", "[fe80::1%eth0]:443", "ip:fe80::/64"},
+		{"an unparseable peer keys on its literal", "not-an-address", "ip:not-an-address"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+			assert.Equal(t, tt.want, remoteIPKey(req))
+		})
+	}
+
+	// The v4-mapped form and the plain form must be one budget, not two.
+	v4 := httptest.NewRequest(http.MethodPost, "/", nil)
+	v4.RemoteAddr = "203.0.113.9:1111"
+	mapped := httptest.NewRequest(http.MethodPost, "/", nil)
+	mapped.RemoteAddr = "[::ffff:203.0.113.9]:2222"
+	assert.Equal(t, remoteIPKey(v4), remoteIPKey(mapped),
+		"a dual-stack listener spelling an IPv4 peer as v4-mapped must not double its budget")
+}
+
 // sprayMCP is initializeMCP's cheap twin, for the bulk of a burst where only
 // the count matters. The wrong Content-Type makes the SDK answer 415 before
 // it builds a per-request MCP server (verified in streamable.go: the
@@ -278,6 +316,24 @@ func TestIPRateLimitStopsTokenSpray(t *testing.T) {
 		// fresh budget.
 		assert.Equal(t, http.StatusTooManyRequests,
 			sprayMCP(srv.handler, "203.0.113.42:6666", "another-token").Code)
+	})
+
+	t.Run("an IPv6 host cannot rotate addresses for a fresh budget", func(t *testing.T) {
+		stub := newMeStub(t, map[string]string{})
+		srv, _ := newTestServer(t, stub.URL, nil)
+		freezeIPLimiter(srv)
+		exhaustIPBudget(t, srv.handler, "[2001:db8:1:2::1]:5555")
+
+		// A brand-new source address from the same /64 — what SLAAC privacy
+		// extensions hand a sprayer for free — arrives already throttled.
+		assert.Equal(t, http.StatusTooManyRequests,
+			sprayMCP(srv.handler, "[2001:db8:1:2:aaaa:bbbb:cccc:dddd]:5555", "rotated-token").Code,
+			"rotating within the /64 must not mint a fresh budget")
+
+		// A genuinely different network is unaffected.
+		assert.Equal(t, http.StatusOK,
+			initializeMCP(srv.handler, "[2001:db8:1:3::1]:5555", "other-network-token").Code,
+			"a different /64 is a different client")
 	})
 
 	t.Run("healthz stays exempt", func(t *testing.T) {
