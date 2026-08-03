@@ -102,6 +102,13 @@ func New(cfg Config) (*Server, error) {
 	if cfg.APIHost == "" {
 		return nil, errors.New("httpserver: APIHost is required")
 	}
+	if cfg.ValidateTokens {
+		// Fail-fast guard: the MeVerifier lands in CLI-PR2 Task 2. Until it
+		// does, accepting this flag would hand the operator an unvalidated
+		// relay while they believe tokens are checked. Task 2 deletes this
+		// guard when it wires the real verifier.
+		return nil, errors.New("httpserver: token validation (ValidateTokens) is not implemented yet")
+	}
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)

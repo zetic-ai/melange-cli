@@ -146,6 +146,12 @@ func TestNewValidatesConfig(t *testing.T) {
 
 	_, err = New(Config{Listen: ":0"})
 	assert.ErrorContains(t, err, "APIHost")
+
+	// Fail-fast until Task 2 wires the MeVerifier: accepting ValidateTokens
+	// today would silently serve an unvalidated relay. Task 2 deletes the
+	// guard and flips this assertion to the real behavior.
+	_, err = New(Config{Listen: ":0", APIHost: "https://api.zetic.ai", ValidateTokens: true})
+	assert.ErrorContains(t, err, "not implemented")
 }
 
 func TestHealthzServesUnauthenticated(t *testing.T) {
