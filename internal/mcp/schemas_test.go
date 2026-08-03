@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zetic-ai/melange-cli/internal/fixturetest"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
 
@@ -105,25 +106,10 @@ func TestEveryRegisteredToolHasAnOutputSchemaOrDocumentedException(t *testing.T)
 	}
 }
 
-// fixturesDir locates the shared contract fixtures relative to this file.
-func fixturesDir(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	return filepath.Join(filepath.Dir(file), "..", "..", "openapi", "fixtures")
-}
-
 // fixtureBody reads one contract fixture's response body.
 func fixtureBody(t *testing.T, name string) json.RawMessage {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(fixturesDir(t), name))
-	require.NoError(t, err)
-	var fx struct {
-		Response struct {
-			Body json.RawMessage `json:"body"`
-		} `json:"response"`
-	}
-	require.NoError(t, json.Unmarshal(data, &fx))
+	fx := fixturetest.Load(t, strings.TrimSuffix(name, ".json"))
 	require.NotEmpty(t, fx.Response.Body, "%s has no response body", name)
 	return fx.Response.Body
 }
@@ -163,83 +149,85 @@ func TestContractFixturesConformToToolOutputSchemas(t *testing.T) {
 		return unmarshalAny(t, body)
 	}
 
-	cases := map[string]struct {
-		tool string
-		wrap func(t *testing.T, body json.RawMessage) any
-	}{
-		"get_me.json":            {tool: "whoami", wrap: passthrough},
-		"get_usage.json":         {tool: "get_account_info", wrap: wrap("usage")},
-		"get_usage_quotas.json":  {tool: "get_account_info", wrap: wrap("quotas")},
-		"get_billing_plan.json":  {tool: "get_account_info", wrap: wrap("plan")},
-		"list_repos.json":        {tool: "list_repos", wrap: passthrough},
-		"create_repo.json":       {tool: "create_repo", wrap: passthrough},
-		"get_repo.json":          {tool: "get_repo", wrap: passthrough},
-		"get_model.json":         {tool: "get_model", wrap: passthrough},
-		"get_model_status.json":  {tool: "get_conversion_status", wrap: passthrough},
-		"set_default_model.json": {tool: "set_default_model", wrap: passthrough},
-		"import_model.json":      {tool: "import_model", wrap: passthrough},
+	// wraps records, for each fixture FixtureTool maps, how its body appears
+	// inside the mapped tool's structured content; the tool itself comes from
+	// the shared FixtureTool table.
+	wraps := map[string]func(t *testing.T, body json.RawMessage) any{
+		"get_me":            passthrough,
+		"get_usage":         wrap("usage"),
+		"get_usage_quotas":  wrap("quotas"),
+		"get_billing_plan":  wrap("plan"),
+		"list_repos":        passthrough,
+		"create_repo":       passthrough,
+		"get_repo":          passthrough,
+		"get_model":         passthrough,
+		"get_model_status":  passthrough,
+		"set_default_model": passthrough,
+		"import_model":      passthrough,
 		// The targets listing only ever reaches a caller inside the
 		// include_targets envelope, next to the model it belongs to.
-		"list_model_targets.json": {tool: "get_model", wrap: func(t *testing.T, body json.RawMessage) any {
+		"list_model_targets": func(t *testing.T, body json.RawMessage) any {
 			t.Helper()
 			return map[string]any{
 				"model":   unmarshalAny(t, fixtureBody(t, "get_model.json")),
 				"targets": unmarshalAny(t, body),
 			}
-		}},
-		"get_deployment_options.json": {tool: "get_deployment_info", wrap: passthrough},
-		"get_deployment_guide.json":   {tool: "get_deployment_info", wrap: passthrough},
-		"get_general_report.json":     {tool: "get_model_report", wrap: passthrough},
-		"get_llm_report.json":         {tool: "get_model_report", wrap: passthrough},
-		"get_package_report.json":     {tool: "get_model_report", wrap: passthrough},
-		"list_library_models.json":    {tool: "search_library", wrap: passthrough},
+		},
+		"get_deployment_options": passthrough,
+		"get_deployment_guide":   passthrough,
+		"get_general_report":     passthrough,
+		"get_llm_report":         passthrough,
+		"get_package_report":     passthrough,
+		"list_library_models":    passthrough,
 		// The provider list only ever reaches a caller inside the
 		// include_providers envelope, next to a model page.
-		"list_library_providers.json": {tool: "search_library", wrap: func(t *testing.T, body json.RawMessage) any {
+		"list_library_providers": func(t *testing.T, body json.RawMessage) any {
 			t.Helper()
 			return map[string]any{
 				"models":    unmarshalAny(t, fixtureBody(t, "list_library_models.json")),
 				"providers": unmarshalAny(t, body),
 			}
-		}},
-		"get_library_model.json":             {tool: "get_library_model", wrap: passthrough},
-		"create_download_authorization.json": {tool: "request_model_download", wrap: passthrough},
+		},
+		"get_library_model":             passthrough,
+		"create_download_authorization": passthrough,
+	}
+	for stem := range wraps {
+		_, mapped := FixtureTool[stem]
+		assert.True(t, mapped, "wrap entry %s matches no FixtureTool fixture", stem)
 	}
 
-	// Fixtures that flow through no MCP tool. Every fixture must be mapped or
-	// listed here, so a new backend fixture forces a deliberate decision.
-	skipped := map[string]string{
-		"create_model_upload.json":          "model upload tools arrive with the upload PR",
-		"create_model_upload_conflict.json": "409 error exchange; also an upload fixture",
-		"get_model_upload.json":             "model upload tools arrive with the upload PR",
-		"complete_model_upload.json":        "model upload tools arrive with the upload PR",
-		"cancel_model_upload.json":          "model upload tools arrive with the upload PR",
-		"error_401.json":                    "error envelope: failures surface as IsError text, not structuredContent",
-		"error_422.json":                    "error envelope: failures surface as IsError text, not structuredContent",
-		"error_422_enum.json":               "error envelope: failures surface as IsError text, not structuredContent",
-	}
-
-	entries, err := os.ReadDir(fixturesDir(t))
+	entries, err := os.ReadDir(fixturetest.Dir(t))
 	require.NoError(t, err)
 	for _, entry := range entries {
 		name := entry.Name()
 		if filepath.Ext(name) != ".json" {
 			continue
 		}
-		tc, mapped := cases[name]
+		stem := strings.TrimSuffix(name, ".json")
+		tool, mapped := FixtureTool[stem]
 		if !mapped {
-			_, isSkipped := skipped[name]
+			// Every fixture must be mapped or skipped, so a new backend
+			// fixture forces a deliberate decision.
+			_, isSkipped := FixtureSkipped[stem]
 			assert.True(t, isSkipped,
-				"fixture %s is neither mapped to a tool nor on the documented skip list", name)
+				"fixture %s is neither in FixtureTool nor in FixtureSkipped (internal/mcp/fixtures.go)", name)
 			continue
 		}
+		_, alsoSkipped := FixtureSkipped[stem]
+		assert.False(t, alsoSkipped, "fixture %s is both mapped and skipped", name)
+		wrapFn, ok := wraps[stem]
+		require.True(t, ok, "fixture %s is mapped to %s but has no wrap entry here", name, tool)
 		t.Run(name, func(t *testing.T) {
-			validateAgainst(t, tc.tool, tc.wrap(t, fixtureBody(t, name)))
+			validateAgainst(t, tool, wrapFn(t, fixtureBody(t, name)))
 		})
 	}
-	for name := range cases {
-		_, err := os.Stat(filepath.Join(fixturesDir(t), name))
-		assert.NoError(t, err, "mapped fixture %s no longer exists", name)
+	for stem := range FixtureTool {
+		_, err := os.Stat(filepath.Join(fixturetest.Dir(t), stem+".json"))
+		assert.NoError(t, err, "mapped fixture %s no longer exists", stem)
+	}
+	for stem := range FixtureSkipped {
+		_, err := os.Stat(filepath.Join(fixturetest.Dir(t), stem+".json"))
+		assert.NoError(t, err, "skipped fixture %s no longer exists", stem)
 	}
 }
 

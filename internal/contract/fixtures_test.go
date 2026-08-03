@@ -21,10 +21,11 @@
 //
 // Fixtures carry placeholder tokens for volatile values; typed Go fields
 // (time.Time, enums) cannot unmarshal a literal "<datetime>", so the tokens
-// are first concretized to type-valid sample values (concretize) before the
-// round-trip. The comparison treats JSON null and an absent key as equal so a
-// nullable field rendered null by the backend but `omitempty`-dropped by the
-// generated struct is not a false positive.
+// are first concretized to type-valid sample values before the round-trip.
+// The comparison treats JSON null and an absent key as equal so a nullable
+// field rendered null by the backend but `omitempty`-dropped by the generated
+// struct is not a false positive. The fixture loading, concretization, and
+// comparison helpers are shared with internal/mcp via internal/fixturetest.
 package contract
 
 import (
@@ -39,12 +40,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
+	"github.com/zetic-ai/melange-cli/internal/fixturetest"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
 
@@ -53,138 +54,13 @@ const (
 	testUA   = "melange-cli/test (contract)"
 )
 
-// ---------------------------------------------------------------------------
-// fixture types
-// ---------------------------------------------------------------------------
-
-type fixture struct {
-	Request  fixtureRequest  `json:"request"`
-	Response fixtureResponse `json:"response"`
-}
-
-type fixtureRequest struct {
-	Method  string            `json:"method"`
-	Path    string            `json:"path"`
-	Headers map[string]string `json:"headers"`
-	Body    json.RawMessage   `json:"body"`
-}
-
-type fixtureResponse struct {
-	Status  int               `json:"status"`
-	Headers map[string]string `json:"headers"`
-	Body    json.RawMessage   `json:"body"`
-}
-
-func fixturesDir(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot locate caller for fixtures dir")
-	}
-	// internal/contract/fixtures_test.go -> repo root.
-	root := filepath.Join(filepath.Dir(file), "..", "..")
-	dir := filepath.Join(root, "openapi", "fixtures")
-	if _, err := os.Stat(dir); err != nil {
-		t.Fatalf("fixtures dir %s: %v", dir, err)
-	}
-	return dir
-}
-
-func loadFixture(t *testing.T, name string) fixture {
-	t.Helper()
-	path := filepath.Join(fixturesDir(t), name+".json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading fixture %s: %v", name, err)
-	}
-	var fx fixture
-	if err := json.Unmarshal(data, &fx); err != nil {
-		t.Fatalf("decoding fixture %s: %v", name, err)
-	}
-	return fx
-}
-
-// ---------------------------------------------------------------------------
-// placeholder concretization + structural comparison
-// ---------------------------------------------------------------------------
-
-// concreteFor maps each normalization placeholder to a type-valid sample the
-// generated structs can unmarshal (time.Time, enums, plain strings). The value
-// only has to be well-formed for its Go type; the round-trip compares the
-// concretized input against the re-marshaled output, so the exact sample is
-// irrelevant as long as it survives the round-trip unchanged.
-var concreteFor = map[string]string{
-	"<id>":         "00000000000000000000000000000000",
-	"<uuid>":       "00000000000000000000000000000000",
-	"<datetime>":   "2026-01-01T00:00:00Z",
-	"<request_id>": "req_sample",
-	"<signed-url>": "https://storage.example/sample?sig=1",
-	"<target_id>":  "tm_1",
-}
-
-// concretize replaces every placeholder token that appears inside JSON string
-// values with its type-valid sample, so typed Go fields can unmarshal it.
-// Placeholders only ever occupy (or are embedded in) JSON strings, so a plain
-// token substitution on the raw JSON text is exact and reversible.
-func concretize(raw json.RawMessage) json.RawMessage {
-	s := string(raw)
-	for token, sample := range concreteFor {
-		s = strings.ReplaceAll(s, token, sample)
-	}
-	return json.RawMessage(s)
-}
-
-// canonicalize decodes JSON into a generic tree with nulls dropped and every
-// number coerced to float64, so the comparison treats (a) an explicit null and
-// an absent key as equal — a nullable field the backend renders null but a
-// generated `omitempty` field drops — and (b) numeric-representation artifacts
-// as equal — JSON has no int/float distinction, so a fixture `1.0` and Go's
-// re-marshaled `1` must compare equal.
-func canonicalize(raw []byte) (any, error) {
-	var v any
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	if err := dec.Decode(&v); err != nil {
-		return nil, err
-	}
-	return dropNulls(v), nil
-}
-
-func dropNulls(v any) any {
-	switch t := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(t))
-		for k, val := range t {
-			if val == nil {
-				continue
-			}
-			out[k] = dropNulls(val)
-		}
-		return out
-	case []any:
-		out := make([]any, len(t))
-		for i, val := range t {
-			out[i] = dropNulls(val)
-		}
-		return out
-	case json.Number:
-		f, err := t.Float64()
-		if err != nil {
-			return t
-		}
-		return f
-	default:
-		return v
-	}
-}
-
 // roundTrip unmarshals concretized fixture body JSON into dst (a pointer to a
 // generated type), re-marshals it, and asserts the re-marshaled tree matches
 // the concretized input (nulls/absent treated equal). A field the generated
 // type does not model is dropped on re-marshal and surfaces here as a diff.
 func roundTrip(t *testing.T, name string, body json.RawMessage, dst any) {
 	t.Helper()
-	concrete := concretize(body)
+	concrete := fixturetest.Concretize(body)
 
 	// Strict decode: an unknown field in the fixture that the generated type
 	// does not model is itself a contract gap (the CLI would silently ignore
@@ -201,11 +77,11 @@ func roundTrip(t *testing.T, name string, body json.RawMessage, dst any) {
 		t.Fatalf("%s: re-marshaling %T: %v", name, dst, err)
 	}
 
-	want, err := canonicalize(concrete)
+	want, err := fixturetest.Canonicalize(concrete)
 	if err != nil {
 		t.Fatalf("%s: canonicalizing fixture body: %v", name, err)
 	}
-	got, err := canonicalize(remarshaled)
+	got, err := fixturetest.Canonicalize(remarshaled)
 	if err != nil {
 		t.Fatalf("%s: canonicalizing re-marshaled body: %v", name, err)
 	}
@@ -230,7 +106,7 @@ func mustJSON(v any) string {
 // own concretized response so the generated WithResponse call succeeds.
 func driveRequest(
 	t *testing.T,
-	fx fixture,
+	fx fixturetest.Fixture,
 	call func(ctx context.Context, c *gen.ClientWithResponses) error,
 ) *http.Request {
 	t.Helper()
@@ -239,9 +115,9 @@ func driveRequest(
 	reg.Register(
 		func(req *http.Request) bool {
 			return strings.EqualFold(req.Method, fx.Request.Method) &&
-				pathMatches(stubPath, req.URL.Path)
+				fixturetest.PathMatches(stubPath, req.URL.Path)
 		},
-		httpmock.JSONResponse(fx.Response.Status, concretize(fx.Response.Body)),
+		httpmock.JSONResponse(fx.Response.Status, fixturetest.Concretize(fx.Response.Body)),
 	)
 
 	client, err := api.NewClient(api.Options{
@@ -263,47 +139,19 @@ func driveRequest(
 	return reg.Requests[0]
 }
 
-// pathSegments splits a URL path (dropping any query string) into segments.
-func pathSegments(p string) []string {
-	if i := strings.IndexByte(p, '?'); i >= 0 {
-		p = p[:i]
-	}
-	return strings.Split(strings.Trim(p, "/"), "/")
-}
-
 // placeholderPathToWildcard leaves the fixture path as-is; placeholder segments
-// (e.g. "<uuid>") are treated as wildcards by pathMatches.
+// (e.g. "<uuid>") are treated as wildcards by fixturetest.PathMatches.
 func placeholderPathToWildcard(p string) string { return p }
-
-// pathMatches compares a fixture path (whose variable segments are placeholder
-// tokens like "<uuid>") against an actual path segment-by-segment, treating any
-// "<...>" fixture segment as a wildcard.
-func pathMatches(fixturePath, actualPath string) bool {
-	want := pathSegments(fixturePath)
-	got := pathSegments(actualPath)
-	if len(want) != len(got) {
-		return false
-	}
-	for i := range want {
-		if strings.HasPrefix(want[i], "<") && strings.HasSuffix(want[i], ">") {
-			continue // wildcard segment
-		}
-		if want[i] != got[i] {
-			return false
-		}
-	}
-	return true
-}
 
 // assertRequest checks the captured outgoing request against the fixture's
 // request: method, path (placeholders wildcarded), and — for bodies — a
 // structural comparison after concretizing the fixture body.
-func assertRequest(t *testing.T, name string, fx fixture, got *http.Request) {
+func assertRequest(t *testing.T, name string, fx fixturetest.Fixture, got *http.Request) {
 	t.Helper()
 	if !strings.EqualFold(got.Method, fx.Request.Method) {
 		t.Fatalf("%s: request method = %s, want %s", name, got.Method, fx.Request.Method)
 	}
-	if !pathMatches(fx.Request.Path, got.URL.Path) {
+	if !fixturetest.PathMatches(fx.Request.Path, got.URL.Path) {
 		t.Fatalf("%s: request path = %s, want %s (placeholders wildcarded)",
 			name, got.URL.Path, fx.Request.Path)
 	}
@@ -321,11 +169,11 @@ func assertRequest(t *testing.T, name string, fx fixture, got *http.Request) {
 	if err != nil {
 		t.Fatalf("%s: reading captured request body: %v", name, err)
 	}
-	want, err := canonicalize(concretize(fx.Request.Body))
+	want, err := fixturetest.Canonicalize(fixturetest.Concretize(fx.Request.Body))
 	if err != nil {
 		t.Fatalf("%s: canonicalizing fixture request body: %v", name, err)
 	}
-	gotTree, err := canonicalize(gotBody)
+	gotTree, err := fixturetest.Canonicalize(gotBody)
 	if err != nil {
 		t.Fatalf("%s: canonicalizing captured request body: %v", name, err)
 	}
@@ -339,51 +187,13 @@ func assertRequest(t *testing.T, name string, fx fixture, got *http.Request) {
 // per-operation coverage table
 // ---------------------------------------------------------------------------
 
-// segAfter returns the path segment immediately following marker in the
-// fixture path (e.g. the account name after "repos"), or "" if absent.
-func segAfter(p, marker string) string {
-	segs := pathSegments(p)
-	for i, s := range segs {
-		if s == marker && i+1 < len(segs) {
-			return segs[i+1]
-		}
-	}
-	return ""
-}
-
-// repoCoords pulls the {account, repo} pair out of a "/v1/repos/{a}/{r}/..."
-// fixture path. The values are placeholder-free literals from the fixtures
-// (stable account/repo names), so they drive the generated path builders.
-func repoCoords(p string) (account, repo string) {
-	segs := pathSegments(p)
-	for i, s := range segs {
-		if s == "repos" && i+2 < len(segs) {
-			return segs[i+1], segs[i+2]
-		}
-	}
-	return "", ""
-}
-
 // modelKey / uploadId pull the trailing key out of the relevant subpaths.
-func afterModels(p string) string { return segAfter(p, "models") }
-func uploadID(p string) string    { return segAfter(p, "uploads") }
+func afterModels(p string) string { return fixturetest.SegmentAfter(p, "models") }
+func uploadID(p string) string    { return fixturetest.SegmentAfter(p, "uploads") }
 
 // targetID pulls the opaque target id out of a
 // "/models/{key}/targets/{target_id}/download-authorizations" path.
-func targetID(p string) string { return segAfter(p, "targets") }
-
-// libraryCoords pulls the {account, repo} pair out of a
-// "/v1/library/models/{account}/{repo}" fixture path (get_library_model). The
-// repos-based repoCoords does not apply to the library namespace.
-func libraryCoords(p string) (account, repo string) {
-	segs := pathSegments(p)
-	for i, s := range segs {
-		if s == "models" && i+2 < len(segs) {
-			return segs[i+1], segs[i+2]
-		}
-	}
-	return "", ""
-}
+func targetID(p string) string { return fixturetest.SegmentAfter(p, "targets") }
 
 // contractCase couples a fixture with the response type to round-trip and the
 // generated call to drive for its request. Either half may be nil when the
@@ -391,7 +201,7 @@ func libraryCoords(p string) (account, repo string) {
 type contractCase struct {
 	name         string
 	responseBody func() any
-	drive        func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error
+	drive        func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error
 }
 
 func cases() []contractCase {
@@ -399,7 +209,7 @@ func cases() []contractCase {
 		{
 			name:         "get_me",
 			responseBody: func() any { return &gen.MeResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				_, err := c.GetMeWithResponse(ctx)
 				return err
 			},
@@ -407,9 +217,9 @@ func cases() []contractCase {
 		{
 			name:         "create_repo",
 			responseBody: func() any { return &gen.RepoResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				var body gen.CreateRepoJSONRequestBody
-				if err := json.Unmarshal(concretize(fx.Request.Body), &body); err != nil {
+				if err := json.Unmarshal(fixturetest.Concretize(fx.Request.Body), &body); err != nil {
 					return err
 				}
 				_, err := c.CreateRepoWithResponse(ctx, body)
@@ -419,8 +229,8 @@ func cases() []contractCase {
 		{
 			name:         "get_repo",
 			responseBody: func() any { return &gen.RepoResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.GetRepoWithResponse(ctx, a, r)
 				return err
 			},
@@ -428,7 +238,7 @@ func cases() []contractCase {
 		{
 			name:         "list_repos",
 			responseBody: func() any { return &gen.PagedRepoResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				limit, offset := 20, 0
 				_, err := c.ListReposWithResponse(ctx, &gen.ListReposParams{
 					Limit: &limit, Offset: &offset,
@@ -439,7 +249,7 @@ func cases() []contractCase {
 		{
 			name:         "get_deployment_options",
 			responseBody: func() any { return &gen.DeploymentOptionsResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				_, err := c.GetDeploymentOptionsWithResponse(ctx)
 				return err
 			},
@@ -447,10 +257,10 @@ func cases() []contractCase {
 		{
 			name:         "create_model_upload",
 			responseBody: func() any { return &gen.ModelUploadResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				var body gen.CreateModelUploadJSONRequestBody
-				if err := json.Unmarshal(concretize(fx.Request.Body), &body); err != nil {
+				if err := json.Unmarshal(fixturetest.Concretize(fx.Request.Body), &body); err != nil {
 					return err
 				}
 				_, err := c.CreateModelUploadWithResponse(
@@ -461,8 +271,8 @@ func cases() []contractCase {
 		{
 			name:         "get_model_upload",
 			responseBody: func() any { return &gen.ModelUploadDetailResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.GetModelUploadWithResponse(ctx, a, r, uploadID(fx.Request.Path))
 				return err
 			},
@@ -470,8 +280,8 @@ func cases() []contractCase {
 		{
 			name:         "cancel_model_upload",
 			responseBody: func() any { return &gen.CancelModelUploadResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.CancelModelUploadWithResponse(
 					ctx, a, r, uploadID(fx.Request.Path), &gen.CancelModelUploadParams{})
 				return err
@@ -480,8 +290,8 @@ func cases() []contractCase {
 		{
 			name:         "complete_model_upload",
 			responseBody: func() any { return &gen.CompleteModelUploadResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.CompleteModelUploadWithResponse(
 					ctx, a, r, uploadID(fx.Request.Path), &gen.CompleteModelUploadParams{})
 				return err
@@ -490,8 +300,8 @@ func cases() []contractCase {
 		{
 			name:         "get_model_status",
 			responseBody: func() any { return &gen.ModelStatusResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.GetModelStatusWithResponse(ctx, a, r, afterModels(fx.Request.Path))
 				return err
 			},
@@ -499,8 +309,8 @@ func cases() []contractCase {
 		{
 			name:         "get_model",
 			responseBody: func() any { return &gen.ModelDetailResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.GetModelWithResponse(ctx, a, r, afterModels(fx.Request.Path))
 				return err
 			},
@@ -508,8 +318,8 @@ func cases() []contractCase {
 		{
 			name:         "get_deployment_guide",
 			responseBody: func() any { return &gen.DeploymentGuideResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				query, err := url.Parse(fx.Request.Path)
 				if err != nil {
 					return err
@@ -527,8 +337,8 @@ func cases() []contractCase {
 		{
 			name:         "list_model_targets",
 			responseBody: func() any { return &gen.ListModelTargetsResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.ListModelTargetsWithResponse(ctx, a, r, afterModels(fx.Request.Path))
 				return err
 			},
@@ -536,8 +346,8 @@ func cases() []contractCase {
 		{
 			name:         "get_general_report",
 			responseBody: func() any { return &gen.GeneralReportResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.GetGeneralReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
 				return err
 			},
@@ -545,8 +355,8 @@ func cases() []contractCase {
 		{
 			name:         "get_llm_report",
 			responseBody: func() any { return &gen.LlmReportResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.GetLlmReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
 				return err
 			},
@@ -554,8 +364,8 @@ func cases() []contractCase {
 		{
 			name:         "get_package_report",
 			responseBody: func() any { return &gen.PackageReportResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.GetPackageReportWithResponse(ctx, a, r, afterModels(fx.Request.Path))
 				return err
 			},
@@ -563,8 +373,8 @@ func cases() []contractCase {
 		{
 			name:         "set_default_model",
 			responseBody: func() any { return &gen.ModelSummary{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.SetDefaultModelWithResponse(ctx, a, r, afterModels(fx.Request.Path))
 				return err
 			},
@@ -572,10 +382,10 @@ func cases() []contractCase {
 		{
 			name:         "import_model",
 			responseBody: func() any { return &gen.ImportModelResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				var body gen.ImportModelJSONRequestBody
-				if err := json.Unmarshal(concretize(fx.Request.Body), &body); err != nil {
+				if err := json.Unmarshal(fixturetest.Concretize(fx.Request.Body), &body); err != nil {
 					return err
 				}
 				_, err := c.ImportModelWithResponse(ctx, a, r, &gen.ImportModelParams{}, body)
@@ -585,8 +395,8 @@ func cases() []contractCase {
 		{
 			name:         "create_download_authorization",
 			responseBody: func() any { return &gen.DownloadAuthorizationResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := repoCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
 				_, err := c.CreateDownloadAuthorizationWithResponse(
 					ctx, a, r, afterModels(fx.Request.Path), targetID(fx.Request.Path),
 					&gen.CreateDownloadAuthorizationParams{})
@@ -596,7 +406,7 @@ func cases() []contractCase {
 		{
 			name:         "list_library_models",
 			responseBody: func() any { return &gen.PagedLibraryModelItem{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				limit, offset := 20, 0
 				_, err := c.ListLibraryModelsWithResponse(ctx, &gen.ListLibraryModelsParams{
 					Limit: &limit, Offset: &offset,
@@ -607,8 +417,8 @@ func cases() []contractCase {
 		{
 			name:         "get_library_model",
 			responseBody: func() any { return &gen.LibraryModelDetailResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
-				a, r := libraryCoords(fx.Request.Path)
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.LibraryCoords(fx.Request.Path)
 				_, err := c.GetLibraryModelWithResponse(ctx, a, r)
 				return err
 			},
@@ -616,7 +426,7 @@ func cases() []contractCase {
 		{
 			name:         "list_library_providers",
 			responseBody: func() any { return &gen.ListLibraryProvidersResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				_, err := c.ListLibraryProvidersWithResponse(ctx)
 				return err
 			},
@@ -624,7 +434,7 @@ func cases() []contractCase {
 		{
 			name:         "get_usage",
 			responseBody: func() any { return &gen.UsageResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				_, err := c.GetUsageWithResponse(ctx)
 				return err
 			},
@@ -632,7 +442,7 @@ func cases() []contractCase {
 		{
 			name:         "get_usage_quotas",
 			responseBody: func() any { return &gen.UsageQuotasResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				_, err := c.GetUsageQuotasWithResponse(ctx)
 				return err
 			},
@@ -640,7 +450,7 @@ func cases() []contractCase {
 		{
 			name:         "get_billing_plan",
 			responseBody: func() any { return &gen.BillingPlanResponse{} },
-			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixture) error {
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
 				_, err := c.GetBillingPlanWithResponse(ctx)
 				return err
 			},
@@ -678,7 +488,7 @@ func TestResponseRoundTrip(t *testing.T) {
 	for _, tc := range cases() {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			fx := loadFixture(t, tc.name)
+			fx := fixturetest.Load(t, tc.name)
 			if tc.responseBody == nil {
 				t.Skip("no response body type wired")
 			}
@@ -696,7 +506,7 @@ func TestRequestShape(t *testing.T) {
 			continue // response-only fixture (error envelopes)
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			fx := loadFixture(t, tc.name)
+			fx := fixturetest.Load(t, tc.name)
 			got := driveRequest(t, fx, func(ctx context.Context, c *gen.ClientWithResponses) error {
 				return tc.drive(ctx, c, fx)
 			})
@@ -709,7 +519,7 @@ func TestRequestShape(t *testing.T) {
 // without a corresponding CLI case — otherwise cross-client drift on a new
 // operation could slip through unnoticed.
 func TestAllFixturesCovered(t *testing.T) {
-	dir := fixturesDir(t)
+	dir := fixturetest.Dir(t)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("reading fixtures dir: %v", err)
@@ -733,7 +543,7 @@ func TestAllFixturesCovered(t *testing.T) {
 // TestFixtureSourceDigest prevents a copied or hand-edited fixture set from
 // claiming provenance from a backend commit whose published payloads differ.
 func TestFixtureSourceDigest(t *testing.T) {
-	dir := fixturesDir(t)
+	dir := fixturetest.Dir(t)
 	raw, err := os.ReadFile(filepath.Join(dir, "..", "FIXTURES_SOURCE"))
 	if err != nil {
 		t.Fatalf("reading fixture source: %v", err)

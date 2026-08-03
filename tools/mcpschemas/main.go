@@ -31,6 +31,8 @@ import (
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+
+	"github.com/zetic-ai/melange-cli/internal/mcp"
 )
 
 func main() {
@@ -462,6 +464,24 @@ func (g *generator) envelope(description string, required []any, props ...prop) 
 // whatever *.json files were there so a renamed tool cannot leave a stale
 // schema behind.
 func (g *generator) writeAll(dir string) error {
+	names := make(map[string]bool, len(catalog))
+	for _, entry := range catalog {
+		if names[entry.name] {
+			return fmt.Errorf("catalog names %q twice", entry.name)
+		}
+		names[entry.name] = true
+	}
+	// Duplicate-check against the fixture mapping internal/mcp exports: every
+	// tool a contract fixture maps to must have a generated schema here, so a
+	// tool renamed in one place cannot leave the other pointing at nothing.
+	for fixture, toolName := range mcp.FixtureTool {
+		if !names[toolName] {
+			return fmt.Errorf(
+				"internal/mcp.FixtureTool maps fixture %q to tool %q, which is not in this catalog",
+				fixture, toolName)
+		}
+	}
+
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -475,13 +495,7 @@ func (g *generator) writeAll(dir string) error {
 		}
 	}
 
-	names := make(map[string]bool, len(catalog))
 	for _, entry := range catalog {
-		if names[entry.name] {
-			return fmt.Errorf("catalog names %q twice", entry.name)
-		}
-		names[entry.name] = true
-
 		schema, err := entry.build(g)
 		if err != nil {
 			return fmt.Errorf("%s: %w", entry.name, err)
