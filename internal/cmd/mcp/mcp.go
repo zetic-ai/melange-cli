@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os/signal"
+	"syscall"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -56,9 +58,9 @@ Only API-backed tools are served: anything that would touch the caller's own
 machine (model uploads) stays stdio-only, because the server cannot see the
 caller's files.
 
-Exit codes: 0 clean disconnect (stdio) or completed drain after SIGINT
-(http), 1 serve failure such as an address already in use, 2 usage error,
-130 interrupted (stdio).`,
+Exit codes: 0 clean disconnect (stdio) or completed drain after SIGINT or
+SIGTERM (http), 1 serve failure such as an address already in use or a drain
+that overran its deadline, 2 usage error, 130 interrupted (stdio).`,
 		Example: `  # Register with Claude Code
   claude mcp add melange -- melange mcp
 
@@ -167,10 +169,9 @@ func runHTTP(cmd *cobra.Command, f *cmdutil.Factory, hc httpConfig) error {
 		return err
 	}
 
-	// SIGINT/SIGTERM cancels cmd.Context(); ListenAndServe treats that as the
-	// operator's stop signal, drains in-flight requests, and returns nil — so
-	// an interrupted HTTP server exits 0, where an interrupted stdio server
-	// exits 130.
+	// A canceled context is the operator's stop signal: ListenAndServe drains
+	// in-flight requests and returns nil, so a signaled HTTP server exits 0
+	// where a signaled stdio server exits 130.
 	//
 	// The divergence is deliberate. 130 means "the user interrupted work that
 	// did not finish"; it is the right answer for a stdio session abandoned
@@ -179,7 +180,21 @@ func runHTTP(cmd *cobra.Command, f *cmdutil.Factory, hc httpConfig) error {
 	// (systemd, ECS, Kubernetes) reads a nonzero status on an orderly stop as
 	// a crash and reports it as one. A drain that overruns its deadline does
 	// abandon work, and ListenAndServe returns an error there (exit 1).
-	return srv.ListenAndServe(cmd.Context())
+	//
+	// Both stop signals have to reach that drain. SIGINT is handled
+	// process-wide (cmd/melange/main.go); SIGTERM is added here, derived from
+	// cmd.Context() so SIGINT still propagates, and deliberately not added
+	// there. Those same supervisors stop a process by sending SIGTERM,
+	// waiting, then SIGKILL, so a drain wired only to SIGINT is a drain that
+	// never runs in production — but for a one-shot command SIGTERM's default
+	// action, terminate now, is the right answer. Making it cancelable
+	// process-wide would let any command that does not thread its context
+	// through ignore `kill` entirely, turning a reliable stop into a hang. A
+	// server is the case where the signal must be a request rather than a
+	// kill, because there is in-flight work to finish.
+	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGTERM)
+	defer stop()
+	return srv.ListenAndServe(ctx)
 }
 
 // resolveHost returns the API host this deployment fronts, following the

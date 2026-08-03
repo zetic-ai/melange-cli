@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -96,18 +97,45 @@ func TestRunMCPHTTPOnlyFlagsWithStdio(t *testing.T) {
 	}
 }
 
-// TestRunMCPHTTPTransportSIGINTExitsZero is the exit-code contract for the
+// TestRunMCPHTTPTransportStopSignalsExitZero is the exit-code contract for the
 // HTTP transport driven through the real entry point, including the real
-// signal handler: a running server that receives SIGINT drains and exits 0.
+// signal handlers: a running server that receives a stop signal drains and
+// exits 0.
 //
-// This is the one place the divergence from stdio (where SIGINT exits 130) is
-// provable end to end, and it matters operationally: every process supervisor
-// that will run this command reads a nonzero status on an orderly stop as a
-// crash.
-func TestRunMCPHTTPTransportSIGINTExitsZero(t *testing.T) {
+// This is the one place the divergence from stdio (where these signals exit
+// 130) is provable end to end, and it matters operationally: every process
+// supervisor that will run this command reads a nonzero status on an orderly
+// stop as a crash.
+//
+// Both signals are covered because they are wired in different places and a
+// supervisor only ever sends one of them. SIGINT comes from the process-wide
+// handler in Run(); SIGTERM is installed by the mcp command's own HTTP path,
+// and it is the signal that actually matters in production — systemd, ECS and
+// Kubernetes all stop a container by sending SIGTERM, waiting, then SIGKILL.
+// If that wiring is dropped, SIGTERM's default action terminates this test
+// binary outright, so the regression cannot pass silently.
+func TestRunMCPHTTPTransportStopSignalsExitZero(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("a process cannot deliver SIGINT to itself on Windows")
+		t.Skip("a process cannot deliver stop signals to itself on Windows")
 	}
+	for _, tt := range []struct {
+		name string
+		sig  os.Signal
+	}{
+		{"SIGINT", os.Interrupt},
+		{"SIGTERM", syscall.SIGTERM},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assertHTTPServerDrainsOnSignal(t, tt.sig)
+		})
+	}
+}
+
+// assertHTTPServerDrainsOnSignal starts a real `melange mcp --transport http`
+// through Run(), proves it is serving, delivers sig to this process, and
+// requires an exit code of 0.
+func assertHTTPServerDrainsOnSignal(t *testing.T, sig os.Signal) {
+	t.Helper()
 
 	// The server logs the address it bound to stderr, so the listen address
 	// can stay :0 and the test never races another process for a fixed port.
@@ -141,7 +169,7 @@ func TestRunMCPHTTPTransportSIGINTExitsZero(t *testing.T) {
 	}
 
 	// Prove it is really serving before signaling: this also guarantees the
-	// signal handler is installed, so the SIGINT below can never fall through
+	// signal handler is installed, so the signal below can never fall through
 	// to the default action and kill the test binary.
 	resp, err := http.Get("http://" + listenAddr + "/healthz")
 	require.NoError(t, err)
@@ -150,13 +178,13 @@ func TestRunMCPHTTPTransportSIGINTExitsZero(t *testing.T) {
 
 	self, err := os.FindProcess(os.Getpid())
 	require.NoError(t, err)
-	require.NoError(t, self.Signal(os.Interrupt))
+	require.NoError(t, self.Signal(sig))
 
 	select {
 	case got := <-code:
-		assert.Equal(t, 0, got, "SIGINT during an HTTP serve is an orderly stop: exit 0, not 130")
+		assert.Equal(t, 0, got, "%v during an HTTP serve is an orderly stop: exit 0, not 130", sig)
 	case <-time.After(30 * time.Second):
-		t.Fatal("the server did not exit after SIGINT")
+		t.Fatalf("the server did not exit after %v", sig)
 	}
 	_ = w.Close()
 	_ = r.Close()

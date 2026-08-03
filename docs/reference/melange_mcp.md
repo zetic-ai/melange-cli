@@ -24,9 +24,9 @@ Only API-backed tools are served: anything that would touch the caller's own
 machine (model uploads) stays stdio-only, because the server cannot see the
 caller's files.
 
-Exit codes: 0 clean disconnect (stdio) or completed drain after SIGINT
-(http), 1 serve failure such as an address already in use, 2 usage error,
-130 interrupted (stdio).
+Exit codes: 0 clean disconnect (stdio) or completed drain after SIGINT or
+SIGTERM (http), 1 serve failure such as an address already in use or a drain
+that overran its deadline, 2 usage error, 130 interrupted (stdio).
 
 ```
 melange mcp [flags]
