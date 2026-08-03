@@ -160,7 +160,7 @@ func uploadModelHandler(d Deps) mcp.ToolHandlerFor[uploadModelArgs, any] {
 		}
 		// The flow hands the held session lock back on every non-nil Result
 		// (also partial ones next to an error); this handler owns releasing it.
-		defer func() { _ = res.CloseLease() }()
+		defer func() { closeUploadLease(d.logger(), res) }()
 
 		if runErr != nil {
 			return d.toolError(d.uploadFlowError(runErr, events)), nil, nil
@@ -329,6 +329,21 @@ func (d Deps) uploadFlowError(err error, events uploadflow.Events) error {
 	}
 
 	return err
+}
+
+// closeUploadLease releases the session lock the flow handed back. Like the
+// state cleanup it is best-effort — the call's outcome is already decided —
+// but a failed unlock leaves the session's .lock file behind still held by
+// this process, which stalls every later upload_model call for that session
+// until the server exits. That is invisible from the tool result, so it has to
+// be diagnosable in the server log. CloseLease is nil-safe on both the Result
+// and the lease and only reports failures when it actually held one, so a
+// non-nil error implies a non-nil res.
+func closeUploadLease(log *slog.Logger, res *uploadflow.Result) {
+	if err := res.CloseLease(); err != nil {
+		log.Warn("upload_model: releasing the upload session lock failed",
+			"session_id", res.SessionID, "error", err.Error())
+	}
 }
 
 // removeUploadState discards a terminal session's local resume state.
