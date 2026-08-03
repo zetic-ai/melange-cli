@@ -99,6 +99,11 @@ type Server struct {
 	httpServer *http.Server
 	limiter    *rateLimiter
 	ipLimiter  *rateLimiter
+	// schemaCache is shared by every per-request server so tool schemas are
+	// resolved once per process instead of once per request. Only resolved
+	// schemas are shared — nothing credential-scoped touches it, so it does
+	// not weaken the per-request isolation this design exists for.
+	schemaCache *sdk.SchemaCache
 	// drainTimeout is how long ListenAndServe's Shutdown waits for in-flight
 	// requests. Set to the drainTimeout constant by New; tests shorten it to
 	// reach the forced-close path without a 25-second wait.
@@ -123,7 +128,7 @@ func New(cfg Config) (*Server, error) {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	s := &Server{cfg: cfg, logger: logger, drainTimeout: drainTimeout}
+	s := &Server{cfg: cfg, logger: logger, drainTimeout: drainTimeout, schemaCache: sdk.NewSchemaCache()}
 
 	mcpHandler := sdk.NewStreamableHTTPHandler(s.getServer, &sdk.StreamableHTTPOptions{
 		// Stateless: no Mcp-Session-Id is issued or required, every POST is
@@ -263,6 +268,10 @@ func (s *Server) getServer(req *http.Request) *sdk.Server {
 		// Local tools act on the server's own filesystem, which is
 		// meaningless (and dangerous) for a remote caller.
 		EnableLocalTools: false,
+		// The process-wide cache: per-request servers re-register the same
+		// (memoized) schema pointers, so resolution happens on the first
+		// request only.
+		SchemaCache: s.schemaCache,
 	})
 }
 

@@ -17,7 +17,7 @@ const serverName = "melange"
 func New(deps Deps, opts Options) *mcp.Server {
 	s := mcp.NewServer(
 		&mcp.Implementation{Name: serverName, Version: deps.Version},
-		&mcp.ServerOptions{Logger: deps.logger()},
+		&mcp.ServerOptions{Logger: deps.logger(), SchemaCache: opts.SchemaCache},
 	)
 	registerAccount(s, deps)
 	registerRepo(s, deps)

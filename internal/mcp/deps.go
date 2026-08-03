@@ -1,6 +1,10 @@
 package mcp
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
 
 // Deps carries the shared dependencies every MCP tool handler receives.
 type Deps struct {
@@ -36,6 +40,16 @@ type Options struct {
 	// runs on the same machine as the caller (e.g. file uploads over stdio).
 	// False hides them, as an HTTP transport must.
 	EnableLocalTools bool
+	// SchemaCache, when non-nil, lets the SDK reuse resolved tool schemas
+	// across every server built with the same cache. The HTTP transport
+	// builds one server per request for token isolation and passes one
+	// process-wide cache so schema resolution is paid once, not per request;
+	// combined with this package's memoized schema pointers (the cache keys
+	// provided schemas by pointer identity) that removes almost all of the
+	// per-request construction cost. Nil — stdio's default — keeps the SDK
+	// resolving per server, exactly as before. It lives on Options, not Deps,
+	// because it shapes construction and is never seen by a tool handler.
+	SchemaCache *mcp.SchemaCache
 }
 
 // logger returns the configured logger, or a discard logger when nil, so
