@@ -89,14 +89,16 @@ type Server struct {
 	handler    http.Handler
 	httpServer *http.Server
 	limiter    *rateLimiter
+	ipLimiter  *rateLimiter
 
 	mu   sync.Mutex
 	addr net.Addr
 }
 
 // New validates cfg and assembles the server. The handler chain for the MCP
-// endpoint is (outermost first): Origin policy -> bearer auth -> bearer
-// capture -> rate limit -> streamable handler; /healthz bypasses all of it.
+// endpoint is (outermost first): IP rate limit -> Origin policy -> bearer
+// auth -> bearer capture -> token rate limit -> streamable handler; /healthz
+// bypasses all of it.
 func New(cfg Config) (*Server, error) {
 	if cfg.Listen == "" {
 		return nil, errors.New("httpserver: Listen address is required")
@@ -127,9 +129,10 @@ func New(cfg Config) (*Server, error) {
 		verifier = NewMeVerifier(s.apiOptions).Verify
 	}
 	s.limiter = newRateLimiter(nil)
+	s.ipLimiter = newIPRateLimiter(nil)
 
-	// Rate limiting sits AFTER RequireBearerToken deliberately (the brief's
-	// alternative order). What that buys:
+	// Token rate limiting sits AFTER RequireBearerToken deliberately (the
+	// brief's alternative order). What that buys:
 	//   - Enforcement never runs for unauthenticated junk: a credential-less
 	//     flood is answered with cheap SDK 401s and cannot create buckets,
 	//     evict a legitimate client's bucket, or consume anyone's budget.
@@ -140,16 +143,31 @@ func New(cfg Config) (*Server, error) {
 	//   - Key extraction needs no pre-auth middleware: the Authorization
 	//     header is still on the request, and parseBearer mirrors the SDK's
 	//     own extraction exactly.
-	// Known cost: with --validate-tokens, an invalid-token spray reaches
-	// /v1/me before any limiting (negatives are uncached by design). Those
-	// are cheap upstream 401s, and the API owns brute-force defense for its
-	// own auth endpoint; the limiter's job is protecting THIS instance and
-	// the tool path behind it.
-	protected := originMiddleware(cfg.AllowedOrigins,
-		AuthMiddleware(verifier, s.limiter.middleware(mcpHandler)))
+	// The cost of that order is that nothing keyed on the token can throttle
+	// a caller who never presents a valid one, which is why a second, coarse
+	// limiter runs in FRONT of the whole chain, keyed on the source IP.
+	// Without it, a single host spraying unique bearers gets an unlimited
+	// budget: in validate mode every spray request reaches /v1/me (negatives
+	// are uncached by design), and in passthrough mode every request mints a
+	// fresh token-hash bucket, each with a full burst. Neither is bounded by
+	// the token limiter. The IP budget is deliberately generous
+	// (ipRateLimitPerMinute) so a NAT'd fleet of legitimate agents never
+	// feels it — it only bites machine-speed sprays from one address. A
+	// distributed spray defeats it by construction; that is the backend's and
+	// the WAF's problem, not a single instance's.
+	protected := s.ipLimiter.middleware(
+		originMiddleware(cfg.AllowedOrigins,
+			AuthMiddleware(verifier, s.limiter.middleware(mcpHandler))))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
+	// Non-GET on the health path is a method error, not MCP traffic. Without
+	// this route the "/" catch-all would hand e.g. POST /healthz to the
+	// protected chain and answer 401, which reads to an operator like a
+	// broken probe credential rather than the wrong method. (The MCP endpoint
+	// itself stays path-agnostic: the deployment, not this binary, decides
+	// what prefix the transport is published under.)
+	mux.HandleFunc("/healthz", healthzMethodNotAllowed)
 	mux.Handle("/", protected)
 	s.handler = mux
 
@@ -271,6 +289,12 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 		Status  string `json:"status"`
 		Version string `json:"version,omitempty"`
 	}{Status: "ok", Version: s.cfg.Version})
+}
+
+// healthzMethodNotAllowed answers non-GET requests to the health path.
+func healthzMethodNotAllowed(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Allow", "GET, HEAD")
+	http.Error(w, "Method Not Allowed: /healthz serves GET", http.StatusMethodNotAllowed)
 }
 
 // originMiddleware enforces the browser-origin posture for a public host.

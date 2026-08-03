@@ -99,6 +99,22 @@ func TestRateLimiterBoundedMemory(t *testing.T) {
 	require.False(t, ok, "fresh bucket still enforces the burst")
 }
 
+// TestLimitPoliciesRefillWithinIdleTTL pins the invariant eviction depends on:
+// every policy's bucket must refill completely within bucketIdleTTL, or
+// dropping an "idle" bucket would hand a throttled client a free burst
+// instead of being lossless. A future retuning that breaks the relationship
+// fails here rather than silently opening the limiter.
+func TestLimitPoliciesRefillWithinIdleTTL(t *testing.T) {
+	for name, p := range map[string]limitPolicy{"token": tokenLimitPolicy, "ip": ipLimitPolicy} {
+		t.Run(name, func(t *testing.T) {
+			full := time.Duration(p.burst / p.refillPerSecond * float64(time.Second))
+			assert.LessOrEqual(t, full, bucketIdleTTL,
+				"a %s bucket takes %s to refill, longer than the %s idle TTL: eviction would no longer be lossless",
+				name, full, bucketIdleTTL)
+		})
+	}
+}
+
 func TestClientKey(t *testing.T) {
 	const token = "ztp_super_secret_0123456789"
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -119,6 +135,190 @@ func TestClientKey(t *testing.T) {
 	anon := httptest.NewRequest(http.MethodPost, "/", nil)
 	anon.RemoteAddr = "203.0.113.9:4321"
 	assert.Equal(t, "ip:203.0.113.9", clientKey(anon))
+}
+
+// TestRemoteIPKeyIgnoresProxyHeaders pins the pre-auth key against the one
+// mistake that would neuter the limiter: trusting a client-settable
+// forwarding header would let a single sprayer mint a fresh bucket per forged
+// hop.
+func TestRemoteIPKeyIgnoresProxyHeaders(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.RemoteAddr = "203.0.113.9:4321"
+	req.Header.Set("X-Forwarded-For", "198.51.100.7")
+	req.Header.Set("X-Real-IP", "198.51.100.8")
+	req.Header.Set("Forwarded", "for=198.51.100.9")
+
+	assert.Equal(t, "ip:203.0.113.9", remoteIPKey(req),
+		"the pre-auth key must come from the peer address, never a spoofable header")
+}
+
+// initializeMCP drives one full, valid MCP POST through the server handler
+// from a chosen peer address. Going through the handler (not a socket) is
+// what makes distinct client IPs expressible: httptest's real listener would
+// report 127.0.0.1 for every request.
+func initializeMCP(h http.Handler, remoteAddr, token string) *httptest.ResponseRecorder {
+	return sprayRequest(h, remoteAddr, token, "application/json")
+}
+
+// sprayMCP is initializeMCP's cheap twin, for the bulk of a burst where only
+// the count matters. The wrong Content-Type makes the SDK answer 415 before
+// it builds a per-request MCP server (verified in streamable.go: the
+// media-type check precedes getServer), while the request still traverses
+// every middleware this test cares about — IP limiter, Origin, auth, token
+// limiter. Sending hundreds of full initializes instead would spend tens of
+// seconds under -race constructing identical tool catalogs; each subtest
+// still sends one real initializeMCP to pin that genuine MCP traffic is
+// counted the same way.
+func sprayMCP(h http.Handler, remoteAddr, token string) *httptest.ResponseRecorder {
+	return sprayRequest(h, remoteAddr, token, "text/plain")
+}
+
+func sprayRequest(h http.Handler, remoteAddr, token, contentType string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(initializeBody))
+	req.RemoteAddr = remoteAddr
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// exhaustIPBudget spends a peer's entire pre-auth budget and asserts the next
+// request is throttled.
+func exhaustIPBudget(t *testing.T, h http.Handler, peer string) {
+	t.Helper()
+	for i := 0; i < ipRateLimitBurst; i++ {
+		require.NotEqual(t, http.StatusTooManyRequests,
+			sprayMCP(h, peer, fmt.Sprintf("spray-token-%05d", i)).Code,
+			"request %d is still within the IP burst", i+1)
+	}
+	require.Equal(t, http.StatusTooManyRequests, sprayMCP(h, peer, "one-too-many").Code,
+		"the burst is spent, so this address must now be throttled")
+}
+
+// freezeIPLimiter pins the pre-auth limiter's clock so refill cannot race a
+// spray: exactly ipRateLimitBurst requests pass, then 429.
+func freezeIPLimiter(srv *Server) {
+	srv.ipLimiter.mu.Lock()
+	defer srv.ipLimiter.mu.Unlock()
+	srv.ipLimiter.now = newFakeClock().Now
+}
+
+// TestIPRateLimitStopsTokenSpray is the reason the pre-auth limiter exists.
+// The token-keyed limiter cannot throttle a caller who never reuses a token:
+// every fresh bearer is a fresh bucket with a full burst. So a single host
+// spraying unique bearers must be stopped by source address instead — in
+// passthrough mode before it mints unlimited buckets, and in validate mode
+// before it turns this server into an amplifier for /v1/me guessing.
+func TestIPRateLimitStopsTokenSpray(t *testing.T) {
+	const peer = "203.0.113.42:5555"
+
+	t.Run("passthrough mode", func(t *testing.T) {
+		stub := newMeStub(t, map[string]string{})
+		srv, _ := newTestServer(t, stub.URL, nil)
+		freezeIPLimiter(srv)
+
+		// Every request carries a token never seen before, so the token
+		// limiter is a no-op by construction: any 429 here is the IP limiter.
+		// Real MCP traffic counts against the same budget as anything else.
+		require.Equal(t, http.StatusOK, initializeMCP(srv.handler, peer, "spray-token-real").Code)
+		for i := 1; i < ipRateLimitBurst; i++ {
+			require.Equal(t, http.StatusUnsupportedMediaType,
+				sprayMCP(srv.handler, peer, fmt.Sprintf("spray-token-%05d", i)).Code,
+				"spray request %d is within the burst, so it is answered by the layers behind the limiter", i+1)
+		}
+
+		rec := sprayMCP(srv.handler, peer, "spray-token-final")
+		assert.Equal(t, http.StatusTooManyRequests, rec.Code,
+			"a unique-bearer spray from one address must be throttled by source IP")
+		assert.Equal(t, "1", rec.Header().Get("Retry-After"),
+			"429 must carry integral Retry-After seconds")
+
+		// And the sprayer cannot buy itself out with a valid request either.
+		assert.Equal(t, http.StatusTooManyRequests,
+			initializeMCP(srv.handler, peer, "spray-token-real-2").Code)
+	})
+
+	t.Run("validate mode", func(t *testing.T) {
+		stub := newCountingMeStub(t, map[string]string{})
+		srv, _ := newTestServer(t, stub.URL, func(c *Config) { c.ValidateTokens = true })
+		freezeIPLimiter(srv)
+
+		for i := 0; i < ipRateLimitBurst; i++ {
+			rec := sprayMCP(srv.handler, peer, fmt.Sprintf("spray-token-%05d", i))
+			require.Equal(t, http.StatusUnauthorized, rec.Code, "spray request %d", i+1)
+		}
+		reached := stub.calls.Load()
+		assert.Equal(t, int64(ipRateLimitBurst), reached,
+			"each in-burst request costs exactly one upstream /v1/me (negatives are uncached)")
+
+		// Past the burst the upstream must stop seeing the spray at all: the
+		// 429 is served before the verifier runs.
+		for i := 0; i < 25; i++ {
+			rec := sprayMCP(srv.handler, peer, fmt.Sprintf("spray-token-over-%05d", i))
+			require.Equal(t, http.StatusTooManyRequests, rec.Code)
+		}
+		assert.Equal(t, reached, stub.calls.Load(),
+			"throttled requests must never reach /v1/me: the pre-auth limiter runs ahead of the verifier")
+	})
+
+	t.Run("distinct client addresses are independent", func(t *testing.T) {
+		stub := newMeStub(t, map[string]string{})
+		srv, _ := newTestServer(t, stub.URL, nil)
+		freezeIPLimiter(srv)
+		exhaustIPBudget(t, srv.handler, peer)
+
+		// A different source address is untouched and serves real MCP traffic.
+		assert.Equal(t, http.StatusOK,
+			initializeMCP(srv.handler, "198.51.100.7:9999", "innocent-token").Code,
+			"one noisy address must not throttle everyone else")
+
+		// A new ephemeral port on the noisy address is the same client, not a
+		// fresh budget.
+		assert.Equal(t, http.StatusTooManyRequests,
+			sprayMCP(srv.handler, "203.0.113.42:6666", "another-token").Code)
+	})
+
+	t.Run("healthz stays exempt", func(t *testing.T) {
+		stub := newMeStub(t, map[string]string{})
+		srv, _ := newTestServer(t, stub.URL, nil)
+		freezeIPLimiter(srv)
+		exhaustIPBudget(t, srv.handler, peer)
+
+		// The liveness probe shares the exhausted address: a throttled
+		// neighbor must never make a deployment look unhealthy.
+		for i := 0; i < 10; i++ {
+			req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+			req.RemoteAddr = peer
+			rec := httptest.NewRecorder()
+			srv.handler.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusOK, rec.Code, "healthz must never be rate limited")
+		}
+	})
+}
+
+// TestHealthzRejectsNonGET pins that the health path never falls through to
+// the MCP chain: a probe sending the wrong method gets a method error, not a
+// 401 that reads like a credential problem.
+func TestHealthzRejectsNonGET(t *testing.T) {
+	_, ts := newTestServer(t, "https://api.invalid", nil)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/healthz", strings.NewReader("{}"))
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Allow"), "GET")
+
+	// HEAD is served by the GET route (Go's ServeMux pairs them), so probes
+	// that avoid bodies still work.
+	headResp, err := http.Head(ts.URL + "/healthz")
+	require.NoError(t, err)
+	defer headResp.Body.Close()
+	assert.Equal(t, http.StatusOK, headResp.StatusCode)
 }
 
 // TestRateLimit429ThroughStack drives the full server: an over-burst client
