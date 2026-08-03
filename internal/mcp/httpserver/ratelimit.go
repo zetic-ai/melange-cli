@@ -106,12 +106,6 @@ func newRateLimiter(now func() time.Time) *rateLimiter {
 	return newLimiter(tokenLimitPolicy, now)
 }
 
-// newIPRateLimiter builds the pre-auth, IP-keyed limiter; now == nil selects
-// the real clock.
-func newIPRateLimiter(now func() time.Time) *rateLimiter {
-	return newLimiter(ipLimitPolicy, now)
-}
-
 func newLimiter(policy limitPolicy, now func() time.Time) *rateLimiter {
 	if now == nil {
 		now = time.Now

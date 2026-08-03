@@ -80,6 +80,15 @@ type Config struct {
 	// any tool runs; false relays any non-empty bearer to the API unchecked
 	// (PassthroughVerifier).
 	ValidateTokens bool
+
+	// ipLimit, when non-nil, replaces the production pre-auth limiter tuning.
+	// Test-only seam, unexported so no caller outside this package can weaken
+	// the production policy: volume tests drive hundreds of requests through
+	// one httptest listener, which pins every request to 127.0.0.1 and would
+	// exhaust the shared per-IP budget the tests are not about. The policy is
+	// fixed before the middleware chain is assembled (New), never mutated on a
+	// live limiter, so no synchronization question arises.
+	ipLimit *limitPolicy
 }
 
 // Server is the Streamable HTTP front end for the Melange MCP server.
@@ -90,6 +99,10 @@ type Server struct {
 	httpServer *http.Server
 	limiter    *rateLimiter
 	ipLimiter  *rateLimiter
+	// drainTimeout is how long ListenAndServe's Shutdown waits for in-flight
+	// requests. Set to the drainTimeout constant by New; tests shorten it to
+	// reach the forced-close path without a 25-second wait.
+	drainTimeout time.Duration
 
 	mu   sync.Mutex
 	addr net.Addr
@@ -110,7 +123,7 @@ func New(cfg Config) (*Server, error) {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	s := &Server{cfg: cfg, logger: logger}
+	s := &Server{cfg: cfg, logger: logger, drainTimeout: drainTimeout}
 
 	mcpHandler := sdk.NewStreamableHTTPHandler(s.getServer, &sdk.StreamableHTTPOptions{
 		// Stateless: no Mcp-Session-Id is issued or required, every POST is
@@ -129,7 +142,11 @@ func New(cfg Config) (*Server, error) {
 		verifier = NewMeVerifier(s.apiOptions).Verify
 	}
 	s.limiter = newRateLimiter(nil)
-	s.ipLimiter = newIPRateLimiter(nil)
+	ipPolicy := ipLimitPolicy
+	if cfg.ipLimit != nil {
+		ipPolicy = *cfg.ipLimit
+	}
+	s.ipLimiter = newLimiter(ipPolicy, nil)
 
 	// Token rate limiting sits AFTER RequireBearerToken deliberately (the
 	// brief's alternative order). What that buys:
@@ -207,12 +224,12 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
-	s.logger.Info("mcp http server draining", "timeout", drainTimeout.String())
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	s.logger.Info("mcp http server draining", "timeout", s.drainTimeout.String())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), s.drainTimeout)
 	defer cancel()
 	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
 		s.httpServer.Close()
-		return fmt.Errorf("drain deadline (%s) exceeded, connections force-closed: %w", drainTimeout, err)
+		return fmt.Errorf("drain deadline (%s) exceeded, connections force-closed: %w", s.drainTimeout, err)
 	}
 	<-serveErr // Serve has returned http.ErrServerClosed.
 	return nil
