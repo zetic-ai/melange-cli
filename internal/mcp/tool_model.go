@@ -122,18 +122,18 @@ func setDefaultModelHandler(d Deps) mcp.ToolHandlerFor[setDefaultModelArgs, any]
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in setDefaultModelArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.SetDefaultModelWithResponse(ctx, account, name, in.ModelKey)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		return rawResult(resp.Body), nil, nil
 	}
@@ -152,20 +152,20 @@ func importModelHandler(d Deps) mcp.ToolHandlerFor[importModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in importModelArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.ImportModelWithResponse(ctx, account, name,
 			&gen.ImportModelParams{IdempotencyKey: newIdempotencyKeyParam()},
 			gen.ImportModelJSONRequestBody{HfRepo: in.HfRepo})
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		return rawResult(resp.Body), nil, nil
 	}
@@ -183,20 +183,20 @@ func listModelsHandler(d Deps) mcp.ToolHandlerFor[listModelsArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in listModelsArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		limit := pageLimit(in.Limit)
 		resp, err := g.ListModelsWithResponse(ctx, account, name,
 			&gen.ListModelsParams{Limit: &limit, Offset: &in.Offset})
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		return rawResult(resp.Body), nil, nil
 	}
@@ -222,18 +222,18 @@ func getModelHandler(d Deps) mcp.ToolHandlerFor[getModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in getModelArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.GetModelWithResponse(ctx, account, name, in.ModelKey)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if !in.IncludeTargets {
 			return rawResult(resp.Body), nil, nil
@@ -241,10 +241,10 @@ func getModelHandler(d Deps) mcp.ToolHandlerFor[getModelArgs, any] {
 
 		targets, err := g.ListModelTargetsWithResponse(ctx, account, name, in.ModelKey)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(targets.StatusCode(), targets.HTTPResponse, targets.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		envelope, err := marshalEnvelope(modelWithTargets{Model: resp.Body, Targets: targets.Body})
 		if err != nil {
@@ -279,11 +279,11 @@ func getConversionStatusHandler(d Deps) mcp.ToolHandlerFor[conversionStatusArgs,
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in conversionStatusArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 
 		// fetch reports the raw status body and whether the API considers the
@@ -306,7 +306,7 @@ func getConversionStatusHandler(d Deps) mcp.ToolHandlerFor[conversionStatusArgs,
 		if in.WaitSeconds <= 0 {
 			body, _, err := fetch(ctx)
 			if err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
 			return rawResult(body), nil, nil
 		}
@@ -332,12 +332,12 @@ func getConversionStatusHandler(d Deps) mcp.ToolHandlerFor[conversionStatusArgs,
 		case errors.Is(err, wait.ErrTimeout):
 			if latest == nil {
 				// The budget expired before any status came back.
-				return toolError(fmt.Errorf(
+				return d.toolError(fmt.Errorf(
 					"no conversion status returned within %ds; call get_conversion_status again",
 					in.WaitSeconds)), nil, nil
 			}
 		case err != nil:
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		return rawResult(latest), nil, nil
 	}

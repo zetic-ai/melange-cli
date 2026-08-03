@@ -60,14 +60,14 @@ func whoamiHandler(d Deps) mcp.ToolHandlerFor[whoamiArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, _ whoamiArgs) (*mcp.CallToolResult, any, error) {
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.GetMeWithResponse(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		return rawResult(resp.Body), nil, nil
 	}
@@ -115,7 +115,7 @@ func getAccountInfoHandler(d Deps) mcp.ToolHandlerFor[accountInfoArgs, any] {
 				default:
 					// Unreachable through the schema; kept so a drifting enum
 					// reports the bad argument instead of an empty envelope.
-					return toolError(fmt.Errorf(
+					return d.toolError(fmt.Errorf(
 						"invalid include %q: expected usage, quotas, or plan", section)), nil, nil
 				}
 			}
@@ -123,7 +123,7 @@ func getAccountInfoHandler(d Deps) mcp.ToolHandlerFor[accountInfoArgs, any] {
 
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 
 		// Sections are fetched in envelope order regardless of how `include`
@@ -132,30 +132,30 @@ func getAccountInfoHandler(d Deps) mcp.ToolHandlerFor[accountInfoArgs, any] {
 		if wantUsage {
 			resp, err := g.GetUsageWithResponse(ctx)
 			if err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
 			if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
 			info.Usage = resp.Body
 		}
 		if wantQuotas {
 			resp, err := g.GetUsageQuotasWithResponse(ctx)
 			if err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
 			if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
 			info.Quotas = resp.Body
 		}
 		if wantPlan {
 			resp, err := g.GetBillingPlanWithResponse(ctx)
 			if err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
 			if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
 			info.Plan = resp.Body
 		}

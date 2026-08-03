@@ -87,7 +87,7 @@ func searchLibraryHandler(d Deps) mcp.ToolHandlerFor[searchLibraryArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in searchLibraryArgs) (*mcp.CallToolResult, any, error) {
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		limit := pageLimit(in.Limit)
 		params := &gen.ListLibraryModelsParams{Limit: &limit, Offset: &in.Offset}
@@ -106,10 +106,10 @@ func searchLibraryHandler(d Deps) mcp.ToolHandlerFor[searchLibraryArgs, any] {
 		}
 		resp, err := g.ListLibraryModelsWithResponse(ctx, params)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if !in.IncludeProviders {
 			return rawResult(resp.Body), nil, nil
@@ -117,10 +117,10 @@ func searchLibraryHandler(d Deps) mcp.ToolHandlerFor[searchLibraryArgs, any] {
 
 		providers, err := g.ListLibraryProvidersWithResponse(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(providers.StatusCode(), providers.HTTPResponse, providers.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		envelope, err := marshalEnvelope(libraryWithProviders{Models: resp.Body, Providers: providers.Body})
 		if err != nil {
@@ -142,18 +142,18 @@ func getLibraryModelHandler(d Deps) mcp.ToolHandlerFor[getLibraryModelArgs, any]
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in getLibraryModelArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitLibraryModel(in.LibraryModel)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.GetLibraryModelWithResponse(ctx, account, name)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		return rawResult(resp.Body), nil, nil
 	}

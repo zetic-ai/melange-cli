@@ -61,10 +61,10 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in requestModelDownloadArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if !in.Confirm {
-			return toolError(fmt.Errorf(
+			return d.toolError(fmt.Errorf(
 				"request_model_download refused: confirm is not true, so nothing was authorized "+
 					"and nothing was charged. Downloading target %s counts against the account's "+
 					"bandwidth quota: obtain explicit consent from the user first, then call "+
@@ -74,7 +74,7 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		// A quota 429 here is not transient, so it must not be retried; the
 		// fresh Idempotency-Key still lets the transport replay one logical
@@ -83,10 +83,10 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 			account, name, in.ModelKey, in.TargetID,
 			&gen.CreateDownloadAuthorizationParams{IdempotencyKey: newIdempotencyKeyParam()})
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if in.IncludeURLs {
 			return rawResult(resp.Body), nil, nil
