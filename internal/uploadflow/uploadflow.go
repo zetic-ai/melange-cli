@@ -154,6 +154,17 @@ type Result struct {
 	Lease       *upload.SessionLease
 }
 
+// CloseLease releases the session lock the Result carries. It is nil-safe on
+// both the Result and the Lease so frontends can defer it unconditionally
+// right where Run or Resume returns — the invariant is "non-nil Result ⇔ lock
+// held", and this helper makes honoring it on every path a one-liner.
+func (r *Result) CloseLease() error {
+	if r == nil || r.Lease == nil {
+		return nil
+	}
+	return r.Lease.Close()
+}
+
 // Phase names where in the flow an error occurred, so frontends can attach
 // phase-appropriate remediation.
 type Phase int

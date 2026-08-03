@@ -74,7 +74,7 @@ func getModelReportHandler(d Deps) mcp.ToolHandlerFor[modelReportArgs, any] {
 		if err := api.GenError(status, httpResp, body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(body), nil, nil
+		return rawResult(body)
 	}
 }
 

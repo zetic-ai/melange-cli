@@ -69,7 +69,7 @@ func whoamiHandler(d Deps) mcp.ToolHandlerFor[whoamiArgs, any] {
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -166,6 +166,6 @@ func getAccountInfoHandler(d Deps) mcp.ToolHandlerFor[accountInfoArgs, any] {
 			// programming fault, not something the caller can act on.
 			return nil, nil, fmt.Errorf("building get_account_info envelope: %w", err)
 		}
-		return rawResult(envelope), nil, nil
+		return rawResult(envelope)
 	}
 }

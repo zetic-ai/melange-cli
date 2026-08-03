@@ -112,7 +112,7 @@ func searchLibraryHandler(d Deps) mcp.ToolHandlerFor[searchLibraryArgs, any] {
 			return d.toolError(err), nil, nil
 		}
 		if !in.IncludeProviders {
-			return rawResult(resp.Body), nil, nil
+			return rawResult(resp.Body)
 		}
 
 		providers, err := g.ListLibraryProvidersWithResponse(ctx)
@@ -128,7 +128,7 @@ func searchLibraryHandler(d Deps) mcp.ToolHandlerFor[searchLibraryArgs, any] {
 			// programming fault, not something the caller can act on.
 			return nil, nil, fmt.Errorf("building search_library envelope: %w", err)
 		}
-		return rawResult(envelope), nil, nil
+		return rawResult(envelope)
 	}
 }
 
@@ -155,7 +155,7 @@ func getLibraryModelHandler(d Deps) mcp.ToolHandlerFor[getLibraryModelArgs, any]
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 

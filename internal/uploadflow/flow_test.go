@@ -89,12 +89,20 @@ func setup(t *testing.T) *env {
 	return &env{reg: reg, orch: orch, events: events, clock: clock, ctx: context.Background()}
 }
 
-// closeResult releases the lease the flow hands back on every non-nil Result.
+// closeResult releases the lease the flow hands back on every non-nil Result,
+// through the nil-safe helper frontends are expected to use.
 func closeResult(t *testing.T, res *uploadflow.Result) {
 	t.Helper()
-	if res != nil && res.Lease != nil {
-		require.NoError(t, res.Lease.Close())
-	}
+	require.NoError(t, res.CloseLease())
+}
+
+// TestCloseLeaseNilSafe pins the helper's contract: deferring it on a nil
+// Result (no session yet) or a Result without a Lease must be a no-op, so a
+// frontend can close on every path with one unconditional defer.
+func TestCloseLeaseNilSafe(t *testing.T) {
+	var res *uploadflow.Result
+	require.NoError(t, res.CloseLease())
+	require.NoError(t, (&uploadflow.Result{}).CloseLease())
 }
 
 // modelDir creates a model file plus an input file with fixed contents.

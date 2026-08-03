@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -32,12 +33,27 @@ func marshalEnvelope(envelope any) ([]byte, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
+// errEmptyBody reports a success path that reached rawResult with no bytes.
+// It is a programming fault (Go-error class, not a toolError): every 2xx
+// exchange these tools wrap carries a JSON body, so an empty one means a
+// handler wired the wrong bytes through. The class became reachable with the
+// upload-session operations, hence the explicit guard instead of silently
+// framing an empty success payload.
+var errEmptyBody = errors.New("mcp: empty response body on a successful tool call (programming fault)")
+
 // rawResult wraps a 2xx API response body as a tool result: the exact bytes
 // go in StructuredContent (json.RawMessage — never re-marshaled through typed
 // structs) with a TextContent mirror for clients that ignore structured
 // output. Oversized mirrors are truncated with a notice pointing at
 // structuredContent.
-func rawResult(body []byte) *mcp.CallToolResult {
+//
+// It returns the full handler triple so passthrough handlers stay one-liners;
+// the Out value is always nil (byte-exact passthrough never uses typed
+// output). An empty body returns errEmptyBody instead of a result.
+func rawResult(body []byte) (*mcp.CallToolResult, any, error) {
+	if len(body) == 0 {
+		return nil, nil, errEmptyBody
+	}
 	// Mirror Exporter.Write: trim trailing JSON whitespace (RFC 8259) so the
 	// text mirror never ends in a dangling newline.
 	trimmed := bytes.TrimRight(body, " \t\r\n")
@@ -50,5 +66,5 @@ func rawResult(body []byte) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content:           []mcp.Content{&mcp.TextContent{Text: mirror}},
 		StructuredContent: json.RawMessage(body),
-	}
+	}, nil, nil
 }

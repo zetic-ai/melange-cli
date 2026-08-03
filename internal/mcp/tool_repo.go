@@ -157,7 +157,7 @@ func createRepoHandler(d Deps) mcp.ToolHandlerFor[createRepoArgs, any] {
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -220,7 +220,7 @@ func updateRepoHandler(d Deps) mcp.ToolHandlerFor[updateRepoArgs, any] {
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -276,7 +276,7 @@ func deleteRepoHandler(d Deps) mcp.ToolHandlerFor[deleteRepoArgs, any] {
 			// not something the caller can act on.
 			return nil, nil, fmt.Errorf("building delete_repo result: %w", err)
 		}
-		return rawResult(result), nil, nil
+		return rawResult(result)
 	}
 }
 
@@ -306,7 +306,7 @@ func listReposHandler(d Deps) mcp.ToolHandlerFor[listReposArgs, any] {
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -333,6 +333,6 @@ func getRepoHandler(d Deps) mcp.ToolHandlerFor[getRepoArgs, any] {
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }

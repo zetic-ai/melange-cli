@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "upload_model envelope: session is the raw upload-complete response; model repeats its model reference when registration produced one; status is the latest conversion status a wait_seconds poll observed.",
+  "properties": {
+    "model": {
+      "description": "Reference to the CommonModel a completed session registered.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "version"
+      ],
+      "title": "ModelRef",
+      "type": "object"
+    },
+    "session": {
+      "description": "Session state after a complete call (ADR-5 status vocabulary).\n\n`state` is the session state machine value; verification/promotion\nfailures surface as `state == \"FAILED\"` + `failure_code` on a 200 —\nthe POST itself succeeded, the SESSION failed. `terminal` means the\nsession will not transition further (CONVERTING is terminal for the\nsession: conversion progress continues on the model status endpoint).",
+      "properties": {
+        "failure_code": {
+          "title": "Failure Code",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "description": "Reference to the CommonModel a completed session registered.",
+              "properties": {
+                "key": {
+                  "title": "Key",
+                  "type": "string"
+                },
+                "version": {
+                  "title": "Version",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "key",
+                "version"
+              ],
+              "title": "ModelRef",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "CREATED",
+            "UPLOADING",
+            "VERIFYING",
+            "DISPATCH_PENDING",
+            "CONVERTING",
+            "FAILED",
+            "CANCELED",
+            "EXPIRED"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "terminal": {
+          "title": "Terminal",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "terminal"
+      ],
+      "title": "CompleteModelUploadResponse",
+      "type": "object"
+    },
+    "status": {
+      "description": "Public conversion status of a model (the CLI `--wait` poll target).\n\n`state` is a STABLE public enum (lowercase snake) mapped from the\ninternal model status; `failure_code` is always a sanitized stable code,\nnever raw pipeline exception text.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "download_ready": {
+          "title": "Download Ready",
+          "type": "boolean"
+        },
+        "failure_code": {
+          "title": "Failure Code",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progress": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Progress",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "retry_after": {
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Retry After",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stage": {
+          "enum": [
+            "convert",
+            "benchmark",
+            null
+          ],
+          "title": "Stage",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "converting",
+            "optimizing",
+            "ready",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "terminal": {
+          "title": "Terminal",
+          "type": "boolean"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "terminal",
+        "download_ready",
+        "created_at",
+        "updated_at",
+        "failure_code",
+        "stage",
+        "progress",
+        "retry_after"
+      ],
+      "title": "ModelStatusResponse",
+      "type": "object"
+    }
+  },
+  "required": [
+    "session"
+  ],
+  "type": "object"
+}
