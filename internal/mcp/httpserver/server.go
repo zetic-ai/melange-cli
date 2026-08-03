@@ -144,7 +144,7 @@ func New(cfg Config) (*Server, error) {
 
 	verifier := auth.TokenVerifier(PassthroughVerifier)
 	if cfg.ValidateTokens {
-		verifier = NewMeVerifier(s.apiOptions).Verify
+		verifier = NewMeVerifier(s.apiOptions, logger).Verify
 	}
 	s.limiter = newRateLimiter(nil)
 	ipPolicy := ipLimitPolicy

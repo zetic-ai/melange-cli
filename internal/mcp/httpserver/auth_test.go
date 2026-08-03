@@ -87,11 +87,31 @@ func testAPIOptions(host string) func(string) api.Options {
 	}
 }
 
-// newTestMeVerifier builds a MeVerifier against host with an injected clock.
+// newTestMeVerifier builds a MeVerifier against host with an injected clock
+// and a discarding logger.
 func newTestMeVerifier(host string, clk *fakeClock) *MeVerifier {
-	v := NewMeVerifier(testAPIOptions(host))
+	return newTestMeVerifierLogging(host, clk, nil)
+}
+
+// newTestMeVerifierLogging is newTestMeVerifier with the failure detail routed
+// to a caller-supplied logger, so a test can assert what was withheld from the
+// response body actually reached the operator.
+func newTestMeVerifierLogging(host string, clk *fakeClock, logger *slog.Logger) *MeVerifier {
+	v := NewMeVerifier(testAPIOptions(host), logger)
+	// Safe before the verifier is shared: now is written only here, during
+	// setup, and read under mu once requests start.
 	v.now = clk.Now
 	return v
+}
+
+// deadHost starts and immediately closes an httptest server, yielding a URL
+// whose host is reachable only as a connection refusal — the transport-failure
+// fixture.
+func deadHost(t *testing.T) string {
+	t.Helper()
+	s := httptest.NewServer(http.HandlerFunc(http.NotFound))
+	s.Close()
+	return s.URL
 }
 
 func TestPassthroughVerifier(t *testing.T) {
@@ -293,14 +313,66 @@ func TestMeVerifierUpstreamFailureIsNotInvalidToken(t *testing.T) {
 	_, err := v.Verify(ctx, "token-a", nil)
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, auth.ErrInvalidToken)
+	assert.NotContains(t, err.Error(), stub.Listener.Addr().String(),
+		"a status-derived message must not name the backend either")
 
-	// Transport failure (connection refused).
-	dead := httptest.NewServer(http.HandlerFunc(http.NotFound))
-	dead.Close()
-	v = newTestMeVerifier(dead.URL, newFakeClock())
+	// Transport failure (connection refused). The SDK copies err.Error() into
+	// the 500 body, so this error must be the static sentinel and must not
+	// carry the *url.Error's host or dial detail.
+	deadURL := deadHost(t)
+	logs := &syncBuffer{}
+	v = newTestMeVerifierLogging(deadURL, newFakeClock(),
+		slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	_, err = v.Verify(ctx, "token-a", nil)
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, auth.ErrInvalidToken)
+	assert.ErrorIs(t, err, errValidationUnavailable)
+	assert.Equal(t, "token validation unavailable", err.Error(),
+		"transport-failure text is static: the SDK publishes it verbatim in the 500 body")
+	deadAddr := strings.TrimPrefix(deadURL, "http://")
+	assert.NotContains(t, err.Error(), deadAddr)
+
+	// ...and the withheld detail is not merely dropped: an operator can still
+	// see which host failed and why.
+	captured := logs.String()
+	assert.Contains(t, captured, deadAddr, "the failing backend address must reach the server log")
+	assert.Contains(t, captured, "connection refused", "the dial fault must reach the server log")
+	assert.NotContains(t, captured, "token-a", "the bearer must never reach the server log")
+}
+
+// TestMeVerifierTransportFailureLeaksNothingThroughStack is the wire-level
+// proof of the same contract: with --validate-tokens and the backend
+// unreachable, any caller holding a bearer-shaped string gets a 500 whose body
+// names neither the backend nor the network fault, while the server log keeps
+// both.
+func TestMeVerifierTransportFailureLeaksNothingThroughStack(t *testing.T) {
+	const bearer = "super-secret-transport-bearer-1414213562"
+	deadURL := deadHost(t)
+	deadAddr := strings.TrimPrefix(deadURL, "http://")
+
+	logs := &syncBuffer{}
+	_, ts := newTestServer(t, deadURL, func(c *Config) {
+		c.ValidateTokens = true
+		c.Logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
+
+	resp := postMCP(t, ts.URL, bearer, "", strings.NewReader(initializeBody))
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode,
+		"an unreachable backend is not a bad credential: 500, not 401")
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	body := string(raw)
+
+	assert.Contains(t, body, "token validation unavailable")
+	assert.NotContains(t, body, deadAddr, "the backend address must never reach the response body")
+	assert.NotContains(t, body, "connection refused", "net-layer detail must never reach the response body")
+	assert.NotContains(t, body, "dial tcp", "net-layer detail must never reach the response body")
+	assert.NotContains(t, body, bearer, "the bearer must never reach the response body")
+
+	captured := logs.String()
+	assert.Contains(t, captured, deadAddr, "the operator must still learn which backend failed")
+	assert.Contains(t, captured, "connection refused", "the operator must still learn why it failed")
+	assert.NotContains(t, captured, bearer, "the bearer must never reach the server log")
 }
 
 // TestMeVerifierCacheBounded pins the size bound under a token spray: the
@@ -375,9 +447,10 @@ func TestBearerNeverInLogs(t *testing.T) {
 	stub := newMeStub(t, map[string]string{good: "ana"})
 
 	logs := &syncBuffer{}
+	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	srv, ts := newTestServer(t, stub.URL, func(c *Config) {
 		c.ValidateTokens = true
-		c.Logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		c.Logger = logger
 	})
 
 	// Successful tool call with the good bearer.
@@ -406,7 +479,15 @@ func TestBearerNeverInLogs(t *testing.T) {
 	}
 	require.True(t, saw429, "burst overrun must produce a 429 for the log-hygiene sweep")
 
+	// Transport failure: the one path that deliberately logs the underlying
+	// error. It must log the backend fault and still no bearer bytes.
+	_, err = newTestMeVerifierLogging(deadHost(t), newFakeClock(), logger).
+		Verify(ctx, good, nil)
+	require.Error(t, err)
+
 	captured := logs.String()
+	assert.Contains(t, captured, "connection refused",
+		"the transport-failure detail must be logged, not silently dropped")
 	assert.NotContains(t, captured, good, "bearer token leaked into server logs")
 	assert.NotContains(t, captured, bad, "rejected bearer leaked into server logs")
 }

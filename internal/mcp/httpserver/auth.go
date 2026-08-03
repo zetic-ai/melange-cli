@@ -3,7 +3,9 @@ package httpserver
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -101,6 +103,16 @@ const (
 	meCacheMaxEntries = 1024
 )
 
+// errValidationUnavailable is the single, static answer for every
+// token-validation failure whose underlying error carries dynamic text. The
+// SDK copies err.Error() verbatim into the HTTP 500 body (go-sdk v1.7.0
+// auth/auth.go), so wrapping a *url.Error — or any error built from the
+// configured API host — would publish the backend's hostname, resolved
+// address, and net-layer detail to whoever holds a bearer-shaped string. The
+// detail is logged server-side instead; the caller learns only that the check
+// could not be completed, which is all it needs to retry.
+var errValidationUnavailable = errors.New("token validation unavailable")
+
 // MeVerifier validates bearer tokens against GET /v1/me on the configured API
 // host (the same host the tools call). Enabled by --validate-tokens: it
 // rejects bad credentials at the door with a 401 instead of letting each tool
@@ -118,8 +130,13 @@ type MeVerifier struct {
 	// hygiene) and host/UA/timeout match the tools.
 	apiOptions func(bearer string) api.Options
 	// now is the cache clock; tests inject a fake (package seam style, see
-	// internal/wait). Guarded by mu so tests can swap it safely.
+	// internal/wait). Set at construction (or by test setup before first use)
+	// and never mutated concurrently.
 	now func() time.Time
+	// logger receives the detail that must not reach the response body —
+	// transport failures and client-construction faults. Never nil (the
+	// constructor substitutes a discard handler) and never given a bearer.
+	logger *slog.Logger
 
 	mu    sync.Mutex
 	cache map[[sha256.Size]byte]meCacheEntry
@@ -131,11 +148,16 @@ type meCacheEntry struct {
 }
 
 // NewMeVerifier builds a MeVerifier; its Verify method is the
-// auth.TokenVerifier.
-func NewMeVerifier(apiOptions func(bearer string) api.Options) *MeVerifier {
+// auth.TokenVerifier. logger receives the failure detail that is withheld from
+// callers; nil discards it.
+func NewMeVerifier(apiOptions func(bearer string) api.Options, logger *slog.Logger) *MeVerifier {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &MeVerifier{
 		apiOptions: apiOptions,
 		now:        time.Now,
+		logger:     logger,
 		cache:      make(map[[sha256.Size]byte]meCacheEntry),
 	}
 }
@@ -155,25 +177,31 @@ func (v *MeVerifier) Verify(ctx context.Context, token string, _ *http.Request) 
 	return info, nil
 }
 
-// validate performs the upstream check. Every error message here is static or
-// status-derived by construction: the SDK writes err.Error() into the HTTP
-// response body, so no upstream body text — and certainly no token bytes —
-// may flow through.
+// validate performs the upstream check. Every error message returned here is
+// static or status-derived by construction: the SDK writes err.Error() into
+// the HTTP response body, so no upstream body text, no infrastructure detail
+// (host, address, dial error) — and certainly no token bytes — may flow
+// through. Anything dynamic goes to the logger instead.
 func (v *MeVerifier) validate(ctx context.Context, token string) (*auth.TokenInfo, error) {
 	client, err := api.NewClient(v.apiOptions(token))
 	if err != nil {
-		return nil, fmt.Errorf("building token validation client: %w", err)
+		// Carries the configured API host (URL parse detail): log only.
+		v.logger.Error("mcp token validation client build failed", "error", err)
+		return nil, errValidationUnavailable
 	}
 	g, err := client.Gen()
 	if err != nil {
-		return nil, fmt.Errorf("building token validation client: %w", err)
+		v.logger.Error("mcp token validation client build failed", "error", err)
+		return nil, errValidationUnavailable
 	}
 	resp, err := g.GetMeWithResponse(ctx)
 	if err != nil {
 		// Transport failure: the token's validity is unknown, so this is not
 		// ErrInvalidToken — the SDK answers 500, and the client retries
-		// instead of discarding a possibly-good credential.
-		return nil, fmt.Errorf("token validation request failed: %w", err)
+		// instead of discarding a possibly-good credential. The *url.Error
+		// names the backend host and the dial fault, so it stays in the log.
+		v.logger.Error("mcp token validation request failed", "error", err)
+		return nil, errValidationUnavailable
 	}
 	switch {
 	case resp.JSON200 != nil:
