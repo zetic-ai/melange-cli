@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
@@ -75,9 +76,9 @@ type Config struct {
 	// endpoint. Empty rejects every request that carries an Origin header;
 	// see originMiddleware for the rationale.
 	AllowedOrigins []string
-	// ValidateTokens verifies bearers against GET /v1/me before serving
-	// (CLI-PR2 Task 2). Until that verifier lands, New rejects true rather
-	// than silently serving unvalidated tokens.
+	// ValidateTokens verifies bearers against GET /v1/me (MeVerifier) before
+	// any tool runs; false relays any non-empty bearer to the API unchecked
+	// (PassthroughVerifier).
 	ValidateTokens bool
 }
 
@@ -87,6 +88,7 @@ type Server struct {
 	logger     *slog.Logger
 	handler    http.Handler
 	httpServer *http.Server
+	limiter    *rateLimiter
 
 	mu   sync.Mutex
 	addr net.Addr
@@ -94,20 +96,13 @@ type Server struct {
 
 // New validates cfg and assembles the server. The handler chain for the MCP
 // endpoint is (outermost first): Origin policy -> bearer auth -> bearer
-// capture -> streamable handler; /healthz bypasses all of it.
+// capture -> rate limit -> streamable handler; /healthz bypasses all of it.
 func New(cfg Config) (*Server, error) {
 	if cfg.Listen == "" {
 		return nil, errors.New("httpserver: Listen address is required")
 	}
 	if cfg.APIHost == "" {
 		return nil, errors.New("httpserver: APIHost is required")
-	}
-	if cfg.ValidateTokens {
-		// Fail-fast guard: the MeVerifier lands in CLI-PR2 Task 2. Until it
-		// does, accepting this flag would hand the operator an unvalidated
-		// relay while they believe tokens are checked. Task 2 deletes this
-		// guard when it wires the real verifier.
-		return nil, errors.New("httpserver: token validation (ValidateTokens) is not implemented yet")
 	}
 	logger := cfg.Logger
 	if logger == nil {
@@ -127,9 +122,31 @@ func New(cfg Config) (*Server, error) {
 		Logger:              logger,
 	})
 
-	// Task 2 swaps tempAllowAllVerifier for the real verifiers (and consults
-	// cfg.ValidateTokens); the chain shape is fixed here.
-	protected := originMiddleware(cfg.AllowedOrigins, AuthMiddleware(tempAllowAllVerifier, mcpHandler))
+	verifier := auth.TokenVerifier(PassthroughVerifier)
+	if cfg.ValidateTokens {
+		verifier = NewMeVerifier(s.apiOptions).Verify
+	}
+	s.limiter = newRateLimiter(nil)
+
+	// Rate limiting sits AFTER RequireBearerToken deliberately (the brief's
+	// alternative order). What that buys:
+	//   - Enforcement never runs for unauthenticated junk: a credential-less
+	//     flood is answered with cheap SDK 401s and cannot create buckets,
+	//     evict a legitimate client's bucket, or consume anyone's budget.
+	//   - Every limited request therefore carries a well-formed bearer, so
+	//     the limiter key is the token hash — the fair unit for an endpoint
+	//     whose clients are tokens, not addresses (many agents share NAT'd
+	//     IPs; one agent may hop IPs).
+	//   - Key extraction needs no pre-auth middleware: the Authorization
+	//     header is still on the request, and parseBearer mirrors the SDK's
+	//     own extraction exactly.
+	// Known cost: with --validate-tokens, an invalid-token spray reaches
+	// /v1/me before any limiting (negatives are uncached by design). Those
+	// are cheap upstream 401s, and the API owns brute-force defense for its
+	// own auth endpoint; the limiter's job is protecting THIS instance and
+	// the tool path behind it.
+	protected := originMiddleware(cfg.AllowedOrigins,
+		AuthMiddleware(verifier, s.limiter.middleware(mcpHandler)))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
