@@ -20,6 +20,8 @@ func New(deps Deps, opts Options) *mcp.Server {
 		&mcp.ServerOptions{Logger: deps.logger()},
 	)
 	registerAccount(s, deps)
+	registerRepo(s, deps)
+	registerModel(s, deps)
 	return s
 }
 
