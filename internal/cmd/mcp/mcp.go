@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
@@ -46,18 +47,8 @@ Exit codes: 0 clean disconnect, 2 usage error, 130 interrupted.`,
 					"invalid --transport %q: only \"stdio\" is supported (\"http\" arrives later)", transport)}
 			}
 
-			deps := mcpserver.Deps{
-				Clients: mcpserver.NewStaticProvider(func() (*gen.ClientWithResponses, error) {
-					client, err := f.ApiClient()
-					if err != nil {
-						return nil, err
-					}
-					return client.Gen()
-				}),
-				Version: build.Version,
-			}
 			// stdio runs on the caller's machine, so local-only tools are in scope.
-			srv := mcpserver.New(deps, mcpserver.Options{EnableLocalTools: true})
+			srv := mcpserver.New(newDeps(f), mcpserver.Options{EnableLocalTools: true})
 
 			err := srv.Run(cmd.Context(), &mcpsdk.StdioTransport{})
 			if err == nil || errors.Is(err, io.EOF) {
@@ -73,4 +64,32 @@ Exit codes: 0 clean disconnect, 2 usage error, 130 interrupted.`,
 		`Transport to serve on: "stdio" (later: "http")`)
 
 	return cmd
+}
+
+// newDeps assembles the server dependencies from the CLI factory: a lazily
+// resolved API client (so the server starts logged out) and a stderr logger.
+func newDeps(f *cmdutil.Factory) mcpserver.Deps {
+	return mcpserver.Deps{
+		Clients: mcpserver.NewStaticProvider(func() (*gen.ClientWithResponses, error) {
+			client, err := f.ApiClient()
+			if err != nil {
+				return nil, err
+			}
+			return client.Gen()
+		}),
+		Version: build.Version,
+		Logger:  stderrLogger(f),
+	}
+}
+
+// stderrLogger builds the server's diagnostic logger. It writes to stderr and
+// never to stdout, which carries protocol frames exclusively. The default
+// level is warn so a normal session stays quiet in the client's log pane;
+// MELANGE_DEBUG lowers it to debug, matching the API client's debug switch.
+func stderrLogger(f *cmdutil.Factory) *slog.Logger {
+	level := slog.LevelWarn
+	if cmdutil.DebugEnabled() {
+		level = slog.LevelDebug
+	}
+	return slog.New(slog.NewTextHandler(f.IOStreams.ErrOut, &slog.HandlerOptions{Level: level}))
 }

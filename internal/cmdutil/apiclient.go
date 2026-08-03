@@ -21,12 +21,19 @@ func envTruthy(v string) bool {
 	return false
 }
 
+// DebugEnabled reports whether MELANGE_DEBUG asks for verbose diagnostics on
+// stderr. It is the single source of truth for the debug switch, shared by the
+// API client's request logging and the MCP server's diagnostic logger.
+func DebugEnabled() bool {
+	return envTruthy(os.Getenv("MELANGE_DEBUG"))
+}
+
 // NewAPIClient builds an api.Client for the given host and token, honoring
 // the factory's base transport override and a truthy MELANGE_DEBUG (debug
 // lines go to stderr). token may be empty for unauthenticated clients.
 func NewAPIClient(f *Factory, host, token string) (*api.Client, error) {
 	var debug io.Writer
-	if envTruthy(os.Getenv("MELANGE_DEBUG")) {
+	if DebugEnabled() {
 		debug = f.IOStreams.ErrOut
 	}
 	timeout := api.DefaultRequestTimeout
