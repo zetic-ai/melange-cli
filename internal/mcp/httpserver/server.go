@@ -76,8 +76,8 @@ type Config struct {
 	// see originMiddleware for the rationale.
 	AllowedOrigins []string
 	// ValidateTokens verifies bearers against GET /v1/me before serving
-	// (CLI-PR2 Task 2). Task 1 records the choice but does not consume it:
-	// the temporary verifier accepts every bearer either way.
+	// (CLI-PR2 Task 2). Until that verifier lands, New rejects true rather
+	// than silently serving unvalidated tokens.
 	ValidateTokens bool
 }
 
