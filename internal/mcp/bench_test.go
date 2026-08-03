@@ -11,8 +11,12 @@ import (
 // reference evidence, not a CI gate (`go test` never runs benchmarks): the
 // CI-gated guard is the pointer-identity suite in schema_cache_test.go.
 //
-//	no-cache:     what stdio pays once, and what HTTP paid per request
-//	              before Options.SchemaCache existed.
+//	no-cache:     construction with this package's memoized schema parsing
+//	              but no SDK cache — what stdio pays once per process, and
+//	              what would remain per request if only the SDK-cache wiring
+//	              were lost. It is NOT the pre-change per-request cost:
+//	              memoization is process-global, so no variant here re-parses
+//	              the embedded JSON (the pre-change cost was ~3x higher).
 //	shared-cache: the HTTP steady state — one process-wide cache, schemas
 //	              resolved on the first request only.
 func BenchmarkNew(b *testing.B) {

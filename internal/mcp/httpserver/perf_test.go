@@ -20,8 +20,38 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	mcpserver "github.com/zetic-ai/melange-cli/internal/mcp"
 	"go.uber.org/goleak"
 )
+
+// TestPerRequestServersShareOneSchemaCache guards this transport's half of
+// the schema-cache wiring: getServer must hand every per-request server the
+// process-wide cache created in New. The internal/mcp allocation guard cannot
+// see this seam — if getServer stopped passing s.schemaCache, every request
+// would silently re-resolve every schema and all other tests would stay
+// green. Allocation counting keeps the guard deterministic and wall-clock-
+// free: a warmed getServer construction allocates ~2k objects, an uncached
+// server construction ~60k, so the loose 10x threshold cannot flake yet fails
+// the moment either the getServer wiring or mcpserver.New's pass-through to
+// the SDK disappears.
+func TestPerRequestServersShareOneSchemaCache(t *testing.T) {
+	srv, err := New(Config{Listen: "127.0.0.1:0", APIHost: "http://127.0.0.1:1"})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), bearerContextKey{}, "token-alloc-guard"))
+
+	require.NotNil(t, srv.getServer(req), "the warmup request must build a server")
+
+	baseline := testing.AllocsPerRun(5, func() {
+		mcpserver.New(mcpserver.Deps{Version: "alloc-guard"}, mcpserver.Options{})
+	})
+	warm := testing.AllocsPerRun(5, func() { srv.getServer(req) })
+
+	assert.Less(t, warm, baseline/10,
+		"per-request servers must reuse the shared schema cache: %.0f allocs per getServer vs %.0f uncached",
+		warm, baseline)
+}
 
 // TestConcurrentSessionsTokenIsolation runs 32 parallel sessions × 16 calls
 // each through the real HTTP stack under -race. Every response must be valid

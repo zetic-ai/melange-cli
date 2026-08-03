@@ -74,7 +74,10 @@ func (e *inputSchemaEntry) use(key reflect.Type, refine func(props map[string]*j
 
 // refineID is a refine function's comparable identity: its code pointer, or 0
 // for nil. Top-level functions (every refine in this package) have exactly one
-// code pointer per function.
+// code pointer per function. Caveat: closures minted by one factory (or from
+// one function literal) share that literal's code pointer, so two closures
+// differing only in captured state would pass this guard undistinguished —
+// refines must stay named top-level functions.
 func refineID(refine func(props map[string]*jsonschema.Schema)) uintptr {
 	if refine == nil {
 		return 0

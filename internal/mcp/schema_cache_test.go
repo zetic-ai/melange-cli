@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -37,6 +38,29 @@ func TestOutputSchemaPointerStableUnderConcurrentFirstParse(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			ptrs[i] = outputSchema("get_repo")
+		}()
+	}
+	wg.Wait()
+	for i, p := range ptrs {
+		require.Same(t, ptrs[0], p, "caller %d observed a different schema pointer", i)
+	}
+}
+
+// TestInputSchemaPointerStableUnderConcurrentFirstDerivation mirrors the
+// output-schema race test onto inputSchemaFor: force the cold path, race the
+// first derivation, require every caller to converge on one pointer with
+// -race silent.
+func TestInputSchemaPointerStableUnderConcurrentFirstDerivation(t *testing.T) {
+	inputSchemas.Delete(reflect.TypeFor[listReposArgs]())
+
+	const callers = 16
+	ptrs := make([]*jsonschema.Schema, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ptrs[i] = inputSchemaFor[listReposArgs](withPageBounds)
 		}()
 	}
 	wg.Wait()
@@ -84,4 +108,25 @@ func TestSharedSchemaCacheChangesNothingObservable(t *testing.T) {
 
 	assert.Equal(t, uncached, coldCache, "a cold shared cache must not change the advertised catalog")
 	assert.Equal(t, uncached, warmCache, "a warm shared cache must not change the advertised catalog")
+}
+
+// TestSharedSchemaCacheCutsConstructionAllocations guards the win itself: the
+// pointer-identity and observable-equality tests above stay green even if
+// Options.SchemaCache is silently dropped on the floor, so this test pins
+// that a warm cache actually short-circuits schema resolution inside New.
+// Allocation counting keeps it wall-clock-free and deterministic: an uncached
+// New resolves every schema (~60k allocations), a warm-cache New skips all of
+// it (~2k), so the loose 10x threshold has ~3x margin on both sides and fails
+// the moment New stops handing opts.SchemaCache to the SDK.
+func TestSharedSchemaCacheCutsConstructionAllocations(t *testing.T) {
+	deps := Deps{Version: "alloc-guard"}
+	cache := mcp.NewSchemaCache()
+	New(deps, Options{SchemaCache: cache}) // warm, as the first HTTP request would
+
+	baseline := testing.AllocsPerRun(5, func() { New(deps, Options{}) })
+	warm := testing.AllocsPerRun(5, func() { New(deps, Options{SchemaCache: cache}) })
+
+	assert.Less(t, warm, baseline/10,
+		"a warm shared cache must skip schema resolution during New: %.0f allocs cached vs %.0f uncached",
+		warm, baseline)
 }
