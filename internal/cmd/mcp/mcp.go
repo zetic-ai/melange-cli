@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
@@ -51,8 +52,7 @@ Exit codes: 0 clean disconnect, 2 usage error, 130 interrupted.`,
 			srv := mcpserver.New(newDeps(f), mcpserver.Options{EnableLocalTools: true})
 
 			err := srv.Run(cmd.Context(), &mcpsdk.StdioTransport{})
-			if err == nil || errors.Is(err, io.EOF) {
-				// Clean client disconnect.
+			if isCleanDisconnect(err) {
 				return nil
 			}
 			// SIGINT propagates as context.Canceled (exit 130 via ExitCode).
@@ -64,6 +64,29 @@ Exit codes: 0 clean disconnect, 2 usage error, 130 interrupted.`,
 		`Transport to serve on: "stdio" (later: "http")`)
 
 	return cmd
+}
+
+// codeServerClosing is the JSON-RPC error code the SDK's jsonrpc2 layer
+// attaches to work abandoned because the connection is shutting down
+// (`jsonrpc2.ErrServerClosing`). The constant is not exported by the SDK — only
+// the wire code is stable — so it is restated here.
+const codeServerClosing = -32004
+
+// isCleanDisconnect reports whether a server Run error is just the client
+// going away, which is a successful end of service (exit 0), not a failure.
+//
+// Two shapes mean "the peer hung up": io.EOF on stdin, and a shutdown that
+// abandoned in-flight work because stdin reached EOF (or stdout broke) before
+// the reply was written — the SDK reports the latter as ErrServerClosing. The
+// second shape is what a client that closes stdin mid-call produces, including
+// a one-shot `printf ... | melange mcp` session. Everything else — protocol
+// faults, context.Canceled from SIGINT — keeps its non-zero exit.
+func isCleanDisconnect(err error) bool {
+	if err == nil || errors.Is(err, io.EOF) {
+		return true
+	}
+	// WireError.Is compares codes, so a zero-value target matches by code.
+	return errors.Is(err, &jsonrpc.Error{Code: codeServerClosing})
 }
 
 // newDeps assembles the server dependencies from the CLI factory: a lazily
