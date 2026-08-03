@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 
@@ -13,11 +14,28 @@ import (
 )
 
 // Bodies use non-alphabetical key order so any re-marshal through a typed
-// struct (which would sort keys) breaks the byte-equality assertions.
+// struct (which would sort keys) breaks the byte-equality assertions. The `<`
+// and `&` in the written bodies are equally deliberate: descriptions are prose
+// and carry them, and json.Marshal rewrites them as &lt; and &amp; whenever it
+// re-emits a json.RawMessage.
 const (
-	repoListBody = `{"results":[{"full_name":"zetic/whisper-tiny","visibility":"public","model_type":"onnx"}],"count":1}`
-	repoBody     = `{"name":"whisper-tiny","visibility":"public","model_type":"onnx","description":"tiny"}`
+	repoListBody    = `{"results":[{"full_name":"zetic/whisper-tiny","visibility":"public","model_type":"onnx"}],"count":1}`
+	repoBody        = `{"name":"whisper-tiny","visibility":"public","model_type":"onnx","description":"tiny"}`
+	writtenRepoBody = `{"full_name":"zetic/whisper-tiny","visibility":"private","model_type":"general",` +
+		`"description":"speech <-> text & subtitles"}`
 )
+
+// requestBody returns the exact bytes a recorded request carried.
+func requestBody(t *testing.T, req *http.Request) string {
+	t.Helper()
+	require.NotNil(t, req.GetBody, "request must expose a replayable body")
+	rc, err := req.GetBody()
+	require.NoError(t, err)
+	defer rc.Close() //nolint:errcheck
+	raw, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	return string(raw)
+}
 
 // callTool runs one tool call over the in-memory transport.
 func callTool(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
@@ -39,6 +57,24 @@ func toolNamed(t *testing.T, cs *mcp.ClientSession, name string) *mcp.Tool {
 	}
 	t.Fatalf("tool %q is not registered", name)
 	return nil
+}
+
+// assertMutatingAnnotations checks a write tool's annotation contract: never
+// read-only, and DestructiveHint/IdempotentHint exactly as the catalog
+// declares them. DestructiveHint must be set explicitly — the SDK's default is
+// true, so a forgotten hint would advertise create_repo as destructive.
+func assertMutatingAnnotations(t *testing.T, cs *mcp.ClientSession, name string, destructive, idempotent bool) {
+	t.Helper()
+	tool := toolNamed(t, cs, name)
+	assert.NotContains(t, tool.Name, "melange", "tool names are unprefixed")
+	assert.NotEmpty(t, tool.Description, "every tool documents its workflow role")
+	require.NotNil(t, tool.Annotations)
+	assert.False(t, tool.Annotations.ReadOnlyHint, "%s mutates state", name)
+	assert.Equal(t, idempotent, tool.Annotations.IdempotentHint, "%s idempotency hint", name)
+	require.NotNil(t, tool.Annotations.DestructiveHint,
+		"DestructiveHint must be set explicitly (SDK default is true)")
+	assert.Equal(t, destructive, *tool.Annotations.DestructiveHint, "%s destructive hint", name)
+	assert.Nil(t, tool.OutputSchema, "no output schema until Task 5 (Out = any)")
 }
 
 // assertReadOnlyAnnotations checks the annotation contract every read tool in
@@ -185,4 +221,293 @@ func TestRepoToolAnnotations(t *testing.T) {
 	for _, name := range []string{"list_repos", "get_repo"} {
 		t.Run(name, func(t *testing.T) { assertReadOnlyAnnotations(t, cs, name) })
 	}
+}
+
+func TestCreateRepoSendsEveryProvidedFieldAndPassesResponseBytesThrough(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("POST", "/v1/repos"), jsonBody(http.StatusCreated, writtenRepoBody))
+
+	cs, wire := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "create_repo", map[string]any{
+		"name": "whisper-tiny", "private": true, "model_type": "llm",
+		"use_case": "speech", "tags": []string{"asr", "tiny"}, "description": "d",
+	})
+
+	assert.False(t, res.IsError)
+	assert.Equal(t, writtenRepoBody, textOf(t, res))
+	require.Len(t, reg.Requests, 1)
+	// The body carries exactly the caller's arguments under their request field
+	// names, and nothing the caller did not ask for (readme) is invented.
+	assert.JSONEq(t,
+		`{"description":"d","is_private":true,"model_type":"llm","name":"whisper-tiny",`+
+			`"tags":["asr","tiny"],"use_case":"speech"}`,
+		requestBody(t, reg.Requests[0]))
+
+	require.NoError(t, cs.Close())
+	assertStructuredContentOnWire(t, wire, writtenRepoBody)
+	reg.Verify(t)
+}
+
+func TestCreateRepoOmittedOptionsStayOutOfTheBody(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("POST", "/v1/repos"), jsonBody(http.StatusCreated, writtenRepoBody))
+
+	cs, _ := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "create_repo", map[string]any{"name": "whisper-tiny"})
+
+	assert.False(t, res.IsError)
+	require.Len(t, reg.Requests, 1)
+	// The general default is applied by the handler (a schema default would
+	// crash the SDK on "arguments": null), and an omitted option is absent
+	// rather than sent as an empty value the API would have to interpret.
+	assert.JSONEq(t, `{"model_type":"general","name":"whisper-tiny"}`, requestBody(t, reg.Requests[0]))
+	reg.Verify(t)
+}
+
+func TestCreateRepoRejectsAnAccountPrefixedNameWithoutAnAPICall(t *testing.T) {
+	reg := &httpmock.Registry{}
+	cs, _ := connect(t, registryProvider(t, reg))
+
+	res := callTool(t, cs, "create_repo", map[string]any{"name": "zetic/whisper-tiny"})
+
+	assert.True(t, res.IsError)
+	assert.Contains(t, textOf(t, res), "without an ACCOUNT/ prefix",
+		"the agent is told how to fix the name, not just that it failed")
+	assert.Empty(t, reg.Requests, "a repository is never created under a guessed name")
+}
+
+func TestCreateRepoRejectsUnknownVocabularyBeforeCallingTheAPI(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+
+	// The vocabulary must reach the client, not just the handler: an
+	// unadvertised value would otherwise be forwarded and rejected as a 422
+	// only after the agent has already committed to the call.
+	schema, err := json.Marshal(toolNamed(t, cs, "create_repo").InputSchema)
+	require.NoError(t, err)
+	assert.Contains(t, string(schema), `"enum":["general","llm"]`)
+	assert.Contains(t, string(schema), `"enum":["vision","nlp","llm","speech","other"]`)
+
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"unknown model type", map[string]any{"name": "x", "model_type": "onnx"}},
+		{"unknown use case", map[string]any{"name": "x", "use_case": "audio"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			cs, _ := connect(t, registryProvider(t, reg))
+
+			res := callTool(t, cs, "create_repo", tc.args)
+
+			assert.True(t, res.IsError)
+			// The SDK prefixes schema-validation failures this way; without it,
+			// an IsError result could just as well be the unmatched-stub
+			// transport error, which would pass with no enum at all.
+			assert.Contains(t, textOf(t, res), `validating "arguments"`,
+				"the value is rejected by the schema, not by a failed request")
+			assert.Empty(t, reg.Requests)
+		})
+	}
+}
+
+func TestUpdateRepoPatchBodyCarriesOnlyTheProvidedFields(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+		want string
+	}{
+		{
+			// "" is the documented way to clear a description, so it must be
+			// sent rather than treated as an omitted argument.
+			name: "empty description clears it",
+			args: map[string]any{"repo": "zetic/whisper-tiny", "description": ""},
+			want: `{"description":""}`,
+		},
+		{
+			name: "private false publishes",
+			args: map[string]any{"repo": "zetic/whisper-tiny", "private": false},
+			want: `{"is_private":false}`,
+		},
+		{
+			// An empty list is a real edit (drop every tag), not an omission.
+			name: "empty tags clear the set",
+			args: map[string]any{"repo": "zetic/whisper-tiny", "tags": []string{}},
+			want: `{"tags":[]}`,
+		},
+		{
+			name: "every field",
+			args: map[string]any{
+				"repo": "zetic/whisper-tiny", "description": "d", "private": true,
+				"use_case": "speech", "tags": []string{"asr"},
+			},
+			want: `{"description":"d","is_private":true,"tags":["asr"],"use_case":"speech"}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			reg.Register(httpmock.REST("PATCH", "/v1/repos/zetic/whisper-tiny"),
+				jsonBody(200, writtenRepoBody))
+
+			cs, _ := connect(t, registryProvider(t, reg))
+			res := callTool(t, cs, "update_repo", tc.args)
+
+			assert.False(t, res.IsError)
+			require.Len(t, reg.Requests, 1)
+			assert.JSONEq(t, tc.want, requestBody(t, reg.Requests[0]),
+				"an untouched field must stay out of the PATCH body entirely")
+			reg.Verify(t)
+		})
+	}
+}
+
+func TestUpdateRepoPassesResponseBytesThrough(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("PATCH", "/v1/repos/zetic/whisper-tiny"),
+		jsonBody(200, writtenRepoBody))
+
+	cs, wire := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "update_repo", map[string]any{
+		"repo": "zetic/whisper-tiny", "description": "d",
+	})
+
+	assert.False(t, res.IsError)
+	assert.Equal(t, writtenRepoBody, textOf(t, res),
+		"the updated repository's bytes survive, including the < and & an escaping re-marshal would rewrite")
+
+	require.NoError(t, cs.Close())
+	assertStructuredContentOnWire(t, wire, writtenRepoBody)
+	reg.Verify(t)
+}
+
+func TestUpdateRepoWithNothingToChangeIsRefusedWithoutAnAPICall(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"repo alone", map[string]any{"repo": "zetic/whisper-tiny"}},
+		{
+			// The schema admits null for the pointer-valued fields. Null must
+			// read as "leave it alone" — reading it as "clear it" would delete
+			// a description the caller never asked to touch.
+			name: "explicit nulls",
+			args: map[string]any{"repo": "zetic/whisper-tiny", "description": nil, "private": nil, "tags": nil},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			cs, _ := connect(t, registryProvider(t, reg))
+
+			res := callTool(t, cs, "update_repo", tc.args)
+
+			assert.True(t, res.IsError)
+			assert.Contains(t, textOf(t, res), "nothing to update",
+				"an empty PATCH is refused with guidance, not sent as a no-op write")
+			assert.Empty(t, reg.Requests)
+		})
+	}
+}
+
+func TestDeleteRepoWithoutAMatchingConfirmationNeverCallsTheAPI(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"confirm absent", map[string]any{"repo": "zetic/whisper-tiny"}},
+		{"confirm empty", map[string]any{"repo": "zetic/whisper-tiny", "confirm": ""}},
+		{"different repo", map[string]any{"repo": "zetic/whisper-tiny", "confirm": "zetic/other"}},
+		{"name only", map[string]any{"repo": "zetic/whisper-tiny", "confirm": "whisper-tiny"}},
+		{"case differs", map[string]any{"repo": "zetic/whisper-tiny", "confirm": "zetic/Whisper-Tiny"}},
+		{"trailing space", map[string]any{"repo": "zetic/whisper-tiny", "confirm": "zetic/whisper-tiny "}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			cs, _ := connect(t, registryProvider(t, reg))
+
+			res := callTool(t, cs, "delete_repo", tc.args)
+
+			assert.True(t, res.IsError)
+			text := textOf(t, res)
+			// Discriminating on the refusal's own words: an IsError result with
+			// an empty registry could equally be a schema failure or an
+			// unmatched stub, neither of which proves the gate ran.
+			assert.Contains(t, text, "Nothing was deleted")
+			assert.Contains(t, text, "explicit consent from the user",
+				"the agent is told to get consent, not just to retry with confirm")
+			assert.Contains(t, text, `confirm: "zetic/whisper-tiny"`,
+				"the refusal spells out the exact value to send")
+			assert.Empty(t, reg.Requests, "an unconfirmed deletion never reaches the API")
+		})
+	}
+}
+
+func TestDeleteRepoWithAMatchingConfirmationDeletes(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("DELETE", "/v1/repos/zetic/whisper-tiny"),
+		httpmock.StatusStringResponse(http.StatusNoContent, ""))
+
+	cs, wire := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "delete_repo", map[string]any{
+		"repo": "zetic/whisper-tiny", "confirm": "zetic/whisper-tiny",
+	})
+
+	assert.False(t, res.IsError)
+	// The API answers 204 with no body; the tool still has to say what happened.
+	want := `{"deleted":true,"repo":"zetic/whisper-tiny"}`
+	assert.Equal(t, want, textOf(t, res))
+	require.Len(t, reg.Requests, 1)
+	assert.Equal(t, http.MethodDelete, reg.Requests[0].Method)
+
+	require.NoError(t, cs.Close())
+	assertStructuredContentOnWire(t, wire, want)
+	reg.Verify(t)
+}
+
+func TestDeleteRepoAPIFailureIsToolError(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("DELETE", "/v1/repos/zetic/whisper-tiny"),
+		httpmock.JSONResponse(http.StatusForbidden, json.RawMessage(
+			`{"type":"error","error":{"type":"permission_error","message":"only the owner can delete"},"request_id":"req_21"}`)))
+
+	cs, _ := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "delete_repo", map[string]any{
+		"repo": "zetic/whisper-tiny", "confirm": "zetic/whisper-tiny",
+	})
+
+	assert.True(t, res.IsError, "a refused deletion is never reported as deleted")
+	text := textOf(t, res)
+	assert.Contains(t, text, "only the owner can delete")
+	assert.Contains(t, text, "melange auth status")
+	reg.Verify(t)
+}
+
+func TestRepoWriteToolAnnotations(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	for _, tc := range []struct {
+		name                    string
+		destructive, idempotent bool
+	}{
+		{"create_repo", false, false},
+		{"update_repo", false, true},
+		{"delete_repo", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertMutatingAnnotations(t, cs, tc.name, tc.destructive, tc.idempotent)
+		})
+	}
+}
+
+func TestDeleteRepoAdvertisesItsConsentContract(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	tool := toolNamed(t, cs, "delete_repo")
+
+	// The description is where an agent learns the gate exists before it ever
+	// calls the tool, and that consent — not just the argument — is required.
+	assert.Contains(t, tool.Description, "cannot be undone")
+	assert.Contains(t, tool.Description, "explicit consent")
+
+	schema, err := json.Marshal(tool.InputSchema)
+	require.NoError(t, err)
+	assert.Contains(t, string(schema), `"required":["repo"]`,
+		"confirm stays optional in the schema so the handler's consent guidance is what an agent sees")
 }

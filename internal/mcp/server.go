@@ -25,6 +25,7 @@ func New(deps Deps, opts Options) *mcp.Server {
 	registerDeploy(s, deps)
 	registerReport(s, deps)
 	registerLibrary(s, deps)
+	registerDownload(s, deps)
 	return s
 }
 
@@ -33,4 +34,12 @@ func New(deps Deps, opts Options) *mcp.Server {
 func falsePtr() *bool {
 	f := false
 	return &f
+}
+
+// truePtr returns a pointer to true, for annotation hints that are pointers
+// and must be set explicitly (e.g. OpenWorldHint on a tool that reaches
+// third-party systems).
+func truePtr() *bool {
+	t := true
+	return &t
 }

@@ -26,6 +26,8 @@ const (
 		`"description":"speech <-> text & subtitles"}`
 	targetsBody = `{"results":[{"target_id":"tgt_abc","target":"cpu","quant_type":"q4_k_m",` +
 		`"label":"CPU <fp16> & NPU"}],"count":1}`
+	importedModelBody = `{"key":"llama-3-2-1b-1","version":1,"state":"converting","is_default":false,` +
+		`"source":"hf:meta-llama/Llama-3.2-1B","description":"instruct <chat> & tools"}`
 )
 
 // statusBody renders a model status response; terminal drives the poll loop.
@@ -366,6 +368,142 @@ func TestGetConversionStatusRejectsAnOverlongWaitBeforeCallingTheAPI(t *testing.
 			assert.Empty(t, reg.Requests)
 		})
 	}
+}
+
+func TestSetDefaultModelPassesResponseBytesThrough(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("PUT", "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1/default"),
+		jsonBody(200, modelBody))
+
+	cs, wire := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "set_default_model", map[string]any{
+		"repo": "zetic/whisper-tiny", "model_key": "whisper-tiny-1",
+	})
+
+	assert.False(t, res.IsError)
+	assert.Equal(t, modelBody, textOf(t, res))
+	require.Len(t, reg.Requests, 1)
+	assert.Equal(t, http.MethodPut, reg.Requests[0].Method)
+
+	require.NoError(t, cs.Close())
+	assertStructuredContentOnWire(t, wire, modelBody)
+	reg.Verify(t)
+}
+
+func TestSetDefaultModelInvalidRepoArgumentIsToolErrorWithoutAnAPICall(t *testing.T) {
+	reg := &httpmock.Registry{}
+	cs, _ := connect(t, registryProvider(t, reg))
+
+	res := callTool(t, cs, "set_default_model", map[string]any{
+		"repo": "whisper-tiny", "model_key": "whisper-tiny-1",
+	})
+
+	assert.True(t, res.IsError)
+	assert.Contains(t, textOf(t, res), "ACCOUNT/NAME")
+	assert.Empty(t, reg.Requests, "a malformed repo never reaches the API")
+}
+
+func TestSetDefaultModelAPIFailureIsToolError(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("PUT", "/v1/repos/zetic/whisper-tiny/models/nope/default"),
+		httpmock.JSONResponse(http.StatusNotFound, json.RawMessage(
+			`{"type":"error","error":{"type":"not_found_error","message":"model not found"},"request_id":"req_31"}`)))
+
+	cs, _ := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "set_default_model", map[string]any{
+		"repo": "zetic/whisper-tiny", "model_key": "nope",
+	})
+
+	assert.True(t, res.IsError)
+	assert.Contains(t, textOf(t, res), "model not found")
+	reg.Verify(t)
+}
+
+func TestImportModelSendsTheHuggingFaceRepoAndPassesResponseBytesThrough(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("POST", "/v1/repos/zetic/llama/models/import"),
+		jsonBody(http.StatusCreated, importedModelBody))
+
+	cs, wire := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "import_model", map[string]any{
+		"repo": "zetic/llama", "hf_repo": "meta-llama/Llama-3.2-1B",
+	})
+
+	assert.False(t, res.IsError)
+	assert.Equal(t, importedModelBody, textOf(t, res))
+	require.Len(t, reg.Requests, 1)
+	// revision is reserved and rejected when non-null, so the tool must not
+	// invent one.
+	assert.JSONEq(t, `{"hf_repo":"meta-llama/Llama-3.2-1B"}`, requestBody(t, reg.Requests[0]))
+
+	require.NoError(t, cs.Close())
+	assertStructuredContentOnWire(t, wire, importedModelBody)
+	reg.Verify(t)
+}
+
+func TestImportModelCarriesAFreshIdempotencyKeyPerCall(t *testing.T) {
+	reg := &httpmock.Registry{}
+	for range 2 {
+		reg.Register(httpmock.REST("POST", "/v1/repos/zetic/llama/models/import"),
+			jsonBody(http.StatusCreated, importedModelBody))
+	}
+
+	cs, _ := connect(t, registryProvider(t, reg))
+	for range 2 {
+		assert.False(t, callTool(t, cs, "import_model", map[string]any{
+			"repo": "zetic/llama", "hf_repo": "meta-llama/Llama-3.2-1B",
+		}).IsError)
+	}
+
+	require.Len(t, reg.Requests, 2)
+	first := reg.Requests[0].Header.Get("Idempotency-Key")
+	second := reg.Requests[1].Header.Get("Idempotency-Key")
+	// The key is what lets the transport replay one import after a transient
+	// failure; sharing it between calls would instead make a deliberate second
+	// import replay the first one's outcome.
+	assert.NotEmpty(t, first, "an import must be replay-safe within its own call")
+	assert.NotEqual(t, first, second, "each call starts a new import, so each carries a new key")
+	reg.Verify(t)
+}
+
+func TestImportModelAPIFailureIsToolError(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("POST", "/v1/repos/zetic/whisper-tiny/models/import"),
+		httpmock.JSONResponse(http.StatusUnprocessableEntity, json.RawMessage(
+			`{"type":"error","error":{"type":"invalid_request_error","message":"repository does not accept imports",`+
+				`"fields":[{"field":"model_type","message":"must be llm"}]},"request_id":"req_33"}`)))
+
+	cs, _ := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "import_model", map[string]any{
+		"repo": "zetic/whisper-tiny", "hf_repo": "meta-llama/Llama-3.2-1B",
+	})
+
+	assert.True(t, res.IsError)
+	text := textOf(t, res)
+	assert.Contains(t, text, "repository does not accept imports")
+	assert.Contains(t, text, "model_type: must be llm", "field-level detail reaches the agent")
+	reg.Verify(t)
+}
+
+func TestModelWriteToolAnnotations(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	assertMutatingAnnotations(t, cs, "set_default_model", false, true)
+	assertMutatingAnnotations(t, cs, "import_model", false, false)
+
+	// import_model reaches HuggingFace, not just the Melange API.
+	openWorld := toolNamed(t, cs, "import_model").Annotations.OpenWorldHint
+	require.NotNil(t, openWorld, "import_model declares that it touches a third-party system")
+	assert.True(t, *openWorld)
+}
+
+func TestImportModelAdvertisesTheAsyncFollowUp(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	tool := toolNamed(t, cs, "import_model")
+
+	// The description is the only place an agent learns that the returned
+	// model is not ready yet and which tool to poll.
+	assert.Contains(t, tool.Description, "get_conversion_status")
+	assert.Contains(t, tool.Description, "Returns immediately")
 }
 
 func TestModelToolAnnotations(t *testing.T) {
