@@ -12,18 +12,24 @@ import (
 
 // Bodies use non-alphabetical key order so any re-marshal through a typed
 // struct (which would sort keys) breaks the byte-equality assertions.
+//
+// The `<`, `>`, and `&` characters are equally deliberate: readmes and
+// descriptions are prose and carry them routinely, and json.Marshal rewrites
+// them as <, >, and & whenever it re-emits a json.RawMessage.
+// An envelope built with HTML escaping fails on these bodies.
 const (
 	libraryListBody = `{"results":[{"full_name":"zetic/whisper-tiny","provider":{"name":"Zetic"},` +
-		`"use_case":"speech","model_type":"onnx"}],"count":1}`
-	libraryProvidersBody = `{"results":[{"name":"Zetic","model_count":12}],"count":1}`
+		`"use_case":"speech","model_type":"onnx","description":"speech <-> text & subtitles"}],"count":1}`
+	libraryProvidersBody = `{"results":[{"name":"Zetic & Partners <labs>","model_count":12}],"count":1}`
 	libraryModelBody     = `{"full_name":"zetic/whisper-tiny","account":"zetic","name":"whisper-tiny",` +
-		`"provider":{"name":"Zetic"},"use_case":"speech","model_type":"onnx","readme":"# whisper"}`
+		`"provider":{"name":"Zetic"},"use_case":"speech","model_type":"onnx",` +
+		`"readme":"# whisper\n<img src=\"logo.png\"> speech & text"}`
 )
 
 func TestSearchLibraryPassesResponseBytesThroughAndDefaultsThePage(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/library/models"),
-		httpmock.JSONResponse(200, json.RawMessage(libraryListBody)))
+		jsonBody(200, libraryListBody))
 
 	cs, wire := connect(t, registryProvider(t, reg))
 	// nil arguments marshal to a literal "arguments": null — the shape that
@@ -42,15 +48,14 @@ func TestSearchLibraryPassesResponseBytesThroughAndDefaultsThePage(t *testing.T)
 	assert.False(t, query.Has("task"))
 
 	require.NoError(t, cs.Close())
-	assert.Contains(t, wire.String(), `"structuredContent":`+libraryListBody,
-		"the response bytes cross the wire verbatim")
+	assertStructuredContentOnWire(t, wire, libraryListBody)
 	reg.Verify(t)
 }
 
 func TestSearchLibraryForwardsEveryFilter(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/library/models"),
-		httpmock.JSONResponse(200, json.RawMessage(libraryListBody)))
+		jsonBody(200, libraryListBody))
 
 	cs, _ := connect(t, registryProvider(t, reg))
 	res := callTool(t, cs, "search_library", map[string]any{
@@ -72,7 +77,7 @@ func TestSearchLibraryForwardsEveryFilter(t *testing.T) {
 func TestSearchLibraryWithoutIncludeProvidersSkipsTheProvidersCall(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/library/models"),
-		httpmock.JSONResponse(200, json.RawMessage(libraryListBody)))
+		jsonBody(200, libraryListBody))
 
 	cs, _ := connect(t, registryProvider(t, reg))
 	res := callTool(t, cs, "search_library", map[string]any{"include_providers": false})
@@ -85,9 +90,9 @@ func TestSearchLibraryWithoutIncludeProvidersSkipsTheProvidersCall(t *testing.T)
 func TestSearchLibraryIncludeProvidersEmitsCompositeEnvelope(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/library/models"),
-		httpmock.JSONResponse(200, json.RawMessage(libraryListBody)))
+		jsonBody(200, libraryListBody))
 	reg.Register(httpmock.REST("GET", "/v1/library/providers"),
-		httpmock.JSONResponse(200, json.RawMessage(libraryProvidersBody)))
+		jsonBody(200, libraryProvidersBody))
 
 	cs, wire := connect(t, registryProvider(t, reg))
 	res := callTool(t, cs, "search_library", map[string]any{"include_providers": true})
@@ -95,17 +100,18 @@ func TestSearchLibraryIncludeProvidersEmitsCompositeEnvelope(t *testing.T) {
 	assert.False(t, res.IsError)
 	want := `{"models":` + libraryListBody + `,"providers":` + libraryProvidersBody + `}`
 	assert.Equal(t, want, textOf(t, res),
-		"the envelope names both halves and keeps each response's bytes intact")
+		"the envelope names both halves and keeps each response's bytes intact, "+
+			"including the < and & an escaping re-marshal would rewrite")
 
 	require.NoError(t, cs.Close())
-	assert.Contains(t, wire.String(), `"structuredContent":`+want)
+	assertStructuredContentOnWire(t, wire, want)
 	reg.Verify(t)
 }
 
 func TestSearchLibraryIncludeProvidersSurfacesTheProvidersFailure(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/library/models"),
-		httpmock.JSONResponse(200, json.RawMessage(libraryListBody)))
+		jsonBody(200, libraryListBody))
 	reg.Register(httpmock.REST("GET", "/v1/library/providers"),
 		httpmock.JSONResponse(http.StatusInternalServerError, json.RawMessage(
 			`{"type":"error","error":{"type":"api_error","message":"provider index unavailable"},"request_id":"req_13"}`)))
@@ -160,7 +166,7 @@ func TestSearchLibraryRejectsInvalidFiltersBeforeCallingTheAPI(t *testing.T) {
 func TestGetLibraryModelPassesResponseBytesThrough(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/library/models/zetic/whisper-tiny"),
-		httpmock.JSONResponse(200, json.RawMessage(libraryModelBody)))
+		jsonBody(200, libraryModelBody))
 
 	cs, wire := connect(t, registryProvider(t, reg))
 	res := callTool(t, cs, "get_library_model", map[string]any{"library_model": "zetic/whisper-tiny"})
@@ -169,7 +175,7 @@ func TestGetLibraryModelPassesResponseBytesThrough(t *testing.T) {
 	assert.Equal(t, libraryModelBody, textOf(t, res))
 
 	require.NoError(t, cs.Close())
-	assert.Contains(t, wire.String(), `"structuredContent":`+libraryModelBody)
+	assertStructuredContentOnWire(t, wire, libraryModelBody)
 	reg.Verify(t)
 }
 

@@ -12,6 +12,26 @@ import (
 // StructuredContent always carries the full response regardless.
 const maxTextMirrorBytes = 16 * 1024
 
+// marshalEnvelope renders a composite tool envelope whose fields are raw API
+// response halves.
+//
+// It exists because json.Marshal HTML-escapes what it re-emits: a half
+// containing `readme: "# a <img> & b"` would reach the caller as `<img>
+// &`, silently rewriting the very bytes json.RawMessage halves exist to
+// preserve. An Encoder with SetEscapeHTML(false) keeps them intact. Only
+// insignificant JSON whitespace between tokens is normalized; no value,
+// key, or key order is touched.
+func marshalEnvelope(envelope any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(envelope); err != nil {
+		return nil, err
+	}
+	// Encode appends a newline; the halves' own bytes end where they end.
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
 // rawResult wraps a 2xx API response body as a tool result: the exact bytes
 // go in StructuredContent (json.RawMessage — never re-marshaled through typed
 // structs) with a TextContent mirror for clients that ignore structured

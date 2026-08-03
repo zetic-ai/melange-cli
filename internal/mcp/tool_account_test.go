@@ -42,6 +42,35 @@ func (w *syncWriter) String() string {
 	return w.buf.String()
 }
 
+// jsonBody stubs a JSON response whose body is exactly the given bytes.
+//
+// httpmock.JSONResponse cannot serve a fixture containing `<`, `>`, or `&`:
+// it marshals through encoding/json, which rewrites them as <, >,
+// and & — so a body written to prove those characters survive would
+// arrive at the client already escaped, and the property would be
+// unobservable. This responder writes the fixture verbatim, exactly as a real
+// API would.
+func jsonBody(status int, body string) httpmock.Responder {
+	return httpmock.WithHeader(
+		httpmock.StatusStringResponse(status, body), "Content-Type", "application/json")
+}
+
+// assertStructuredContentOnWire asserts that the tool result framed on the
+// wire carried want as its structuredContent.
+//
+// want is compared after json.Marshal because the SDK's JSON-RPC framing
+// HTML-escapes when it writes the frame. That escaping is lossless — the
+// client decodes & back to `&`, which is why textOf sees the original
+// characters — and it is the transport's business, not ours. What this pins
+// is that the handler's bytes are the bytes framed.
+func assertStructuredContentOnWire(t *testing.T, wire *syncWriter, want string) {
+	t.Helper()
+	framed, err := json.Marshal(json.RawMessage(want))
+	require.NoError(t, err)
+	assert.Contains(t, wire.String(), `"structuredContent":`+string(framed),
+		"the response bytes cross the wire verbatim")
+}
+
 // registryProvider returns a ClientProvider whose generated client talks to
 // the httpmock registry.
 func registryProvider(t *testing.T, reg *httpmock.Registry) ClientProvider {
@@ -134,11 +163,16 @@ func TestWhoamiNoTokenResolvedIsToolErrorWithRemediation(t *testing.T) {
 }
 
 // Section bodies for get_account_info, again in non-alphabetical key order.
+//
+// The `<` and `&` characters are equally deliberate: plan labels are prose and
+// carry them, and json.Marshal rewrites them as < and & whenever it
+// re-emits a json.RawMessage. An envelope built with HTML escaping fails on
+// these bodies.
 const (
 	usageBody  = `{"prompts":120,"model_uploads":3,"active_devices":7,"bandwidth":204800}`
 	quotasBody = `{"prompts":{"used":120,"limit":1000,"remaining":880},` +
-		`"model_uploads":{"used":3,"limit":null,"remaining":null}}`
-	planBody = `{"plan":"pro","is_trial":false,"trial_ends_at":null}`
+		`"model_uploads":{"used":3,"limit":null,"remaining":null},"note":"spikes & bursts included"}`
+	planBody = `{"plan":"pro","label":"Pro & Team <beta>","is_trial":false,"trial_ends_at":null}`
 )
 
 // stubAccountSections registers the section endpoints named in sections.
@@ -149,8 +183,7 @@ func stubAccountSections(reg *httpmock.Registry, sections ...string) {
 		"plan":   {"/v1/billing/plan", planBody},
 	}
 	for _, s := range sections {
-		reg.Register(httpmock.REST("GET", bodies[s].path),
-			httpmock.JSONResponse(200, json.RawMessage(bodies[s].body)))
+		reg.Register(httpmock.REST("GET", bodies[s].path), jsonBody(200, bodies[s].body))
 	}
 }
 
@@ -167,10 +200,11 @@ func TestGetAccountInfoWithoutIncludeReturnsEverySection(t *testing.T) {
 	assert.False(t, res.IsError)
 	want := `{"usage":` + usageBody + `,"quotas":` + quotasBody + `,"plan":` + planBody + `}`
 	assert.Equal(t, want, textOf(t, res),
-		"the envelope names each section and keeps every response's bytes intact")
+		"the envelope names each section and keeps every response's bytes intact, "+
+			"including the < and & an escaping re-marshal would rewrite")
 
 	require.NoError(t, cs.Close())
-	assert.Contains(t, wire.String(), `"structuredContent":`+want)
+	assertStructuredContentOnWire(t, wire, want)
 	reg.Verify(t)
 }
 

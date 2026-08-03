@@ -156,7 +156,7 @@ func getAccountInfoHandler(d Deps) mcp.ToolHandlerFor[accountInfoArgs, any] {
 			info.Plan = resp.Body
 		}
 
-		envelope, err := json.Marshal(info)
+		envelope, err := marshalEnvelope(info)
 		if err != nil {
 			// Every half is API JSON we already accepted; a failure here is a
 			// programming fault, not something the caller can act on.

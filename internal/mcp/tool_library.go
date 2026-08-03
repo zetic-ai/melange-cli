@@ -118,7 +118,7 @@ func searchLibraryHandler(d Deps) mcp.ToolHandlerFor[searchLibraryArgs, any] {
 		if err := api.GenError(providers.StatusCode(), providers.HTTPResponse, providers.Body); err != nil {
 			return toolError(err), nil, nil
 		}
-		envelope, err := json.Marshal(libraryWithProviders{Models: resp.Body, Providers: providers.Body})
+		envelope, err := marshalEnvelope(libraryWithProviders{Models: resp.Body, Providers: providers.Body})
 		if err != nil {
 			// Both halves are API JSON we already accepted; a failure here is a
 			// programming fault, not something the caller can act on.

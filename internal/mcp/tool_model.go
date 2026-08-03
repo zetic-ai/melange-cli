@@ -152,7 +152,7 @@ func getModelHandler(d Deps) mcp.ToolHandlerFor[getModelArgs, any] {
 		if err := api.GenError(targets.StatusCode(), targets.HTTPResponse, targets.Body); err != nil {
 			return toolError(err), nil, nil
 		}
-		envelope, err := json.Marshal(modelWithTargets{Model: resp.Body, Targets: targets.Body})
+		envelope, err := marshalEnvelope(modelWithTargets{Model: resp.Body, Targets: targets.Body})
 		if err != nil {
 			// Both halves are API JSON we already accepted; a failure here is a
 			// programming fault, not something the caller can act on.

@@ -15,10 +15,17 @@ import (
 
 // Bodies use non-alphabetical key order so any re-marshal through a typed
 // struct (which would sort keys) breaks the byte-equality assertions.
+//
+// The `<` and `&` characters are equally deliberate: descriptions are prose
+// and carry them, and json.Marshal rewrites them as < and &
+// whenever it re-emits a json.RawMessage. An envelope built with HTML
+// escaping fails on these bodies.
 const (
 	modelListBody = `{"results":[{"key":"whisper-tiny-1","version":1,"type":"onnx","is_default":true}],"count":1}`
-	modelBody     = `{"key":"whisper-tiny-1","version":1,"type":"onnx","state":"ready","is_default":true}`
-	targetsBody   = `{"results":[{"target_id":"tgt_abc","target":"cpu","quant_type":"q4_k_m"}],"count":1}`
+	modelBody     = `{"key":"whisper-tiny-1","version":1,"type":"onnx","state":"ready","is_default":true,` +
+		`"description":"speech <-> text & subtitles"}`
+	targetsBody = `{"results":[{"target_id":"tgt_abc","target":"cpu","quant_type":"q4_k_m",` +
+		`"label":"CPU <fp16> & NPU"}],"count":1}`
 )
 
 // statusBody renders a model status response; terminal drives the poll loop.
@@ -152,7 +159,7 @@ func TestListModelsInvalidRepoArgumentIsToolError(t *testing.T) {
 func TestGetModelPassesResponseBytesThrough(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1"),
-		httpmock.JSONResponse(200, json.RawMessage(modelBody)))
+		jsonBody(200, modelBody))
 
 	cs, wire := connect(t, registryProvider(t, reg))
 	res := callTool(t, cs, "get_model", map[string]any{
@@ -163,14 +170,14 @@ func TestGetModelPassesResponseBytesThrough(t *testing.T) {
 	assert.Equal(t, modelBody, textOf(t, res))
 
 	require.NoError(t, cs.Close())
-	assert.Contains(t, wire.String(), `"structuredContent":`+modelBody)
+	assertStructuredContentOnWire(t, wire, modelBody)
 	reg.Verify(t)
 }
 
 func TestGetModelWithoutIncludeTargetsSkipsTheTargetsCall(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1"),
-		httpmock.JSONResponse(200, json.RawMessage(modelBody)))
+		jsonBody(200, modelBody))
 
 	cs, _ := connect(t, registryProvider(t, reg))
 	res := callTool(t, cs, "get_model", map[string]any{
@@ -185,9 +192,9 @@ func TestGetModelWithoutIncludeTargetsSkipsTheTargetsCall(t *testing.T) {
 func TestGetModelIncludeTargetsEmitsCompositeEnvelope(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1"),
-		httpmock.JSONResponse(200, json.RawMessage(modelBody)))
+		jsonBody(200, modelBody))
 	reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1/targets"),
-		httpmock.JSONResponse(200, json.RawMessage(targetsBody)))
+		jsonBody(200, targetsBody))
 
 	cs, wire := connect(t, registryProvider(t, reg))
 	res := callTool(t, cs, "get_model", map[string]any{
@@ -197,17 +204,18 @@ func TestGetModelIncludeTargetsEmitsCompositeEnvelope(t *testing.T) {
 	assert.False(t, res.IsError)
 	want := `{"model":` + modelBody + `,"targets":` + targetsBody + `}`
 	assert.Equal(t, want, textOf(t, res),
-		"the envelope names both halves and keeps each response's bytes intact")
+		"the envelope names both halves and keeps each response's bytes intact, "+
+			"including the < and & an escaping re-marshal would rewrite")
 
 	require.NoError(t, cs.Close())
-	assert.Contains(t, wire.String(), `"structuredContent":`+want)
+	assertStructuredContentOnWire(t, wire, want)
 	reg.Verify(t)
 }
 
 func TestGetModelIncludeTargetsSurfacesTheTargetsFailure(t *testing.T) {
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1"),
-		httpmock.JSONResponse(200, json.RawMessage(modelBody)))
+		jsonBody(200, modelBody))
 	reg.Register(httpmock.REST("GET", "/v1/repos/zetic/whisper-tiny/models/whisper-tiny-1/targets"),
 		httpmock.JSONResponse(http.StatusForbidden, json.RawMessage(
 			`{"type":"error","error":{"type":"permission_error","message":"token cannot read targets"},"request_id":"req_3"}`)))
