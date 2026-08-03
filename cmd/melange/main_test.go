@@ -55,6 +55,21 @@ func TestRunArgCountErrors(t *testing.T) {
 	}
 }
 
+// TestRunMCPBadTransport pins the usage-error contract for the mcp command
+// through the real Run() path: an unsupported --transport is a flag error and
+// must exit 2, never start a server.
+func TestRunMCPBadTransport(t *testing.T) {
+	code := Run([]string{"mcp", "--transport", "bogus"})
+	assert.Equal(t, 2, code, "unsupported --transport must exit 2 (usage error)")
+}
+
+// TestRunMCPHelp pins that `melange mcp --help` is a documentation read, not a
+// server start: it must exit 0 without ever touching stdin.
+func TestRunMCPHelp(t *testing.T) {
+	code := Run([]string{"mcp", "--help"})
+	assert.Equal(t, 0, code, "melange mcp --help should exit 0")
+}
+
 func TestRunCompletionBash(t *testing.T) {
 	code := Run([]string{"completion", "bash"})
 	assert.Equal(t, 0, code, "completion bash should exit 0")
