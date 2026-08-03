@@ -68,24 +68,32 @@ Exit codes: 0 clean disconnect, 2 usage error, 130 interrupted.`,
 
 // codeServerClosing is the JSON-RPC error code the SDK's jsonrpc2 layer
 // attaches to work abandoned because the connection is shutting down
-// (`jsonrpc2.ErrServerClosing`). The constant is not exported by the SDK — only
-// the wire code is stable — so it is restated here.
+// (`jsonrpc2.ErrServerClosing`). The SDK exports the jsonrpc.Error type but not
+// that sentinel, so only the wire code can be named here.
+//
+// Restating an SDK-internal value is a liability, so it is not left to pin
+// itself: TestIsCleanDisconnectAcceptsRealHangup drives a real go-sdk server
+// through a client hangup and classifies the error the SDK actually returns, so
+// an upgrade that changes this code or shape fails the build rather than
+// silently restoring the exit-1 regression.
 const codeServerClosing = -32004
 
-// isCleanDisconnect reports whether a server Run error is just the client
-// going away, which is a successful end of service (exit 0), not a failure.
+// isCleanDisconnect reports whether a server Run error means "stop serving,
+// without fault" — a successful end of service (exit 0) rather than a failure.
 //
-// Two shapes mean "the peer hung up": io.EOF on stdin, and a shutdown that
-// abandoned in-flight work because stdin reached EOF (or stdout broke) before
-// the reply was written — the SDK reports the latter as ErrServerClosing. The
-// second shape is what a client that closes stdin mid-call produces, including
-// a one-shot `printf ... | melange mcp` session. Everything else — protocol
-// faults, context.Canceled from SIGINT — keeps its non-zero exit.
+// Two shapes qualify. io.EOF is stdin running out. ErrServerClosing is any
+// reply that could not be written once shutdown had already begun; in practice
+// that is the peer hanging up mid-request (a client closing stdin during a tool
+// call, or a one-shot `printf ... | melange mcp`), though a broken stdout — a
+// full disk on a redirected stream, say — reaches it too. Both mean this
+// process has no one left to answer, which is not an operator-actionable
+// failure. Everything else — protocol faults, context.Canceled from SIGINT —
+// keeps its non-zero exit.
 func isCleanDisconnect(err error) bool {
 	if err == nil || errors.Is(err, io.EOF) {
 		return true
 	}
-	// WireError.Is compares codes, so a zero-value target matches by code.
+	// WireError.Is compares codes, so a code-only target matches by code.
 	return errors.Is(err, &jsonrpc.Error{Code: codeServerClosing})
 }
 
