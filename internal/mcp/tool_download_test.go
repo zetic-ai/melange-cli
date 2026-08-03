@@ -212,6 +212,11 @@ func TestRequestModelDownloadAnnotationsAndDescription(t *testing.T) {
 	// redaction default, and that a local user is better served by the CLI.
 	assert.Contains(t, tool.Description, "BILLABLE")
 	assert.Contains(t, tool.Description, "explicit consent")
+	// The tool is stateless: a retry after an ambiguous failure authorizes —
+	// and charges — a second time, on a consent the user gave once. The
+	// description is the only place an agent can learn that before retrying.
+	assert.Contains(t, tool.Description, "Every confirmed call is charged separately")
+	assert.Contains(t, tool.Description, "check with the user before retrying")
 	assert.Contains(t, tool.Description, `"<redacted>"`)
 	assert.Contains(t, tool.Description, "melange model download")
 
