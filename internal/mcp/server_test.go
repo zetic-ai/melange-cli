@@ -122,6 +122,27 @@ func TestToolsListGoldenSnapshot(t *testing.T) {
 			"regenerate with: go test ./internal/mcp -run TestToolsListGoldenSnapshot -update")
 }
 
+// TestEveryToolStatesItsBlastRadius holds the whole catalog to the
+// explicit-annotation discipline for the two hints that default to true.
+// A tool added later that omits them silently tells every agent it may be
+// destructive and may reach arbitrary third-party systems, which is exactly
+// the signal a human-in-the-loop client uses to decide whether to prompt.
+// import_model is the only tool that genuinely leaves the Melange API.
+func TestEveryToolStatesItsBlastRadius(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	for _, tool := range listAllTools(t, cs) {
+		t.Run(tool.Name, func(t *testing.T) {
+			require.NotNil(t, tool.Annotations, "%s has no annotations", tool.Name)
+			require.NotNil(t, tool.Annotations.DestructiveHint,
+				"%s leaves DestructiveHint at its true default", tool.Name)
+			require.NotNil(t, tool.Annotations.OpenWorldHint,
+				"%s leaves OpenWorldHint at its true default", tool.Name)
+			assert.Equal(t, tool.Name == "import_model", *tool.Annotations.OpenWorldHint,
+				"only import_model reaches outside the Melange API")
+		})
+	}
+}
+
 // TestEnableLocalToolsCatalogIsIdenticalToday asserts the EnableLocalTools
 // variant advertises exactly the stdio catalog: no stdio-only tools exist yet,
 // so a second golden file would be a byte-for-byte copy. The upload PR, which

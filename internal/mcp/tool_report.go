@@ -36,6 +36,7 @@ func registerReport(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, getModelReportHandler(d))
 }

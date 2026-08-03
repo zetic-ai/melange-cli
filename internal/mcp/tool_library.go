@@ -30,6 +30,7 @@ func registerLibrary(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, searchLibraryHandler(d))
 
@@ -44,6 +45,7 @@ func registerLibrary(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, getLibraryModelHandler(d))
 }

@@ -29,8 +29,8 @@ func New(deps Deps, opts Options) *mcp.Server {
 	return s
 }
 
-// falsePtr returns a pointer to false, for annotation hints whose SDK default
-// is true (e.g. DestructiveHint) and must be set explicitly.
+// falsePtr returns a pointer to false, for annotation hints whose default is
+// true (DestructiveHint, OpenWorldHint) and must therefore be set explicitly.
 func falsePtr() *bool {
 	f := false
 	return &f

@@ -29,6 +29,7 @@ func registerAccount(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, whoamiHandler(d))
 
@@ -46,6 +47,7 @@ func registerAccount(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, getAccountInfoHandler(d))
 }

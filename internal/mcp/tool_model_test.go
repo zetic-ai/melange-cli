@@ -491,13 +491,10 @@ func TestImportModelAPIFailureIsToolError(t *testing.T) {
 
 func TestModelWriteToolAnnotations(t *testing.T) {
 	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
-	assertMutatingAnnotations(t, cs, "set_default_model", false, true)
-	assertMutatingAnnotations(t, cs, "import_model", false, false)
-
-	// import_model reaches HuggingFace, not just the Melange API.
-	openWorld := toolNamed(t, cs, "import_model").Annotations.OpenWorldHint
-	require.NotNil(t, openWorld, "import_model declares that it touches a third-party system")
-	assert.True(t, *openWorld)
+	// set_default_model only touches the Melange API; import_model reaches
+	// HuggingFace, and is the one tool in the catalog that is open-world.
+	assertMutatingAnnotations(t, cs, "set_default_model", false, true, false)
+	assertMutatingAnnotations(t, cs, "import_model", false, false, true)
 }
 
 func TestImportModelAdvertisesTheAsyncFollowUp(t *testing.T) {

@@ -207,7 +207,7 @@ func TestRequestModelDownloadQuotaFailureIsToolError(t *testing.T) {
 
 func TestRequestModelDownloadAnnotationsAndDescription(t *testing.T) {
 	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
-	assertMutatingAnnotations(t, cs, "request_model_download", false, false)
+	assertMutatingAnnotations(t, cs, "request_model_download", false, false, false)
 
 	tool := toolNamed(t, cs, "request_model_download")
 	// The description is where an agent learns the cost, the consent gate, the

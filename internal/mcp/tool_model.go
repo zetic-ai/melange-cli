@@ -45,6 +45,7 @@ func registerModel(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, listModelsHandler(d))
 
@@ -60,6 +61,7 @@ func registerModel(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, getModelHandler(d))
 
@@ -76,6 +78,7 @@ func registerModel(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, getConversionStatusHandler(d))
 
@@ -88,6 +91,7 @@ func registerModel(s *mcp.Server, d Deps) {
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, setDefaultModelHandler(d))
 

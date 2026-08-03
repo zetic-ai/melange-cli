@@ -70,11 +70,23 @@ func toolNamed(t *testing.T, cs *mcp.ClientSession, name string) *mcp.Tool {
 	return nil
 }
 
+// assertOpenWorldHint checks that a tool states its blast radius explicitly.
+// The MCP default for OpenWorldHint is true, so a forgotten hint tells the
+// agent a Melange-API-only tool may reach arbitrary third-party systems.
+func assertOpenWorldHint(t *testing.T, tool *mcp.Tool, openWorld bool) {
+	t.Helper()
+	require.NotNil(t, tool.Annotations.OpenWorldHint,
+		"OpenWorldHint must be set explicitly (MCP default is true)")
+	assert.Equal(t, openWorld, *tool.Annotations.OpenWorldHint,
+		"%s open-world hint", tool.Name)
+}
+
 // assertMutatingAnnotations checks a write tool's annotation contract: never
-// read-only, and DestructiveHint/IdempotentHint exactly as the catalog
-// declares them. DestructiveHint must be set explicitly — the SDK's default is
-// true, so a forgotten hint would advertise create_repo as destructive.
-func assertMutatingAnnotations(t *testing.T, cs *mcp.ClientSession, name string, destructive, idempotent bool) {
+// read-only, and DestructiveHint/IdempotentHint/OpenWorldHint exactly as the
+// catalog declares them. DestructiveHint and OpenWorldHint must be set
+// explicitly — both default to true, so a forgotten hint would advertise
+// create_repo as destructive and as reaching outside the Melange API.
+func assertMutatingAnnotations(t *testing.T, cs *mcp.ClientSession, name string, destructive, idempotent, openWorld bool) {
 	t.Helper()
 	tool := toolNamed(t, cs, name)
 	assert.NotContains(t, tool.Name, "melange", "tool names are unprefixed")
@@ -85,12 +97,14 @@ func assertMutatingAnnotations(t *testing.T, cs *mcp.ClientSession, name string,
 	require.NotNil(t, tool.Annotations.DestructiveHint,
 		"DestructiveHint must be set explicitly (SDK default is true)")
 	assert.Equal(t, destructive, *tool.Annotations.DestructiveHint, "%s destructive hint", name)
+	assertOpenWorldHint(t, tool, openWorld)
 	assert.NotNil(t, tool.OutputSchema, "%s advertises its OpenAPI-derived output schema", name)
 }
 
 // assertReadOnlyAnnotations checks the annotation contract every read tool in
-// this task shares: read-only, idempotent, and explicitly non-destructive
-// (the SDK's DestructiveHint default is true, so it must be set).
+// this task shares: read-only, idempotent, explicitly non-destructive, and
+// explicitly closed-world — reads only ever touch the Melange API. Both
+// DestructiveHint and OpenWorldHint default to true, so both must be set.
 func assertReadOnlyAnnotations(t *testing.T, cs *mcp.ClientSession, name string) {
 	t.Helper()
 	tool := toolNamed(t, cs, name)
@@ -102,6 +116,7 @@ func assertReadOnlyAnnotations(t *testing.T, cs *mcp.ClientSession, name string)
 	require.NotNil(t, tool.Annotations.DestructiveHint,
 		"DestructiveHint must be set explicitly (SDK default is true)")
 	assert.False(t, *tool.Annotations.DestructiveHint)
+	assertOpenWorldHint(t, tool, false)
 	assert.NotNil(t, tool.OutputSchema, "%s advertises its OpenAPI-derived output schema", name)
 }
 
@@ -503,7 +518,8 @@ func TestRepoWriteToolAnnotations(t *testing.T) {
 		{"delete_repo", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assertMutatingAnnotations(t, cs, tc.name, tc.destructive, tc.idempotent)
+			// Every repo write goes to the Melange API only: closed-world.
+			assertMutatingAnnotations(t, cs, tc.name, tc.destructive, tc.idempotent, false)
 		})
 	}
 }

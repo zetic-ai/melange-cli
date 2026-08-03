@@ -37,6 +37,7 @@ func registerDownload(s *mcp.Server, d Deps) {
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  false,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, requestModelDownloadHandler(d))
 }

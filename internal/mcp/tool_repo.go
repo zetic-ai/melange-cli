@@ -24,6 +24,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, listReposHandler(d))
 
@@ -37,6 +38,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, getRepoHandler(d))
 
@@ -50,6 +52,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  false,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, createRepoHandler(d))
 
@@ -63,6 +66,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, updateRepoHandler(d))
 
@@ -75,6 +79,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  true,
 			DestructiveHint: truePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, deleteRepoHandler(d))
 }

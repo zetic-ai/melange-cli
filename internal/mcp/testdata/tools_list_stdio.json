@@ -3,6 +3,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": false,
+      "openWorldHint": false,
       "readOnlyHint": false
     },
     "description": "Create a repository in the account behind the token — pass NAME alone, never ACCOUNT/NAME. model_type fixes what the repository will accept and cannot be changed later: only an llm repository accepts import_model.",
@@ -131,6 +132,7 @@
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": false
     },
     "description": "Permanently delete a repository and every model in it; this cannot be undone and is restricted to the repository owner. Ask the user for explicit consent first, then repeat the exact ACCOUNT/NAME in 'confirm' — without it nothing is deleted.",
@@ -177,6 +179,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Report the account's standing as the composite object {\"usage\": …, \"quotas\": …, \"plan\": …}: current billing-period counters, those counters against the plan limits, and the effective plan tier. 'include' narrows it to the sections you need — the returned object then carries only those keys. Check quotas before an upload or conversion: each counter's 'remaining' is what enforcement actually permits right now.",
@@ -402,6 +405,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Read a model's conversion status: state (converting, optimizing, ready, or failed), pipeline stage, download readiness, and a failure code when processing failed. Returns immediately by default; wait_seconds polls with backoff and still returns the latest status when that budget runs out, so prefer short waits and call again rather than blocking on one long request.",
@@ -519,6 +523,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Answer deployment questions in one of two modes. Called with no arguments it returns the catalog: every supported SDK language, every inference mode, and the defaults. Called with repo and model_key it returns that model version's deployment guide — SDK, install steps, and inference code — optionally narrowed by language and inference_mode. Guides carry the literal YOUR_PERSONAL_KEY placeholder; no real credential is ever emitted, so tell the user to substitute their own key.",
@@ -803,6 +808,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Show one public library model: full name, provider, use-case task, model type, tags, description, and the complete readme. Take the ACCOUNT/NAME coordinate from search_library, then list its converted model keys with list_models.",
@@ -918,6 +924,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Show one model: version, type, state, default flag, source, terminal and download-ready flags, failure code, and timestamps. With include_targets the result is instead the composite object {\"model\": <model>, \"targets\": <target list>}, which adds the converted target artifacts and their opaque target_ids in a single call.",
@@ -1227,6 +1234,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Read one of a model's on-device benchmark reports. report_type selects the shape: 'general' is per-device latency, SNR, and memory measurements; 'llm' is tokens per second per quantization plus accuracy per dataset; 'package' is a mode-by-metric summary. A model only carries the report types its model type produces, so a not-found error means that shape does not exist for it — try another report_type. Public library models can be benchmarked this way without importing them.",
@@ -2594,6 +2602,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Show one repository: visibility, model type, use case, tags, description, and timestamps. The model type decides what may be uploaded or imported into it.",
@@ -2743,6 +2752,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "List a repository's models, newest first, with each model's key, version, type, state, and whether it is the repository default. Model keys are opaque — always take one from this listing instead of constructing it.",
@@ -2847,6 +2857,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "List the repositories this token can see, newest first. Start here to discover the ACCOUNT/NAME identifier the model tools take; 'search' filters server-side, and 'offset' walks further pages.",
@@ -2964,6 +2975,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": false,
+      "openWorldHint": false,
       "readOnlyHint": false
     },
     "description": "Authorize downloading one converted target's artifacts. This is BILLABLE: the target's size counts against the account's bandwidth quota, also for public models owned by others — ask the user for explicit consent, then pass confirm: true. The result lists the artifacts with every signed url replaced by \"<redacted>\"; include_urls: true returns the real short-lived URLs into the transcript instead. Every confirmed call is charged separately, so if a call fails ambiguously (timeout or connection error) check with the user before retrying. When the user is on the machine that should hold the files, tell them to run 'melange model download' instead: it verifies checksums and writes the files for them. Take model_key from list_models and target_id from get_model with include_targets.",
@@ -3062,6 +3074,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Search the public model library: models already converted and benchmarked for on-device use. 'search' matches name or full_name ignoring case and separators, 'task' filters by use case, and 'provider' takes an exact provider name. With include_providers the result is instead the composite object {\"models\": <page>, \"providers\": <provider list>}, which is how to learn the exact provider names the filter expects. Each entry's full_name is a repository coordinate usable directly with get_model_report and get_deployment_info — never import a library model just to read its public benchmarks.",
@@ -3383,6 +3396,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": false
     },
     "description": "Make one model the repository's default. Exactly one model per repository is the default, so this also clears the previous one; repeating the call returns the same result. Take model_key from list_models.",
@@ -3463,6 +3477,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": false
     },
     "description": "Update a repository's metadata. Only the arguments you pass change: tags replace the entire existing tag set, an empty description clears it, and changing visibility is restricted to the repository owner.",
@@ -3589,6 +3604,7 @@
     "annotations": {
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false,
       "readOnlyHint": true
     },
     "description": "Verify credentials and report the identity behind them: user, account, and token name/scopes. Call this first to confirm authentication before using the other melange tools.",

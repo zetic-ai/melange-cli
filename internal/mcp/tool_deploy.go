@@ -27,6 +27,7 @@ func registerDeploy(s *mcp.Server, d Deps) {
 			ReadOnlyHint:    true,
 			IdempotentHint:  true,
 			DestructiveHint: falsePtr(),
+			OpenWorldHint:   falsePtr(),
 		},
 	}, getDeploymentInfoHandler(d))
 }
