@@ -9,6 +9,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/cmd/auth"
 	"github.com/zetic-ai/melange-cli/internal/cmd/deploy"
 	"github.com/zetic-ai/melange-cli/internal/cmd/library"
+	mcpcmd "github.com/zetic-ai/melange-cli/internal/cmd/mcp"
 	"github.com/zetic-ai/melange-cli/internal/cmd/model"
 	"github.com/zetic-ai/melange-cli/internal/cmd/plan"
 	"github.com/zetic-ai/melange-cli/internal/cmd/repo"
@@ -90,6 +91,7 @@ melange help formatting.`,
 	cmd.AddCommand(usage.NewCmdUsage(f))
 	cmd.AddCommand(plan.NewCmdPlan(f))
 	cmd.AddCommand(apicmd.NewCmdAPI(f))
+	cmd.AddCommand(mcpcmd.NewCmdMCP(f))
 
 	// Additional help topics (gh-style): hidden, non-runnable commands that
 	// only print reference documentation via `melange help <topic>`.
