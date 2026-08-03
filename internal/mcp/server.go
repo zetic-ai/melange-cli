@@ -22,6 +22,9 @@ func New(deps Deps, opts Options) *mcp.Server {
 	registerAccount(s, deps)
 	registerRepo(s, deps)
 	registerModel(s, deps)
+	registerDeploy(s, deps)
+	registerReport(s, deps)
+	registerLibrary(s, deps)
 	return s
 }
 

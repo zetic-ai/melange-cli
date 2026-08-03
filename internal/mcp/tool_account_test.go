@@ -133,6 +133,161 @@ func TestWhoamiNoTokenResolvedIsToolErrorWithRemediation(t *testing.T) {
 	}
 }
 
+// Section bodies for get_account_info, again in non-alphabetical key order.
+const (
+	usageBody  = `{"prompts":120,"model_uploads":3,"active_devices":7,"bandwidth":204800}`
+	quotasBody = `{"prompts":{"used":120,"limit":1000,"remaining":880},` +
+		`"model_uploads":{"used":3,"limit":null,"remaining":null}}`
+	planBody = `{"plan":"pro","is_trial":false,"trial_ends_at":null}`
+)
+
+// stubAccountSections registers the section endpoints named in sections.
+func stubAccountSections(reg *httpmock.Registry, sections ...string) {
+	bodies := map[string]struct{ path, body string }{
+		"usage":  {"/v1/usage", usageBody},
+		"quotas": {"/v1/usage/quotas", quotasBody},
+		"plan":   {"/v1/billing/plan", planBody},
+	}
+	for _, s := range sections {
+		reg.Register(httpmock.REST("GET", bodies[s].path),
+			httpmock.JSONResponse(200, json.RawMessage(bodies[s].body)))
+	}
+}
+
+func TestGetAccountInfoWithoutIncludeReturnsEverySection(t *testing.T) {
+	reg := &httpmock.Registry{}
+	stubAccountSections(reg, "usage", "quotas", "plan")
+
+	cs, wire := connect(t, registryProvider(t, reg))
+	// nil arguments marshal to a literal "arguments": null — the shape that
+	// crashes the SDK's default-filling, so "all sections" is a handler
+	// default, never a schema one.
+	res := callTool(t, cs, "get_account_info", nil)
+
+	assert.False(t, res.IsError)
+	want := `{"usage":` + usageBody + `,"quotas":` + quotasBody + `,"plan":` + planBody + `}`
+	assert.Equal(t, want, textOf(t, res),
+		"the envelope names each section and keeps every response's bytes intact")
+
+	require.NoError(t, cs.Close())
+	assert.Contains(t, wire.String(), `"structuredContent":`+want)
+	reg.Verify(t)
+}
+
+func TestGetAccountInfoIncludeFetchesOnlyTheRequestedSections(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		include  []string
+		stub     []string
+		want     string
+		requests int
+	}{
+		{
+			name: "quotas alone", include: []string{"quotas"}, stub: []string{"quotas"},
+			want: `{"quotas":` + quotasBody + `}`, requests: 1,
+		},
+		{
+			name: "plan alone", include: []string{"plan"}, stub: []string{"plan"},
+			want: `{"plan":` + planBody + `}`, requests: 1,
+		},
+		{
+			// The envelope keys stay in their canonical order however the
+			// caller wrote include, so the same request always reads the same.
+			name: "reversed order", include: []string{"plan", "usage"}, stub: []string{"usage", "plan"},
+			want: `{"usage":` + usageBody + `,"plan":` + planBody + `}`, requests: 2,
+		},
+		{
+			name: "repeated section", include: []string{"usage", "usage"}, stub: []string{"usage"},
+			want: `{"usage":` + usageBody + `}`, requests: 1,
+		},
+		{
+			// An explicit empty list reads as "no preference", not "no data":
+			// an empty envelope would answer nothing at all.
+			name: "empty include", include: []string{}, stub: []string{"usage", "quotas", "plan"},
+			want:     `{"usage":` + usageBody + `,"quotas":` + quotasBody + `,"plan":` + planBody + `}`,
+			requests: 3,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			stubAccountSections(reg, tc.stub...)
+
+			cs, _ := connect(t, registryProvider(t, reg))
+			res := callTool(t, cs, "get_account_info", map[string]any{"include": tc.include})
+
+			assert.False(t, res.IsError)
+			assert.Equal(t, tc.want, textOf(t, res),
+				"an unrequested section is absent from the envelope, not null")
+			assert.Len(t, reg.Requests, tc.requests,
+				"a section nobody asked for is never fetched")
+			reg.Verify(t)
+		})
+	}
+}
+
+func TestGetAccountInfoRejectsAnUnknownSectionBeforeCallingTheAPI(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+
+	// The vocabulary must reach the client, not just the handler: an
+	// unadvertised section would otherwise be dropped, and a silently smaller
+	// envelope reads like a section the account does not have.
+	schema, err := json.Marshal(toolNamed(t, cs, "get_account_info").InputSchema)
+	require.NoError(t, err)
+	assert.Contains(t, string(schema), `"enum":["usage","quotas","plan"]`,
+		"the section vocabulary is advertised")
+
+	for _, tc := range []struct {
+		name    string
+		include []string
+	}{
+		{"unknown section", []string{"billing"}},
+		{"one bad section among good ones", []string{"usage", "billing"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			cs, _ := connect(t, registryProvider(t, reg))
+
+			res := callTool(t, cs, "get_account_info", map[string]any{"include": tc.include})
+
+			assert.True(t, res.IsError)
+			// The SDK prefixes schema-validation failures this way; without it,
+			// an IsError result could just as well be the unmatched-stub
+			// transport error, which would pass with no enum at all.
+			assert.Contains(t, textOf(t, res), `validating "arguments"`,
+				"the section is rejected by the schema, not by a failed request")
+			assert.Empty(t, reg.Requests, "no section is fetched for an invalid request")
+		})
+	}
+}
+
+func TestGetAccountInfoSectionFailureSurfacesInsteadOfAPartialEnvelope(t *testing.T) {
+	reg := &httpmock.Registry{}
+	stubAccountSections(reg, "usage")
+	reg.Register(httpmock.REST("GET", "/v1/usage/quotas"),
+		httpmock.JSONResponse(http.StatusForbidden, json.RawMessage(
+			`{"type":"error","error":{"type":"permission_error","message":"token cannot read quotas"},"request_id":"req_15"}`)))
+
+	cs, _ := connect(t, registryProvider(t, reg))
+	res := callTool(t, cs, "get_account_info", map[string]any{"include": []string{"usage", "quotas"}})
+
+	assert.True(t, res.IsError, "a half-built envelope is never returned as success")
+	text := textOf(t, res)
+	assert.Contains(t, text, "token cannot read quotas")
+	assert.Contains(t, text, "melange auth status")
+	reg.Verify(t)
+}
+
+func TestGetAccountInfoAnnotationsAndDescription(t *testing.T) {
+	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	assertReadOnlyAnnotations(t, cs, "get_account_info")
+
+	tool := toolNamed(t, cs, "get_account_info")
+	// The description is the only place an agent learns the envelope's shape
+	// and that 'remaining' — not limit minus used — is the real headroom.
+	assert.Contains(t, tool.Description, `{"usage":`)
+	assert.Contains(t, tool.Description, "remaining")
+}
+
 func TestWhoamiToolAnnotations(t *testing.T) {
 	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
 	tools, err := cs.ListTools(context.Background(), nil)

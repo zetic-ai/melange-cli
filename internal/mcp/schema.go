@@ -49,6 +49,18 @@ func withPageBounds(props map[string]*jsonschema.Schema) {
 	props["offset"].Minimum = &minOffset
 }
 
+// enumValues renders a tool argument's accepted set for a schema `enum`,
+// taking the generated API constants themselves so a spec change that drops
+// or renames a value fails to compile instead of silently advertising a value
+// the API no longer accepts.
+func enumValues[T ~string](values ...T) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = string(v)
+	}
+	return out
+}
+
 // pageLimit resolves an omitted limit to the default page size. The schema
 // rejects every explicit value outside 1..maxPageLimit, so zero means absent.
 func pageLimit(limit int) int {
