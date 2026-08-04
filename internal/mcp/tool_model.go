@@ -165,7 +165,7 @@ func importModelHandler(d Deps) mcp.ToolHandlerFor[importModelArgs, any] {
 			return d.toolError(err), nil, nil
 		}
 		resp, err := g.ImportModelWithResponse(ctx, account, name,
-			&gen.ImportModelParams{IdempotencyKey: newIdempotencyKeyParam()},
+			&gen.ImportModelParams{IdempotencyKey: api.NewIdempotencyKeyParam()},
 			gen.ImportModelJSONRequestBody{HfRepo: in.HfRepo})
 		if err != nil {
 			return d.toolError(err), nil, nil

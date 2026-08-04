@@ -690,7 +690,7 @@ func runCancel(ctx context.Context, opts *uploadOptions) error {
 		return err
 	}
 	resp, err := g.CancelModelUploadWithResponse(ctx, opts.account, opts.name, opts.cancelID,
-		&gen.CancelModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
+		&gen.CancelModelUploadParams{IdempotencyKey: api.NewIdempotencyKeyParam()})
 	if err != nil {
 		return err
 	}

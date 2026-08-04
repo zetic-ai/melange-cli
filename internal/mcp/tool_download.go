@@ -3,10 +3,8 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/zetic-ai/melange-cli/internal/api"
@@ -84,7 +82,7 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 		// authorization after a 5xx without charging twice.
 		resp, err := g.CreateDownloadAuthorizationWithResponse(api.WithNoRetryOn429(ctx),
 			account, name, in.ModelKey, in.TargetID,
-			&gen.CreateDownloadAuthorizationParams{IdempotencyKey: newIdempotencyKeyParam()})
+			&gen.CreateDownloadAuthorizationParams{IdempotencyKey: api.NewIdempotencyKeyParam()})
 		if err != nil {
 			return d.toolError(err), nil, nil
 		}
@@ -135,30 +133,4 @@ func redactAuthorization(raw []byte) ([]byte, error) {
 		}
 	}
 	return marshalEnvelope(body)
-}
-
-// newIdempotencyKeyParam returns a fresh random UUIDv4 as the pointer type the
-// generated params structs take. It is used by import_model and
-// request_model_download: the key is generated once per logical tool call, so
-// the API retry transport replays the same key on a 5xx retry instead of
-// starting a second import or charging a second authorization.
-//
-// It duplicates internal/cmd/model's helper because that package pulls in
-// cobra, which internal/mcp must not import.
-func newIdempotencyKeyParam() *gen.IdempotencyKey {
-	key := gen.IdempotencyKey(newIdempotencyKey())
-	return &key
-}
-
-// newIdempotencyKey returns a random UUIDv4.
-func newIdempotencyKey() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand never fails on supported platforms; fall back to a
-		// timestamp key rather than abandoning the call over it.
-		return fmt.Sprintf("melange-%d", time.Now().UnixNano())
-	}
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
