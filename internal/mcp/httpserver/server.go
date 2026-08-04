@@ -214,6 +214,14 @@ func New(cfg Config) (*Server, error) {
 	// The cost of that order is that nothing keyed on the token can throttle
 	// a caller who never presents a valid one, which is why a second, coarse
 	// limiter runs in FRONT of the whole chain, keyed on the source IP.
+	//
+	// With a scope-populating verifier (MeVerifier), the RFC 6750
+	// insufficient_scope gate sits innermost — behind auth (it reads the
+	// verifier's TokenInfo) and behind the token limiter (a scope-blocked
+	// call spends rate budget like any other) — so a scope-blocked write
+	// tools/call is answered 403 + WWW-Authenticate before the streamable
+	// handler runs. It is never installed for PassthroughVerifier, whose
+	// empty TokenInfo must keep the API as the sole authority (the PR2 trap).
 	// Without it, a single host spraying unique bearers gets an unlimited
 	// budget: in validate mode every spray request reaches /v1/me (negatives
 	// are uncached by design), and in passthrough mode every request mints a
@@ -223,9 +231,13 @@ func New(cfg Config) (*Server, error) {
 	// feels it — it only bites machine-speed sprays from one address. A
 	// distributed spray defeats it by construction; that is the backend's and
 	// the WAF's problem, not a single instance's.
+	var innermost http.Handler = mcpHandler
+	if s.verifierKind == "me" {
+		innermost = scopeStepUpGate(resourceMetadataURL, mcpHandler)
+	}
 	protected := s.ipLimiter.middleware(
 		originMiddleware(cfg.AllowedOrigins,
-			AuthMiddleware(verifier, resourceMetadataURL, s.limiter.middleware(mcpHandler))))
+			AuthMiddleware(verifier, resourceMetadataURL, s.limiter.middleware(innermost))))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)

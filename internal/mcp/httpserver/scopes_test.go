@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -76,7 +77,7 @@ func callCreateRepo(t *testing.T, ctx context.Context, session *sdk.ClientSessio
 	res, err := session.CallTool(ctx, &sdk.CallToolParams{
 		Name: "create_repo", Arguments: map[string]any{"name": "whisper-tiny"},
 	})
-	require.NoError(t, err, "scope refusals are tool errors, never protocol errors")
+	require.NoError(t, err)
 	require.NotEmpty(t, res.Content)
 	text, ok := res.Content[0].(*sdk.TextContent)
 	require.True(t, ok)
@@ -84,9 +85,11 @@ func callCreateRepo(t *testing.T, ctx context.Context, session *sdk.ClientSessio
 }
 
 // TestWriteScopeEnforcedEndToEnd drives create_repo through a real validated
-// HTTP server: a read-scoped bearer is refused before any API mutation while
-// a write-scoped bearer goes through — proving the verifier's scopes survive
-// into the tool handler's context in stateless streamable mode.
+// HTTP server: a read-scoped bearer is refused as an RFC 6750 403 before any
+// API mutation while a write-scoped bearer goes through — proving the
+// verifier's scopes survive into the scope gate in stateless streamable mode,
+// and that the refusal's remediation text reaches the SDK client verbatim
+// (go-sdk surfaces a JSON-RPC error carried in a non-2xx body).
 func TestWriteScopeEnforcedEndToEnd(t *testing.T) {
 	const (
 		readerToken = "ztp_reader_SECRETREADER"
@@ -103,15 +106,18 @@ func TestWriteScopeEnforcedEndToEnd(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	// Read-scoped bearer: refused with remediation, and the backend never
+	// Read-scoped bearer: the call fails as a protocol-level 403 whose error
+	// carries the full agent-actionable remediation, and the backend never
 	// sees the mutation — the only traffic is token validation itself.
 	reader := connectSession(t, ctx, ts.URL, readerToken)
-	text, isErr := callCreateRepo(t, ctx, reader)
-	require.True(t, isErr, "a read-scoped token must be refused")
-	assert.Contains(t, text, `needs the "write" scope`)
-	assert.Contains(t, text, `Re-authorize granting the "write" scope`,
+	_, err := reader.CallTool(ctx, &sdk.CallToolParams{
+		Name: "create_repo", Arguments: map[string]any{"name": "whisper-tiny"},
+	})
+	require.Error(t, err, "a read-scoped token must be refused")
+	assert.Contains(t, err.Error(), `needs the "write" scope`)
+	assert.Contains(t, err.Error(), `Re-authorize granting the "write" scope`,
 		"the refusal must tell the agent how to fix it")
-	assert.NotContains(t, text, readerToken, "refusals never carry bearer bytes")
+	assert.NotContains(t, err.Error(), readerToken, "refusals never carry bearer bytes")
 	for _, line := range requests() {
 		assert.NotEqual(t, "POST /v1/repos", line,
 			"a scope refusal must make zero API mutations")
@@ -119,7 +125,7 @@ func TestWriteScopeEnforcedEndToEnd(t *testing.T) {
 
 	// Write-scoped bearer: the same call succeeds and reaches the API.
 	writer := connectSession(t, ctx, ts.URL, writerToken)
-	text, isErr = callCreateRepo(t, ctx, writer)
+	text, isErr := callCreateRepo(t, ctx, writer)
 	require.False(t, isErr, "a write-scoped token must pass the gate, got: %s", text)
 	assert.Contains(t, requests(), "POST /v1/repos", "the permitted mutation must reach the API")
 
@@ -128,6 +134,96 @@ func TestWriteScopeEnforcedEndToEnd(t *testing.T) {
 	captured := logs.String()
 	assert.NotContains(t, captured, readerToken, "the bearer must never reach the server log")
 	assert.NotContains(t, captured, writerToken, "the bearer must never reach the server log")
+}
+
+// createRepoCallBody is a raw tools/call request for the write-gated
+// create_repo tool, id 7 so the 403 body's id echo is observable.
+const createRepoCallBody = `{"jsonrpc":"2.0","id":7,"method":"tools/call",` +
+	`"params":{"name":"create_repo","arguments":{"name":"whisper-tiny"}}}`
+
+// TestInsufficientScope403Shape pins the RFC 6750 signal itself, the part a
+// step-up-capable OAuth client machine-reads: HTTP 403 with
+// `WWW-Authenticate: Bearer error="insufficient_scope", scope="write"`
+// (plus the resource_metadata pointer when a resource is configured), and a
+// JSON-RPC error body that echoes the request id and carries the same
+// remediation text as the in-band tool error.
+func TestInsufficientScope403Shape(t *testing.T) {
+	const readerToken = "ztp_reader_SECRETREADER"
+
+	t.Run("validate-tokens posture", func(t *testing.T) {
+		backend, requests := newScopedBackend(t, map[string]string{readerToken: `["read"]`})
+		_, ts := newTestServer(t, backend.URL, func(cfg *Config) { cfg.ValidateTokens = true })
+
+		resp := postMCP(t, ts.URL, readerToken, "", strings.NewReader(createRepoCallBody))
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		assert.Equal(t, `Bearer error="insufficient_scope", scope="write"`,
+			resp.Header.Get("WWW-Authenticate"),
+			"the challenge is the machine-readable step-up trigger (RFC 6750 §3.1)")
+
+		var body struct {
+			JSONRPC string `json:"jsonrpc"`
+			ID      int    `json:"id"`
+			Error   struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		assert.Equal(t, "2.0", body.JSONRPC)
+		assert.Equal(t, 7, body.ID, "the 403 body must echo the request id")
+		assert.Contains(t, body.Error.Message, `needs the "write" scope`)
+		assert.Contains(t, body.Error.Message, `Re-authorize granting the "write" scope`,
+			"the 403 body must carry the same agent-actionable remediation as the tool error")
+		assert.NotContains(t, body.Error.Message, readerToken)
+
+		for _, line := range requests() {
+			assert.NotEqual(t, "POST /v1/repos", line, "the refusal must make zero API mutations")
+		}
+	})
+
+	t.Run("resource posture advertises discovery", func(t *testing.T) {
+		backend, _ := newScopedBackend(t, map[string]string{readerToken: `["read"]`})
+		_, ts := newTestServer(t, backend.URL, func(cfg *Config) {
+			cfg.Resource = "https://mcp.zetic.ai"
+		})
+
+		resp := postMCP(t, ts.URL, readerToken, "", strings.NewReader(createRepoCallBody))
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		assert.Equal(t, `Bearer error="insufficient_scope", scope="write", `+
+			`resource_metadata="https://mcp.zetic.ai/.well-known/oauth-protected-resource"`,
+			resp.Header.Get("WWW-Authenticate"),
+			"a 403 must let a step-up client discover the authorization server, like the 401 does")
+	})
+}
+
+// TestPassthroughNeverEmits403 pins the PR2 trap's guard on the new signal:
+// under PassthroughVerifier there is no verified grant, so the gate must not
+// exist — a write tools/call with any bearer reaches the API, the sole
+// authority in that posture.
+func TestPassthroughNeverEmits403(t *testing.T) {
+	backend, requests := newScopedBackend(t, map[string]string{"any-token": `["read"]`})
+	_, ts := newTestServer(t, backend.URL, nil) // no ValidateTokens, no Resource
+
+	resp := postMCP(t, ts.URL, "any-token", "", strings.NewReader(createRepoCallBody))
+	assert.Equal(t, http.StatusOK, resp.StatusCode,
+		"passthrough must never 403 on scopes it cannot know")
+	assert.Empty(t, resp.Header.Get("WWW-Authenticate"))
+	assert.Contains(t, requests(), "POST /v1/repos",
+		"the API stays the sole authority under passthrough")
+}
+
+// TestValidatedTokenWithoutScopesPassesGate pins the other unenforced case
+// requireScope documents: a validated token whose grant names no scopes falls
+// back to the API's own authorization — the gate narrows known grants, it
+// never invents an authority the backend didn't state.
+func TestValidatedTokenWithoutScopesPassesGate(t *testing.T) {
+	const token = "ztp_unscoped_SECRET"
+	backend, requests := newScopedBackend(t, map[string]string{token: `[]`})
+	_, ts := newTestServer(t, backend.URL, func(cfg *Config) { cfg.ValidateTokens = true })
+
+	resp := postMCP(t, ts.URL, token, "", strings.NewReader(createRepoCallBody))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, requests(), "POST /v1/repos")
 }
 
 // TestReadToolsUnaffectedByReadScope pins the other half of the contract: a

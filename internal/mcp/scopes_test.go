@@ -295,6 +295,37 @@ func TestMutatingToolCasesCoverCatalog(t *testing.T) {
 	}
 }
 
+// TestRequiresWriteScopeMatchesCatalog pins the exported write-scope tool set
+// to the registered catalog: RequiresWriteScope must be true for exactly the
+// tools whose ReadOnlyHint is false (the local superset, so upload_model is
+// covered). The HTTP transport's insufficient_scope gate keys on this set, so
+// drift in either direction is a shipped bug — a missing mutating tool would
+// silently skip the RFC 6750 signal (falling back to the in-band refusal),
+// and a stale entry would 403 a tool that no longer needs write.
+func TestRequiresWriteScopeMatchesCatalog(t *testing.T) {
+	cs := connectWith(t, "test", Options{EnableLocalTools: true})
+	seen := map[string]bool{}
+	for _, tool := range listAllTools(t, cs) {
+		require.NotNil(t, tool.Annotations, "%s must declare annotations", tool.Name)
+		seen[tool.Name] = true
+		assert.Equal(t, !tool.Annotations.ReadOnlyHint, RequiresWriteScope(tool.Name),
+			"RequiresWriteScope(%s) must mirror the catalog's ReadOnlyHint", tool.Name)
+	}
+	for name := range writeScopeTools {
+		assert.True(t, seen[name], "write-scope entry %s matches no registered tool", name)
+	}
+}
+
+// TestWriteScopeRefusalTextMatchesToolError pins the byte-identity between the
+// exported refusal text (the HTTP 403 body) and the in-band tool error, so
+// the two layers can never teach an agent two different remediations.
+func TestWriteScopeRefusalTextMatchesToolError(t *testing.T) {
+	d := Deps{}
+	refusal := d.requireScope(scopedContext(t, &auth.TokenInfo{Scopes: []string{"read"}}), scopeWrite)
+	require.NotNil(t, refusal)
+	assert.Equal(t, WriteScopeRefusalText([]string{"read"}), textOf(t, refusal))
+}
+
 // TestStdioSessionUnaffectedByScopeEnforcement pins the frozen stdio behavior
 // end to end: over a real (in-memory, i.e. non-HTTP — the stdio code path)
 // session there is no TokenInfo, so a mutating tool runs exactly as before
