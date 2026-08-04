@@ -1326,5 +1326,6 @@
       "type": "object"
     }
   ],
-  "description": "One of the three report shapes, selected by report_type: general, llm, or package."
+  "description": "One of the three report shapes, selected by report_type: general, llm, or package.",
+  "type": "object"
 }

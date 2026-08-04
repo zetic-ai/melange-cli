@@ -238,5 +238,6 @@
       "type": "object"
     }
   ],
-  "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key)."
+  "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key).",
+  "type": "object"
 }

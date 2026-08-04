@@ -262,5 +262,6 @@
       "type": "object"
     }
   ],
-  "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope."
+  "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope.",
+  "type": "object"
 }

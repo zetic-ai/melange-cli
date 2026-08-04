@@ -801,7 +801,8 @@
           "type": "object"
         }
       ],
-      "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key)."
+      "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key).",
+      "type": "object"
     }
   },
   {
@@ -1227,7 +1228,8 @@
           "type": "object"
         }
       ],
-      "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope."
+      "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope.",
+      "type": "object"
     }
   },
   {
@@ -2595,7 +2597,8 @@
           "type": "object"
         }
       ],
-      "description": "One of the three report shapes, selected by report_type: general, llm, or package."
+      "description": "One of the three report shapes, selected by report_type: general, llm, or package.",
+      "type": "object"
     }
   },
   {
@@ -3389,7 +3392,8 @@
           "type": "object"
         }
       ],
-      "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope."
+      "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope.",
+      "type": "object"
     }
   },
   {
