@@ -124,7 +124,8 @@ type Server struct {
 // New validates cfg and assembles the server. The handler chain for the MCP
 // endpoint is (outermost first): IP rate limit -> Origin policy -> bearer
 // auth -> bearer capture -> token rate limit -> streamable handler; /healthz
-// bypasses all of it.
+// and (with a configured Resource) the RFC 9728 metadata document bypass all
+// of it.
 func New(cfg Config) (*Server, error) {
 	if cfg.Listen == "" {
 		return nil, errors.New("httpserver: Listen address is required")
@@ -142,6 +143,21 @@ func New(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("httpserver: invalid Resource: %w", err)
 		}
 		cfg.Resource = resource
+	}
+	// A resource identity brings OAuth discovery with it: the RFC 9728
+	// document at its well-known path and the resource_metadata challenge
+	// parameter pointing there. Without one there is nothing truthful to
+	// publish — an RFC 9728 document exists to name a resource identifier —
+	// so no route is registered and 401 challenges stay bare.
+	var metadataPath, resourceMetadataURL string
+	if cfg.Resource != "" {
+		var err error
+		metadataPath, resourceMetadataURL, err = protectedResourceMetadataLocation(cfg.Resource)
+		if err != nil {
+			// Unreachable after CanonicalResource above; fail loudly if the
+			// invariant ever breaks rather than serve without discovery.
+			return nil, fmt.Errorf("httpserver: %w", err)
+		}
 	}
 	logger := cfg.Logger
 	if logger == nil {
@@ -203,7 +219,7 @@ func New(cfg Config) (*Server, error) {
 	// the WAF's problem, not a single instance's.
 	protected := s.ipLimiter.middleware(
 		originMiddleware(cfg.AllowedOrigins,
-			AuthMiddleware(verifier, s.limiter.middleware(mcpHandler))))
+			AuthMiddleware(verifier, resourceMetadataURL, s.limiter.middleware(mcpHandler))))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
@@ -214,6 +230,18 @@ func New(cfg Config) (*Server, error) {
 	// itself stays path-agnostic: the deployment, not this binary, decides
 	// what prefix the transport is published under.)
 	mux.HandleFunc("/healthz", healthzMethodNotAllowed)
+	if metadataPath != "" {
+		// OAuth discovery is public by design (RFC 9728 §3.1) and happens
+		// before the client holds any credential, so the document is served
+		// like /healthz — outside the rate limiters, the Origin policy, and
+		// bearer auth. The handler answers browsers from ANY Origin with
+		// Access-Control-Allow-Origin: * on purpose: the operator's
+		// --allowed-origins gates the credentialed MCP endpoint, not public
+		// configuration. All methods route here (no method pattern) so a CORS
+		// preflight OPTIONS gets its 204 instead of a 401 from the protected
+		// chain.
+		mux.Handle(metadataPath, protectedResourceMetadataHandler(cfg.Resource, cfg.APIHost))
+	}
 	mux.Handle("/", protected)
 	s.handler = mux
 

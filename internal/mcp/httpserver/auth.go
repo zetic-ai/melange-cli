@@ -31,7 +31,11 @@ import (
 // runs verifier on the token, then bearerToContext captures the raw bearer in
 // the request context for the per-request ClientProvider. Every 401 leaves
 // with a WWW-Authenticate challenge (see challengeWriter).
-func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler {
+//
+// resourceMetadataURL is the absolute URL of this server's RFC 9728
+// protected-resource metadata document, or "" when no resource identity is
+// configured (the document is then not served at all — see metadata.go).
+func AuthMiddleware(verifier auth.TokenVerifier, resourceMetadataURL string, next http.Handler) http.Handler {
 	require := auth.RequireBearerToken(verifier, &auth.RequireBearerTokenOptions{
 		// Melange personal access tokens carry no in-band expiry; their
 		// lifetime is managed server-side. Without this, the middleware would
@@ -39,11 +43,13 @@ func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler
 		// real expires_at into TokenInfo, the SDK still enforces it per
 		// request.
 		AllowMissingExpiration: true,
-		// Seam (CLI-PR4): set ResourceMetadataURL here when the OAuth
-		// protected-resource metadata endpoint (RFC 9728) lands. The SDK then
-		// emits `WWW-Authenticate: Bearer resource_metadata="..."` itself and
-		// challengeWriter's bare fallback goes dormant (it only fires when the
-		// header is absent).
+		// Non-empty, the SDK stamps every 401 with the RFC 9728 discovery
+		// pointer — `WWW-Authenticate: Bearer resource_metadata="<url>"` — the
+		// entry point of the OAuth flow: challenge → metadata document →
+		// authorization_servers[0] → RFC 8414 metadata → authorize/token.
+		// Empty leaves the SDK header unset and challengeWriter supplies the
+		// bare `Bearer` scheme instead.
+		ResourceMetadataURL: resourceMetadataURL,
 	})
 	inner := require(bearerToContext(next))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,11 +62,14 @@ func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler
 //
 // go-sdk v1.7.0's RequireBearerToken only writes the header when
 // ResourceMetadataURL or Scopes produce challenge parameters (auth/auth.go:
-// empty params ⇒ no header at all), and we configure neither yet. This
-// wrapper adds the bare `Bearer` scheme exactly when the SDK left the header
-// unset, so a parameterized SDK header always wins once CLI-PR4 configures
-// ResourceMetadataURL. The 401 decision itself — status, body — stays
-// SDK-generated; only the missing challenge is supplied.
+// empty params ⇒ no header at all). With a resource identity configured the
+// SDK emits the parameterized challenge itself — it Adds the header before
+// http.Error triggers WriteHeader, so this wrapper sees it and goes dormant.
+// Without one, this wrapper adds the bare `Bearer` scheme exactly when the
+// SDK left the header unset. Either way exactly one challenge leaves: the
+// parameterized header is never overridden or duplicated. The 401 decision
+// itself — status, body — stays SDK-generated; only the missing challenge is
+// supplied.
 type challengeWriter struct {
 	http.ResponseWriter
 }

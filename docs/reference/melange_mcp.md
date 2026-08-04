@@ -22,8 +22,11 @@ token. Requests are stateless (no session ids), GET /healthz is an
 unauthenticated liveness probe, and browser Origins are rejected unless
 listed in --allowed-origins. Setting --resource (or MELANGE_MCP_RESOURCE)
 declares the server's canonical URL as an OAuth protected resource: every
-bearer is then validated against the API, and OAuth tokens bound to a
-different resource are rejected. Only API-backed tools are served: anything
+bearer is then validated against the API, OAuth tokens bound to a different
+resource are rejected, and the server publishes RFC 9728 discovery metadata
+at /.well-known/oauth-protected-resource — 401 challenges point there so
+OAuth-capable clients can locate the authorization server on their own.
+Only API-backed tools are served: anything
 that would touch the caller's own machine (model uploads) stays stdio-only,
 because the server cannot see the caller's files.
 

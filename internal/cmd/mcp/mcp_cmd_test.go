@@ -445,7 +445,11 @@ func TestHTTPResourceEnforcesAudience(t *testing.T) {
 		resp := s.post(t, "zoa_bound_elsewhere", initializeBody)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode,
 			"a token bound to a different resource must be refused")
-		assert.Equal(t, "Bearer", resp.Header.Get("WWW-Authenticate"))
+		// A configured resource brings RFC 9728 discovery with it: the
+		// challenge names this server's own metadata document.
+		assert.Equal(t,
+			`Bearer resource_metadata="https://mcp.zetic.ai/.well-known/oauth-protected-resource"`,
+			resp.Header.Get("WWW-Authenticate"))
 	})
 }
 

@@ -164,7 +164,7 @@ func TestZoaShapedTokenFlowsEndToEnd(t *testing.T) {
 func TestUnauthenticated401Shape(t *testing.T) {
 	handlerInvoked := false
 	sentinel := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { handlerInvoked = true })
-	chain := AuthMiddleware(PassthroughVerifier, sentinel)
+	chain := AuthMiddleware(PassthroughVerifier, "", sentinel)
 
 	cases := []struct {
 		name          string
@@ -494,12 +494,14 @@ func TestResourceConfigEnforcesAudienceThroughStack(t *testing.T) {
 
 	_, ts := newTestServer(t, stub.URL, func(c *Config) { c.Resource = canonical })
 
-	// The mismatched token is refused at the door: SDK 401 with the Bearer
-	// challenge, one upstream check, and neither the resource URLs nor the
+	// The mismatched token is refused at the door: SDK 401 whose challenge
+	// now carries the RFC 9728 discovery pointer (a resource identity is
+	// configured), one upstream check, and neither the resource URLs nor the
 	// token in the body.
 	resp := postMCP(t, ts.URL, wrong, "", strings.NewReader(initializeBody))
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-	assert.Equal(t, "Bearer", resp.Header.Get("WWW-Authenticate"))
+	assert.Equal(t, `Bearer resource_metadata="`+canonical+protectedResourceWellKnown+`"`,
+		resp.Header.Get("WWW-Authenticate"))
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), wrong, "the bearer must never appear in the 401 body")
