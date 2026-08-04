@@ -46,6 +46,10 @@
 # stragglers from earlier failed runs (repos matching mcp-e2e-run-*, the
 # mcp-e2e-server container) are purged on start. The compose db container is
 # left running on exit — it is a shared dev database, not ours to stop.
+#
+# NOT concurrency-safe: the container name and both host ports are fixed, so
+# two simultaneous runs on one host collide (the second purges the first's
+# backend). Run one at a time per machine.
 set -euo pipefail
 export LC_ALL=C
 
@@ -70,9 +74,15 @@ chmod 700 "$WORK"
 mkdir -p "$WORK/secret" "$WORK/legs"
 chmod 700 "$WORK/secret"
 
+# Everything this script prints is part of the credential-hygiene surface:
+# FAIL branches quote server text, so the console itself must be scanned by
+# the final self-check. Mirror it into the work dir.
+exec > >(tee "$WORK/console.log") 2>&1
+
 STUB_PID=""
 HTTP_PID=""
 STARTED_CONTAINER=0
+BRINGUP=0
 PAT=""
 PAT_READ=""
 HOST=""
@@ -145,6 +155,9 @@ cleanup() {
     exit "$status"
 }
 trap cleanup EXIT
+# A signal must still tear everything down: convert it into an exit so the
+# EXIT trap above runs exactly once.
+trap 'exit 130' INT TERM
 
 # ── Plain API helpers (direct backend calls, used for byte-exact baselines
 #    and cleanup — never through the MCP server) ────────────────────────────
@@ -168,6 +181,7 @@ if [ -n "${MELANGE_HOST:-}" ]; then
     note "using existing backend $HOST"
     wait_backend || fatal "backend $HOST did not answer /v1/me within 60s"
 else
+    BRINGUP=1
     need docker "bring-up mode (or set MELANGE_HOST)"
     need python3 "the Airflow dispatch stub"
     [ -f "$BACKEND_DIR/docker-compose.yml" ] ||
@@ -199,6 +213,17 @@ else
     python3 "$ROOT/script/mcp-e2e-airflow-stub.py" "$STUB_PORT" \
         >"$WORK/stub.log" 2>&1 &
     STUB_PID=$!
+    STUB_READY=0
+    for _ in $(seq 1 25); do
+        if curl -fsS -m 2 -X POST "http://127.0.0.1:$STUB_PORT/auth/token" \
+            -d '{}' >/dev/null 2>&1; then
+            STUB_READY=1
+            break
+        fi
+        sleep 0.2
+    done
+    [ "$STUB_READY" = 1 ] ||
+        fatal "the Airflow stub never became ready on :$STUB_PORT ($(tail -2 "$WORK/stub.log" | tr '\n' ' '))"
 
     note "starting backend container $SERVER_CONTAINER on :$BACKEND_PORT"
     # Plain `docker run` rather than compose: compose's env_file injection
@@ -223,6 +248,35 @@ else
         docker logs "$SERVER_CONTAINER" 2>&1 | tail -20 >&2
         fatal "backend container never became reachable on $HOST"
     }
+
+    # HARD GATE before anything writes (migrate, seed): the container's
+    # effective database — the one Django actually resolved from .env.prod —
+    # must be the local compose MySQL AND an e2e-named database. In this
+    # project dev-be IS prod, so a misconfigured .env.prod would otherwise let
+    # one `make e2e` migrate prod and mint a staff/bypass account on real
+    # infrastructure. DB_HOST must be the compose service alias "db"
+    # (host-published ports never resolve to that name), and DB_NAME must
+    # match the e2e allowlist. Documentation is not a gate; this is.
+    note "verifying the container's database is the local compose e2e DB"
+    DB_GATE="$(docker exec -i -e POETRY_VIRTUALENVS_IN_PROJECT=false "$SERVER_CONTAINER" \
+        poetry run python manage.py shell 2>/dev/null <<'PYDB' | grep '^DBGATE ' || true
+from django.conf import settings
+
+db = settings.DATABASES["default"]
+print("DBGATE", db.get("HOST", ""), db.get("NAME", ""))
+PYDB
+)"
+    DB_HOST_EFF="$(echo "$DB_GATE" | awk '{print $2}')"
+    DB_NAME_EFF="$(echo "$DB_GATE" | awk '{print $3}')"
+    [ "$DB_HOST_EFF" = "db" ] ||
+        fatal "refusing to touch this database: the container resolves DB_HOST='$DB_HOST_EFF', not the compose service 'db' — $BACKEND_DIR/.env.prod points somewhere that may be real infrastructure"
+    case "$DB_NAME_EFF" in
+    zetic_e2e | *_e2e | e2e_* | test_*) : ;;
+    *)
+        fatal "refusing to touch database '$DB_NAME_EFF': not on the e2e allowlist (zetic_e2e, *_e2e, e2e_*, test_*) — fix DB_NAME in $BACKEND_DIR/.env.prod"
+        ;;
+    esac
+    note "database gate ok: $DB_HOST_EFF/$DB_NAME_EFF"
 
     note "applying migrations (idempotent)"
     docker exec -e POETRY_VIRTUALENVS_IN_PROJECT=false "$SERVER_CONTAINER" \
@@ -437,7 +491,27 @@ stdio_await() { # await-id deadline-seconds frames... -> matching line on stdout
         i=$((i + 1))
     done
     exec 3>&-
-    wait "$pid" 2>/dev/null || true
+    # A closed stdin is a clean disconnect: the server must exit, and exit 0
+    # (the frozen 0/1/2/4/130 contract). A hang here would previously block
+    # `wait` forever; now it is bounded and recorded as a contract violation,
+    # as is any non-zero exit.
+    i=0
+    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 50 ]; do
+        sleep 0.2
+        i=$((i + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        echo "stdio server ignored EOF for 10s (killed) after awaiting id=$await" \
+            >>"$WORK/legs/exit-violations"
+    else
+        local rc=0
+        wait "$pid" 2>/dev/null || rc=$?
+        [ "$rc" -eq 0 ] ||
+            echo "stdio server exited $rc (want 0) after awaiting id=$await" \
+                >>"$WORK/legs/exit-violations"
+    fi
     rm -f "$fifo"
     jq -c --argjson id "$await" 'select(.id==$id)' "$out"
     cat "$out" >>"$WORK/legs/stdio-transcript.ndjson"
@@ -466,7 +540,22 @@ http_post() { # body [bearer] -> body on stdout; status in HTTP_CODE; headers in
         -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
         ${auth[@]+"${auth[@]}"} -d "$body")"
+    # Every response survives to the hygiene sweep — per-call files get
+    # overwritten, so a bearer echoed by ANY response (e.g. mid-burst) must
+    # land in the cumulative transcript.
+    {
+        cat "$WORK/legs/http-headers"
+        cat "$WORK/legs/http-body"
+        echo ""
+    } >>"$WORK/legs/http-transcript.log"
     cat "$WORK/legs/http-body"
+}
+
+# header_value NAME: the exact value of a response header from the last
+# http_post, CR stripped — for exact comparisons, never substring matches.
+header_value() {
+    awk -F': ' -v h="$1" 'tolower($1)==h {sub(/\r$/, "", $2); print $2; exit}' \
+        "$WORK/legs/http-headers"
 }
 
 # ═══════════════════════════════════ stdio legs ═════════════════════════════
@@ -502,7 +591,7 @@ fi
 # order).
 WHOAMI="$(stdio_call whoami '{}' 30)"
 MCP_ME="$(echo "$WHOAMI" | jq -c '.result.structuredContent | del(.token.last_used_at)')"
-API_ME="$(api_get /v1/me | jq -c 'del(.token.last_used_at)')"
+API_ME="$(api_get /v1/me 2>/dev/null | jq -c 'del(.token.last_used_at)' || true)"
 if [ -n "$MCP_ME" ] && [ "$MCP_ME" != null ] && [ "$MCP_ME" = "$API_ME" ]; then
     record PASS "stdio whoami passthrough" "byte-exact vs GET /v1/me (last_used_at masked)"
 else
@@ -520,13 +609,20 @@ else
 fi
 
 # S5: get_repo byte-exact vs the API (a stable read: repo timestamps do not
-# move between the two calls).
-REPO_MCP="$(stdio_call get_repo "$(jq -nc --arg r "$ACCOUNT/$RUN_REPO" '{repo:$r}')" 30 | jq -c '.result.structuredContent')"
-REPO_API="$(api_get "/v1/repos/$ACCOUNT/$RUN_REPO" | jq -c .)"
-if [ -n "$REPO_MCP" ] && [ "$REPO_MCP" != null ] && [ "$REPO_MCP" = "$REPO_API" ]; then
-    record PASS "stdio get_repo passthrough" "byte-exact vs GET /v1/repos/$ACCOUNT/$RUN_REPO"
+# move between the two calls). Two comparisons: structuredContent through one
+# identical jq compaction on each side (identical JSON incl. key order), AND
+# the true byte-level check — the TextContent mirror carries the response
+# body's exact bytes, so it must equal the raw API body verbatim.
+GETREPO="$(stdio_call get_repo "$(jq -nc --arg r "$ACCOUNT/$RUN_REPO" '{repo:$r}')" 30)"
+REPO_MCP="$(echo "$GETREPO" | jq -c '.result.structuredContent')"
+REPO_TEXT="$(echo "$GETREPO" | jq -r '.result.content[0].text // empty')"
+REPO_RAW="$(api_get "/v1/repos/$ACCOUNT/$RUN_REPO" 2>/dev/null || true)"
+REPO_API="$(echo "$REPO_RAW" | jq -c . || true)"
+if [ -n "$REPO_MCP" ] && [ "$REPO_MCP" != null ] && [ "$REPO_MCP" = "$REPO_API" ] &&
+    [ -n "$REPO_TEXT" ] && [ "$REPO_TEXT" = "$REPO_RAW" ]; then
+    record PASS "stdio get_repo passthrough" "structuredContent + raw text bytes identical to GET /v1/repos/$ACCOUNT/$RUN_REPO"
 else
-    record FAIL "stdio get_repo passthrough" "mcp=$REPO_MCP api=$REPO_API"
+    record FAIL "stdio get_repo passthrough" "mcp=$REPO_MCP api=$REPO_API text-bytes-match=$([ "$REPO_TEXT" = "$REPO_RAW" ] && echo yes || echo no)"
 fi
 
 # S6+S7: import_model, then get_conversion_status with a bounded wait. The
@@ -549,16 +645,32 @@ else
     fi
 
     if [ -n "$MODEL_KEY" ]; then
+        # The wait must actually be bounded: with the model stuck converting,
+        # wait_seconds:5 has to burn (roughly) its whole budget before
+        # returning the latest state — returning instantly means the poll
+        # never waited, and blowing far past it means the budget is not a
+        # bound. Elapsed includes process spawn plus round trips, hence the
+        # asymmetric band.
+        T0=$SECONDS
         STATUS="$(stdio_call get_conversion_status "$(jq -nc --arg r "$ACCOUNT/$RUN_REPO" --arg k "$MODEL_KEY" '{repo:$r, model_key:$k, wait_seconds:5}')" 40)"
+        ELAPSED=$((SECONDS - T0))
         STATE="$(echo "$STATUS" | jq -r '.result.structuredContent.state // empty')"
-        case "$STATE" in
-        converting | optimizing | ready | failed)
-            record PASS "stdio get_conversion_status" "bounded wait (5s) returned state=$STATE"
-            ;;
-        *)
-            record FAIL "stdio get_conversion_status" "$(echo "$STATUS" | jq -c '.result.content[0].text // .' | head -c 220)"
-            ;;
-        esac
+        # Bring-up mode is deterministic — the stub never runs the DAG, so
+        # anything but "converting" is a regression. Only a MELANGE_HOST
+        # backend (real pipeline, unknown timing) gets the permissive set.
+        if [ "$BRINGUP" = 1 ]; then
+            STATE_OK=$([ "$STATE" = converting ] && echo 1 || echo 0)
+        else
+            case "$STATE" in
+            converting | optimizing | ready | failed) STATE_OK=1 ;;
+            *) STATE_OK=0 ;;
+            esac
+        fi
+        if [ "$STATE_OK" = 1 ] && [ "$ELAPSED" -ge 4 ] && [ "$ELAPSED" -le 15 ]; then
+            record PASS "stdio get_conversion_status" "wait_seconds:5 spent ${ELAPSED}s, state=$STATE"
+        else
+            record FAIL "stdio get_conversion_status" "state='$STATE' elapsed=${ELAPSED}s (want converting in 4..15s): $(echo "$STATUS" | jq -c '.result.content[0].text // .' | head -c 160)"
+        fi
     else
         record SKIP "stdio get_conversion_status" "no model key from import"
     fi
@@ -570,49 +682,86 @@ fi
 FIX_KEY="$(api_get "/v1/repos/$ACCOUNT/$FIXTURES_REPO/models" 2>/dev/null |
     jq -r '.results[0].key // empty' 2>/dev/null || true)"
 FIX_TARGET=""
+FIX_SIZE=""
 if [ -n "$FIX_KEY" ]; then
-    FIX_TARGET="$(api_get "/v1/repos/$ACCOUNT/$FIXTURES_REPO/models/$FIX_KEY/targets" |
-        jq -r '.results[0].target_id // empty')"
+    FIX_TARGET="$(api_get "/v1/repos/$ACCOUNT/$FIXTURES_REPO/models/$FIX_KEY/targets" 2>/dev/null |
+        jq -r '.results[0].target_id // empty' || true)"
+    FIX_SIZE="$(api_get "/v1/repos/$ACCOUNT/$FIXTURES_REPO/models/$FIX_KEY/targets" 2>/dev/null |
+        jq -r '.results[0].download_size // empty' || true)"
+fi
+# In bring-up mode the seed step just created this fixture, so a discovery
+# miss is a product or seeding bug — never a silent SKIP that greens a run
+# which tested nothing.
+if [ "$BRINGUP" = 1 ] && { [ -z "$FIX_KEY" ] || [ -z "$FIX_TARGET" ] || [ -z "$FIX_SIZE" ]; }; then
+    record FAIL "fixture discovery" "bring-up seeded $FIXTURES_REPO but discovery got key='$FIX_KEY' target='$FIX_TARGET' size='$FIX_SIZE'"
 fi
 
-# S8: get_deployment_info — catalog mode always; guide mode via the fixture.
+# S8: get_deployment_info — catalog mode always, with the concrete key set
+# and populated vocabularies; guide mode via the fixture, asserting the
+# version, the default language/inference-mode echo, the literal credential
+# placeholder, and non-empty steps. `{}` or a reshaped catalog must FAIL.
 DEPLOY="$(stdio_call get_deployment_info '{}' 30)"
 DEPLOY_KEYS="$(echo "$DEPLOY" | jq -c '.result.structuredContent | keys? // []' 2>/dev/null || echo '[]')"
-if echo "$DEPLOY" | jq -e '(.result.structuredContent | type == "object") and ((.result.isError // false) | not)' >/dev/null 2>&1; then
+DEF_LANG="$(echo "$DEPLOY" | jq -r '.result.structuredContent.default_language // empty')"
+DEF_MODE="$(echo "$DEPLOY" | jq -r '.result.structuredContent.default_inference_mode // empty')"
+CATALOG_OK=0
+if [ "$DEPLOY_KEYS" = '["default_inference_mode","default_language","guide_version","inference_modes","languages"]' ] &&
+    [ -n "$DEF_LANG" ] && [ -n "$DEF_MODE" ] &&
+    echo "$DEPLOY" | jq -e '(.result.structuredContent.languages | length > 0) and (.result.structuredContent.inference_modes | length > 0)' >/dev/null 2>&1; then
+    CATALOG_OK=1
+fi
+if [ "$CATALOG_OK" = 1 ]; then
     if [ -n "$FIX_KEY" ]; then
         GUIDE="$(stdio_call get_deployment_info "$(jq -nc --arg r "$ACCOUNT/$FIXTURES_REPO" --arg k "$FIX_KEY" '{repo:$r, model_key:$k}')" 30)"
-        if echo "$GUIDE" | jq -e '(.result.structuredContent | type == "object") and ((.result.isError // false) | not)' >/dev/null 2>&1; then
-            record PASS "stdio get_deployment_info" "catalog keys=$DEPLOY_KEYS; fixture guide ok"
+        if echo "$GUIDE" | jq -e --arg lang "$DEF_LANG" --arg mode "$DEF_MODE" '
+            .result.structuredContent as $g
+            | ($g.guide_version | type == "number")
+            and ($g.language == $lang)
+            and ($g.inference_mode == $mode)
+            and ($g.credential_placeholder == "YOUR_PERSONAL_KEY")
+            and (($g.steps | length) > 0)' >/dev/null 2>&1; then
+            record PASS "stdio get_deployment_info" "catalog exact ($DEF_LANG/$DEF_MODE defaults); guide echoes defaults, placeholder literal, steps>0"
         else
-            record FAIL "stdio get_deployment_info" "guide failed: $(echo "$GUIDE" | jq -c '.result.content[0].text // .' | head -c 180)"
+            record FAIL "stdio get_deployment_info" "guide mismatch: $(echo "$GUIDE" | jq -c '.result.structuredContent | {guide_version, language, inference_mode, credential_placeholder} // .result.content[0].text' | head -c 200)"
         fi
     else
-        record PASS "stdio get_deployment_info" "catalog keys=$DEPLOY_KEYS; guide untested (no fixture model)"
+        record PASS "stdio get_deployment_info" "catalog exact ($DEF_LANG/$DEF_MODE defaults); guide untested (no fixture model)"
     fi
 else
-    record FAIL "stdio get_deployment_info" "$(echo "$DEPLOY" | jq -c '.result.content[0].text // .' | head -c 200)"
+    record FAIL "stdio get_deployment_info" "catalog keys=$DEPLOY_KEYS defaults='$DEF_LANG/$DEF_MODE' (want the exact 5-key catalog): $(echo "$DEPLOY" | jq -c '.result.content[0].text // .' | head -c 140)"
 fi
 
-# S9: request_model_download refuses without confirm — and must say so
-# without having authorized anything.
-if [ -n "$FIX_KEY" ] && [ -n "$FIX_TARGET" ]; then
+# S9: request_model_download refuses without confirm. The refusal text alone
+# is not proof — a regression that authorizes AND returns the refusal string
+# would pass a message check — so the side effect is probed too: a confirmed
+# authorization charges the caller's bandwidth counter (GET /v1/usage), which
+# must therefore be unchanged across the refusal and grow by exactly the
+# target's download_size across the confirmed call.
+bandwidth_now() { api_get /v1/usage 2>/dev/null | jq -r '.bandwidth // empty' || true; }
+if [ -n "$FIX_KEY" ] && [ -n "$FIX_TARGET" ] && [ -n "$FIX_SIZE" ]; then
+    BW_BEFORE="$(bandwidth_now)"
     REFUSE="$(stdio_call request_model_download "$(jq -nc --arg r "$ACCOUNT/$FIXTURES_REPO" --arg k "$FIX_KEY" --arg t "$FIX_TARGET" '{repo:$r, model_key:$k, target_id:$t}')" 30)"
+    BW_AFTER_REFUSE="$(bandwidth_now)"
     if echo "$REFUSE" | jq -e '.result.isError == true' >/dev/null 2>&1 &&
-        echo "$REFUSE" | jq -r '.result.content[0].text' | grep -q "nothing was authorized"; then
-        record PASS "stdio download confirm gate" "unconfirmed call refused, nothing authorized"
+        echo "$REFUSE" | jq -r '.result.content[0].text' | grep -q "nothing was authorized" &&
+        [ -n "$BW_BEFORE" ] && [ "$BW_BEFORE" = "$BW_AFTER_REFUSE" ]; then
+        record PASS "stdio download confirm gate" "refused; bandwidth counter unchanged ($BW_BEFORE)"
     else
-        record FAIL "stdio download confirm gate" "$(echo "$REFUSE" | jq -c '.result.content[0].text // .' | head -c 200)"
+        record FAIL "stdio download confirm gate" "bandwidth $BW_BEFORE->$BW_AFTER_REFUSE; $(echo "$REFUSE" | jq -c '.result.content[0].text // .' | head -c 160)"
     fi
 
     # S10: confirmed billable download — every signed artifact URL must come
-    # back redacted (the default; include_urls stays off in an e2e transcript).
+    # back redacted (the default; include_urls stays off in an e2e transcript),
+    # and the charge must land: bandwidth grows by exactly download_size.
     DOWNLOAD="$(stdio_call request_model_download "$(jq -nc --arg r "$ACCOUNT/$FIXTURES_REPO" --arg k "$FIX_KEY" --arg t "$FIX_TARGET" '{repo:$r, model_key:$k, target_id:$t, confirm:true}')" 60)"
+    BW_AFTER_CONFIRM="$(bandwidth_now)"
     AUTH_ID="$(echo "$DOWNLOAD" | jq -r '.result.structuredContent.authorization_id // empty')"
     URLS="$(echo "$DOWNLOAD" | jq -r '[.result.structuredContent.artifacts[].url] | unique | join(",")' 2>/dev/null || true)"
-    if [ -n "$AUTH_ID" ] && [ "$URLS" = "<redacted>" ]; then
-        record PASS "stdio request_model_download" "authorized (id=$AUTH_ID), every url=<redacted>"
+    WANT_BW=$((${BW_AFTER_REFUSE:-0} + FIX_SIZE))
+    if [ -n "$AUTH_ID" ] && [ "$URLS" = "<redacted>" ] && [ "$BW_AFTER_CONFIRM" = "$WANT_BW" ]; then
+        record PASS "stdio request_model_download" "authorized (id=$AUTH_ID), every url=<redacted>, charged exactly ${FIX_SIZE}B"
     else
-        record FAIL "stdio request_model_download" "auth_id='$AUTH_ID' urls='$URLS' $(echo "$DOWNLOAD" | jq -c '.result.content[0].text // .' | head -c 160)"
+        record FAIL "stdio request_model_download" "auth_id='$AUTH_ID' urls='$URLS' bandwidth $BW_AFTER_REFUSE->$BW_AFTER_CONFIRM (want $WANT_BW): $(echo "$DOWNLOAD" | jq -c '.result.content[0].text // .' | head -c 140)"
     fi
 else
     record SKIP "stdio download confirm gate" "no fixture model with a converted target on this backend"
@@ -679,7 +828,7 @@ fi
 # H3: whoami over HTTP resolves the same identity from the request bearer.
 HWHO="$(http_post '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"whoami","arguments":{}}}' "$PAT")"
 H_ME="$(echo "$HWHO" | jq -c '.result.structuredContent | del(.token.last_used_at)')"
-API_ME2="$(api_get /v1/me | jq -c 'del(.token.last_used_at)')"
+API_ME2="$(api_get /v1/me 2>/dev/null | jq -c 'del(.token.last_used_at)' || true)"
 if [ -n "$H_ME" ] && [ "$H_ME" != null ] && [ "$H_ME" = "$API_ME2" ]; then
     record PASS "http whoami passthrough" "byte-exact vs GET /v1/me (last_used_at masked)"
 else
@@ -689,10 +838,10 @@ fi
 # H4: get_repo over HTTP, byte-exact against the API (fixtures repo when the
 # backend has one, else the account's newest visible repo).
 BYTE_REPO="$FIXTURES_REPO"
-[ -n "$FIX_KEY" ] || BYTE_REPO="$(api_get "/v1/repos?limit=1" | jq -r '.results[0].name // empty')"
+[ -n "$FIX_KEY" ] || BYTE_REPO="$(api_get "/v1/repos?limit=1" 2>/dev/null | jq -r '.results[0].name // empty' || true)"
 if [ -n "$BYTE_REPO" ]; then
     HREPO="$(http_post "$(jq -nc --arg r "$ACCOUNT/$BYTE_REPO" '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"get_repo",arguments:{repo:$r}}}')" "$PAT" | jq -c '.result.structuredContent')"
-    AREPO="$(api_get "/v1/repos/$ACCOUNT/$BYTE_REPO" | jq -c .)"
+    AREPO="$(api_get "/v1/repos/$ACCOUNT/$BYTE_REPO" 2>/dev/null | jq -c . || true)"
     if [ -n "$HREPO" ] && [ "$HREPO" != null ] && [ "$HREPO" = "$AREPO" ]; then
         record PASS "http get_repo passthrough" "byte-exact vs GET /v1/repos/$ACCOUNT/$BYTE_REPO"
     else
@@ -702,45 +851,79 @@ else
     record SKIP "http get_repo passthrough" "no repo visible to compare against"
 fi
 
-# H5: a bearer-less request is a 401 carrying the RFC 9110 WWW-Authenticate
-# challenge (bare Bearer scheme — no resource is configured on this server).
+# H5: a bearer-less request is a 401 whose WWW-Authenticate value is EXACTLY
+# the bare `Bearer` scheme — no resource is configured on this server, so any
+# parameters (e.g. a leaked insufficient_scope challenge, the regression
+# fba0e17 fixed) are wrong. Exact comparison, not a substring match.
 http_post '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' >/dev/null || true
-CHALLENGE="$(grep -i '^www-authenticate:' "$WORK/legs/http-headers" | tr -d '\r' | head -1)"
-if [ "$HTTP_CODE" = 401 ] && echo "$CHALLENGE" | grep -qi 'bearer'; then
-    record PASS "http 401 challenge" "401 + '$CHALLENGE'"
+CHALLENGE_VALUE="$(header_value www-authenticate)"
+if [ "$HTTP_CODE" = 401 ] && [ "$CHALLENGE_VALUE" = "Bearer" ]; then
+    record PASS "http 401 challenge" "401 + WWW-Authenticate exactly 'Bearer'"
 else
-    record FAIL "http 401 challenge" "code=$HTTP_CODE challenge='$CHALLENGE'"
+    record FAIL "http 401 challenge" "code=$HTTP_CODE challenge='$CHALLENGE_VALUE' (want exactly 'Bearer')"
 fi
 
 # H6: a machine-speed burst with one token trips the per-token limiter (burst
-# 40, 2/s refill) — expect 429s with an integral Retry-After. Last HTTP leg
-# on purpose: it empties this token's bucket.
+# 40, 2/s refill). The band matters: SOME requests must be 200 (a limiter
+# that throttles everything is as broken as one that throttles nothing), the
+# rest 429 with an integral Retry-After in (0,25) — an HTTP-date there would
+# fail the digit check. Last HTTP leg on purpose: it empties this token's
+# bucket.
 BURST_429=0
+BURST_200=0
+BURST_OTHER=""
 RETRY_AFTER=""
 for _ in $(seq 1 50); do
     http_post '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' "$PAT" >/dev/null || true
-    if [ "$HTTP_CODE" = 429 ]; then
+    case "$HTTP_CODE" in
+    200) BURST_200=$((BURST_200 + 1)) ;;
+    429)
         BURST_429=$((BURST_429 + 1))
-        [ -n "$RETRY_AFTER" ] || RETRY_AFTER="$(grep -i '^retry-after:' "$WORK/legs/http-headers" | tr -d '\r' | awk '{print $2}')"
-    fi
+        [ -n "$RETRY_AFTER" ] || RETRY_AFTER="$(header_value retry-after)"
+        ;;
+    *) BURST_OTHER="$HTTP_CODE" ;;
+    esac
 done
-if [ "$BURST_429" -gt 0 ] && [ -n "$RETRY_AFTER" ]; then
-    record PASS "http 429 burst" "$BURST_429/50 throttled, Retry-After=${RETRY_AFTER}s"
+RETRY_OK=0
+case "$RETRY_AFTER" in
+'' | *[!0-9]*) : ;;
+*) [ "$RETRY_AFTER" -gt 0 ] && [ "$RETRY_AFTER" -lt 25 ] && RETRY_OK=1 ;;
+esac
+if [ "$BURST_429" -gt 0 ] && [ "$BURST_200" -gt 0 ] && [ -z "$BURST_OTHER" ] && [ "$RETRY_OK" = 1 ]; then
+    record PASS "http 429 burst" "$BURST_200 ok + $BURST_429 throttled of 50, Retry-After=${RETRY_AFTER}s (integral, in band)"
 else
-    record FAIL "http 429 burst" "no 429 in a 50-request burst (throttled=$BURST_429)"
+    record FAIL "http 429 burst" "200s=$BURST_200 429s=$BURST_429 other='$BURST_OTHER' Retry-After='$RETRY_AFTER' (want both 200s and 429s, nothing else, integral Retry-After in 1..24)"
 fi
 
+# The drain contract: SIGINT stops an HTTP server via a graceful drain that
+# exits 0 (a supervisor reads nonzero on an orderly stop as a crash).
 kill -INT "$HTTP_PID" 2>/dev/null || true
-wait "$HTTP_PID" 2>/dev/null || true
+HTTP_EXIT=0
+wait "$HTTP_PID" 2>/dev/null || HTTP_EXIT=$?
 HTTP_PID=""
 
+# Transport exit codes: every one-shot stdio session must have exited 0 on
+# clean disconnect (violations were collected per call, including EOF-ignoring
+# hangs), and the HTTP server must have drained to exit 0 on SIGINT.
+if [ ! -s "$WORK/legs/exit-violations" ] && [ "$HTTP_EXIT" -eq 0 ]; then
+    record PASS "transport exit codes" "every stdio session exited 0; http SIGINT drain exited 0"
+else
+    record FAIL "transport exit codes" "http drain exit=$HTTP_EXIT; stdio: $(tr '\n' '; ' <"$WORK/legs/exit-violations" 2>/dev/null || echo none)"
+fi
+
 # ═══════════════════════════════ hygiene self-check ═════════════════════════
-# Nothing this run captured — leg outputs, both server logs, the stdio
-# transcript, seed/migrate output — may contain the bearer. The PAT itself
-# lives only under $WORK/secret (0700), which is excluded.
-LEAKS="$(grep -R -F -l -- "$PAT" "$WORK" 2>/dev/null | grep -v "/secret/" || true)"
+# Nothing this run captured — leg outputs, both server logs, the cumulative
+# stdio and HTTP transcripts, seed/migrate output, and the script's own
+# console (FAIL branches quote server text) — may contain a bearer. Only the
+# literal token files (secret/pat*) are excluded; secret/me.json is an API
+# response body and IS scanned.
+sleep 1 # let the console tee flush before scanning it
+LEAKS="$(grep -R -F -l -- "$PAT" "$WORK" 2>/dev/null | grep -v "secret/pat" || true)"
+if [ -n "$PAT_READ" ]; then
+    LEAKS="$LEAKS$(grep -R -F -l -- "$PAT_READ" "$WORK" 2>/dev/null | grep -v "secret/pat" || true)"
+fi
 if [ -z "$LEAKS" ]; then
-    record PASS "credential hygiene" "PAT bytes absent from every captured output/log"
+    record PASS "credential hygiene" "PAT bytes absent from every captured output, transcript, log, and the console"
 else
     record FAIL "credential hygiene" "PAT found in: $LEAKS"
 fi
