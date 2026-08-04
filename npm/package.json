@@ -2,6 +2,7 @@
   "name": "@zetic-ai/melange-cli",
   "version": "0.0.0-development",
   "description": "Agent-first command-line interface for ZETIC Melange",
+  "mcpName": "ai.zetic/melange",
   "license": "Apache-2.0",
   "homepage": "https://github.com/zetic-ai/melange-cli",
   "repository": {
