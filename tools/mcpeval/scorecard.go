@@ -27,9 +27,6 @@ type RunInfo struct {
 	AgentModel    string `json:"agent_model"`
 	JudgeModel    string `json:"judge_model"`
 	ClaudeVersion string `json:"claude_version,omitempty"`
-	// SchemaShim records that the runner interposed the outputSchema repair
-	// (see shim.go) — true until the generator defect is fixed.
-	SchemaShim bool `json:"schema_shim"`
 }
 
 // Totals summarize the run for a one-line diff.

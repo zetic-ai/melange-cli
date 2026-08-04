@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,7 +21,6 @@ type runEnv struct {
 	patRead    string // read-only PAT for credential: read tasks ("" skips them)
 	melangeBin string // built melange binary (MCP server + CLI oracle)
 	claudeBin  string // claude CLI
-	selfBin    string // this binary, re-exec'd as the stdio shim
 	agentModel string
 	judgeModel string
 	workDir    string // per-run scratch (0700); holds configs, transcripts, cwds
@@ -57,9 +53,8 @@ func (e *runEnv) oracle(ctx context.Context, args []string) ([]byte, error) {
 }
 
 // writeMCPConfig produces the per-task MCP config file claude loads. The
-// stdio transport routes through the schema shim (see shim.go); the HTTP
-// transport points at the shim proxy in front of a runner-managed
-// `melange mcp --transport http` (serverURL).
+// stdio transport spawns `melange mcp` directly; the HTTP transport points
+// at a runner-managed `melange mcp --transport http` (serverURL).
 func (e *runEnv) writeMCPConfig(task Task, serverURL string) (string, error) {
 	var server map[string]any
 	if task.Transport == "http" {
@@ -74,8 +69,8 @@ func (e *runEnv) writeMCPConfig(task Task, serverURL string) (string, error) {
 		}
 	} else {
 		server = map[string]any{
-			"command": e.selfBin,
-			"args":    []string{"-shim-stdio", "--", e.melangeBin, "mcp"},
+			"command": e.melangeBin,
+			"args":    []string{"mcp"},
 			"env": map[string]string{
 				"MELANGE_HOST":    e.host,
 				"MELANGE_API_KEY": e.patWrite,
@@ -95,11 +90,10 @@ func (e *runEnv) writeMCPConfig(task Task, serverURL string) (string, error) {
 var addrRe = regexp.MustCompile(`addr=([0-9.]+:[0-9]+)`)
 
 // startHTTPServer runs `melange mcp --transport http --validate-tokens` on
-// an ephemeral port plus the tools/list shim proxy in front of it, and
-// returns the shim URL the agent should connect to and a stop func.
-// --validate-tokens matters: it makes the server resolve each bearer's
-// granted scopes via /v1/me, which is what arms scope enforcement for the
-// scope-refusal task.
+// an ephemeral port and returns the URL the agent should connect to and a
+// stop func. --validate-tokens matters: it makes the server resolve each
+// bearer's granted scopes via /v1/me, which is what arms scope enforcement
+// for the scope-refusal task.
 func (e *runEnv) startHTTPServer(task Task) (string, func(), error) {
 	logPath := filepath.Join(e.workDir, task.Name+".httpserver.log")
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -134,23 +128,7 @@ func (e *runEnv) startHTTPServer(task Task) (string, func(), error) {
 		return "", nil, fmt.Errorf("melange mcp --transport http never logged its address (see %s)", logPath)
 	}
 
-	target, err := url.Parse("http://" + addr)
-	if err != nil {
-		stopServer()
-		return "", nil, err
-	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		stopServer()
-		return "", nil, err
-	}
-	shim := &http.Server{Handler: newHTTPShim(target)}
-	go func() { _ = shim.Serve(ln) }()
-	stop := func() {
-		_ = shim.Close()
-		stopServer()
-	}
-	return "http://" + ln.Addr().String() + "/", stop, nil
+	return "http://" + addr + "/", stopServer, nil
 }
 
 // runAgent spawns one claude session for the task and returns its parsed

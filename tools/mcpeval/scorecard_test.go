@@ -67,7 +67,7 @@ func TestBuildScorecardTotals(t *testing.T) {
 }
 
 func TestScorecardJSONRoundTrips(t *testing.T) {
-	card := buildScorecard(RunInfo{StartedAt: "now", SchemaShim: true},
+	card := buildScorecard(RunInfo{StartedAt: "now", ClaudeVersion: "2.1.220"},
 		[]TaskResult{{Name: "a", Status: "pass", Score: 1, ToolCalls: []ToolCallEntry{}, Checks: []CheckResult{{Type: "judge", Name: "judge", Pass: true}}}},
 		time.Second)
 	var buf bytes.Buffer
@@ -75,7 +75,7 @@ func TestScorecardJSONRoundTrips(t *testing.T) {
 	var back Scorecard
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &back))
 	assert.Equal(t, card.Total, back.Total)
-	assert.True(t, back.Run.SchemaShim, "the shim must be declared in the scorecard")
+	assert.Equal(t, card.Run, back.Run, "run metadata must survive the round trip")
 }
 
 func TestWriteTableShowsFailingChecks(t *testing.T) {

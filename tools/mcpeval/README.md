@@ -85,18 +85,20 @@ with a converted target for the library task.
 
 ## Findings the harness already surfaced (fixes owned by the controller)
 
-1. **Claude Code cannot load the shipped catalog at all.** Four generated
-   output schemas (`get_deployment_info`, `get_model`, `get_model_report`,
-   `search_library`) are bare `{"anyOf": [...]}` unions with no top-level
-   `"type": "object"`. The MCP spec types `outputSchema` as an object
-   schema, and Claude Code (2.1.220) enforces that literally: tools/list
-   validation fails and the client drops the **entire 18-tool catalog**, so
-   a real agent sees zero melange tools. Fix: `tools/mcpschemas` should emit
-   `{"type": "object", "anyOf": [...]}` for response unions (every branch is
-   already object-typed). Until then the runner interposes a shim (stdio
-   relay / HTTP reverse proxy) that adds exactly that `"type"` key on
-   tools/list results and passes everything else — descriptions included —
-   through untouched. The scorecard declares `"schema_shim": true`.
+1. **Claude Code cannot load the shipped catalog at all.** (FIXED) Four
+   generated output schemas (`get_deployment_info`, `get_model`,
+   `get_model_report`, `search_library`) were bare `{"anyOf": [...]}` unions
+   with no top-level `"type": "object"`. The MCP spec types `outputSchema`
+   as an object schema, and Claude Code (2.1.220) enforces that literally:
+   tools/list validation fails and the client drops the **entire 18-tool
+   catalog**, so a real agent sees zero melange tools. Fixed in
+   `tools/mcpschemas`: response unions now emit
+   `{"type": "object", "anyOf": [...]}` (every branch is object-typed, which
+   the generator checks), the generator refuses any non-object top-level
+   schema, and `internal/mcp` pins the whole catalog with a regression test
+   (`TestEveryAdvertisedSchemaIsAnObjectSchema`). The runner's interim
+   tools/list shim and its `"schema_shim"` scorecard flag are gone: the
+   agent connects to the shipped server directly.
 2. **Tool search hides MCP tools from restricted sessions.** With Claude
    Code's tool search active, MCP tools are deferred behind the ToolSearch
    built-in; a session with built-ins disabled sees zero MCP tools. The

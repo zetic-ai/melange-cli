@@ -39,15 +39,6 @@ import (
 )
 
 func main() {
-	// Hidden re-exec mode: claude spawns this same binary as the stdio MCP
-	// server command, wrapping the real server in the schema shim.
-	if len(os.Args) > 1 && os.Args[1] == "-shim-stdio" {
-		argv := os.Args[2:]
-		if len(argv) > 0 && argv[0] == "--" {
-			argv = argv[1:]
-		}
-		os.Exit(runStdioShim(argv, os.Stdin, os.Stdout, os.Stderr))
-	}
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
@@ -115,11 +106,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return skip("no backend: set MELANGE_HOST and MCPEVAL_PAT_WRITE (or run via `make eval`, which brings one up)")
 	}
 
-	selfBin, err := os.Executable()
-	if err != nil {
-		fmt.Fprintln(stderr, "mcpeval: resolving own executable:", err)
-		return 1
-	}
 	workDir, err := os.MkdirTemp("", "mcpeval-*")
 	if err != nil {
 		fmt.Fprintln(stderr, "mcpeval:", err)
@@ -137,7 +123,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		patRead:    os.Getenv("MCPEVAL_PAT_READ"),
 		melangeBin: melangeBin,
 		claudeBin:  claudeBin,
-		selfBin:    selfBin,
 		agentModel: cfg.agentModel,
 		judgeModel: cfg.judgeModel,
 		workDir:    workDir,
@@ -188,7 +173,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		AgentModel:    cfg.agentModel,
 		JudgeModel:    cfg.judgeModel,
 		ClaudeVersion: strings.TrimSpace(string(claudeVersion)),
-		SchemaShim:    true,
 	}
 	started := time.Now()
 	results := make([]TaskResult, 0, len(tasks))
