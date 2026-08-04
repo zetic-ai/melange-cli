@@ -114,6 +114,97 @@ Compare Gemma4 with another llm available in Melange. Use only benchmark values 
 Show throughput and peak memory for iPhone 16 and Galaxy S25 where available.
 ```
 
+## MCP server
+
+The CLI ships a built-in [MCP](https://modelcontextprotocol.io) server:
+`melange mcp` serves 18 tools over stdio (17 over HTTP — `upload_model` needs
+the caller's local files) so MCP clients call Melange directly instead of
+shelling out. The stdio server reuses the CLI's credentials (`MELANGE_API_KEY`
+or `melange auth login`), resolved lazily on the first tool call. Install the
+CLI first (see [Install](#install)) so `melange` is on your `PATH`, then
+register it with your client. The full tool catalog and per-transport details
+are in [`llms.txt`](llms.txt).
+
+### Claude Code
+
+```sh
+claude mcp add melange -- melange mcp
+```
+
+Verify with `claude mcp list` — the entry should show `✔ Connected`.
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json` (Settings → Developer → Edit Config;
+macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`,
+Windows: `%APPDATA%\Claude\claude_desktop_config.json`), then restart
+Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "melange": {
+      "command": "melange",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project (or `~/.cursor/mcp.json` for all
+projects):
+
+```json
+{
+  "mcpServers": {
+    "melange": {
+      "command": "melange",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### Remote (Streamable HTTP)
+
+For remote agent clients, serve the Streamable HTTP transport. The server
+itself holds no credentials: every request must carry its own token as
+`Authorization: Bearer <token>`, so one deployment serves many callers.
+
+```sh
+melange mcp --transport http --listen 0.0.0.0:8080
+```
+
+Claude Code:
+
+```sh
+claude mcp add --transport http melange https://your-host:8080/ \
+  --header "Authorization: Bearer ztp_your_personal_access_token"
+```
+
+Cursor (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "melange": {
+      "url": "https://your-host:8080/",
+      "headers": {
+        "Authorization": "Bearer ztp_your_personal_access_token"
+      }
+    }
+  }
+}
+```
+
+Claude Desktop registers local stdio servers through
+`claude_desktop_config.json` (above); remote servers are added as custom
+connectors in claude.ai settings instead. See `melange mcp --help` for the
+HTTP deployment flags (`--validate-tokens`, `--allowed-origins`,
+`--resource`).
+
 ## Update 
 
 ### Update the CLI
