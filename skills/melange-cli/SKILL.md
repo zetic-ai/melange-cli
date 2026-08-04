@@ -1,6 +1,6 @@
 ---
 name: melange-cli
-description: "Use when running the zetic.ai `melange` CLI: uploading/importing on-device AI models, monitoring conversion status, reporting Melange benchmarks, generating deployment guides, browsing repos and the public library. Covers auth, JSON output contract, exit-code branching, upload/resume, non-blocking conversion monitoring, model report templates, and the raw API escape hatch. Do NOT trigger for general ML work — training, local inference, or other model registries — unless the `melange` CLI is involved."
+description: "Use when running the zetic.ai `melange` CLI: uploading/importing on-device AI models, monitoring conversion status, reporting Melange benchmarks, generating deployment guides, browsing repos and the public library. Covers auth, JSON output contract, exit-code branching, upload/resume, non-blocking conversion monitoring, model report templates, and the raw API escape hatch. Also points at the `melange mcp` MCP server alternative and when to prefer its tools over shelling out. Do NOT trigger for general ML work — training, local inference, or other model registries — unless the `melange` CLI is involved."
 ---
 
 # Melange CLI
@@ -12,6 +12,22 @@ output is machine-exact except for documented composed or redacted results.
 Waited upload/import results compose model identity with final status, and
 download authorization URLs are redacted credentials. Run `melange help
 exit-codes`, and `melange help formatting` for the authoritative topics.
+
+## MCP server alternative
+
+`melange mcp` serves these same operations as MCP tools (stdio by default;
+`--transport http` for shared remote deployments). When the Melange MCP server
+is already connected to your session, prefer its tools over shelling out for
+anything in its catalog. Use the CLI when the operation has no tool (auth
+management, `model download` to disk, bucketed `.pt2` or `--input-manifest`
+uploads, `melange api`), or when the server is connected over HTTP and the
+work needs the user's local files — the `upload_model` tool exists only on
+stdio. The authoritative tool reference — transports, per-transport auth,
+confirm-gated tools, and the write-scope refusal — is the `## melange mcp`
+section of the CLI repository's `llms.txt`, plus `melange mcp --help`; this
+skill deliberately does not restate it. Every rule below (non-blocking
+conversion monitoring, the pipeline panel, the report templates) applies
+unchanged when the data came from MCP tools.
 
 ## Authentication
 
