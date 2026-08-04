@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -353,10 +354,17 @@ func resourceMatches(canonical, aud string) bool {
 // loop does not need TLS; anything else non-https would advertise an identity
 // tokens should never be bound to.
 //
-// Normalization: scheme and host are lowercased and one trailing "/" is
-// trimmed, so equivalent spellings configure the same identity. Errors are
-// operator-facing startup text (the flag value never contains credentials);
-// callers map them to a usage error (exit 2).
+// Normalization: scheme and host are lowercased, the path is cleaned
+// (path.Clean: duplicate slashes collapse, dot segments resolve) and the
+// trailing "/" is trimmed, so equivalent spellings configure the same
+// identity. Without the clean, `https://host//` canonicalized to
+// `https://host/` — an identity no minted aud could ever match (the
+// authorization server's allowlist entries have no trailing slash and
+// resourceMatches only forgives ONE), and one whose derived RFC 9728
+// well-known path ended in "/", a ServeMux SUBTREE pattern that served the
+// metadata document at every subpath. Errors are operator-facing startup text
+// (the flag value never contains credentials); callers map them to a usage
+// error (exit 2).
 func CanonicalResource(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -387,6 +395,18 @@ func CanonicalResource(raw string) (string, error) {
 		// RFC 9728 §2: a protected-resource identifier has no query or
 		// fragment component.
 		return "", fmt.Errorf("resource URL %q must not have a query or fragment", trimmed)
+	}
+	if u.Path != "" {
+		// One normalization fixes both `//` symptoms above. Clean works on the
+		// decoded path (RawPath is dropped): a resource identifier is operator
+		// configuration, not data, so percent-encoded slashes have no business
+		// in one.
+		u.RawPath = ""
+		if cleaned := path.Clean(u.Path); cleaned == "/" || cleaned == "." {
+			u.Path = ""
+		} else {
+			u.Path = cleaned
+		}
 	}
 	return strings.TrimSuffix(u.String(), "/"), nil
 }
