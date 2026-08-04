@@ -229,13 +229,27 @@ func (v *MeVerifier) validate(ctx context.Context, token string) (*auth.TokenInf
 	}
 	switch {
 	case resp.JSON200 != nil:
-		aud, err := meAudience(resp.Body)
+		aud, audPresent, err := meAudience(resp.Body)
 		if err != nil {
 			// Unreachable while the API keeps aud a string-or-null (the same
 			// bytes just parsed as MeResponse); if the shape ever drifts, fail
 			// closed without inventing a verdict on the token. The parse
 			// detail is log-only like every other dynamic error here.
 			v.logger.Error("mcp token validation response parse failed", "error", err)
+			return nil, errValidationUnavailable
+		}
+		if !audPresent && strings.HasPrefix(token, "zoa_") {
+			// Canary for the one silent failure mode of the audience control:
+			// the backend contract (zetic/public/me.py) puts a token.aud key —
+			// string or null — on EVERY zoa_ bearer's response; the key's
+			// absence is the discriminator for the PAT shape. A zoa_ bearer
+			// without it means the field was renamed or moved, and treating
+			// that as "unbound" would silently disable audience enforcement
+			// for every OAuth token. Fail closed instead (zoa_ acceptance and
+			// the aud enrichment shipped together, so no real backend answers
+			// a zoa_ bearer with the PAT shape). Static error out; detail —
+			// never the bearer — to the log.
+			v.logger.Error("mcp token validation contract drift: OAuth bearer answered without an aud field")
 			return nil, errValidationUnavailable
 		}
 		if v.resource != "" && aud != "" && !resourceMatches(v.resource, aud) {
@@ -277,25 +291,33 @@ func (v *MeVerifier) validate(ctx context.Context, token string) (*auth.TokenInf
 // (which this rides alongside) drops the extra field; the shapes are
 // otherwise identical. Per the backend contract (zetic/public/me.py):
 // MeOAuthResponse is MeResponse plus token.aud — present (string or null) for
-// every zoa_ bearer, never present for a ztp_ PAT. "" means unbound: either a
-// PAT (not audience-bound by construction) or an OAuth grant that named no
-// resource (aud null). Both are accepted deliberately — audience enforcement
-// narrows tokens that WERE bound to a resource; it does not exclude
-// credential kinds that carry no binding, or every PAT user on the HTTP
-// transport would break.
-func meAudience(body []byte) (string, error) {
+// every zoa_ bearer, never present for a ztp_ PAT. present distinguishes the
+// two shapes (the caller's zoa_ canary depends on it); aud == "" with
+// present == true means the grant named no resource (aud null). An empty or
+// null aud is accepted deliberately, exactly like a PAT's absent key —
+// audience enforcement narrows tokens that WERE bound to a resource; it does
+// not exclude credential kinds that carry no binding, or every PAT user on
+// the HTTP transport would break.
+func meAudience(body []byte) (aud string, present bool, err error) {
 	var probe struct {
 		Token struct {
-			Aud *string `json:"aud"`
+			Aud json.RawMessage `json:"aud"`
 		} `json:"token"`
 	}
 	if err := json.Unmarshal(body, &probe); err != nil {
-		return "", fmt.Errorf("parsing /v1/me token audience: %w", err)
+		return "", false, fmt.Errorf("parsing /v1/me token audience: %w", err)
 	}
-	if probe.Token.Aud == nil {
-		return "", nil
+	raw := probe.Token.Aud
+	if raw == nil {
+		return "", false, nil // key absent: the PAT shape
 	}
-	return *probe.Token.Aud, nil
+	if string(raw) == "null" {
+		return "", true, nil // key present, grant named no resource
+	}
+	if err := json.Unmarshal(raw, &aud); err != nil {
+		return "", true, fmt.Errorf("parsing /v1/me token audience: %w", err)
+	}
+	return aud, true, nil
 }
 
 // resourceMatches reports whether aud names this server's canonical resource.
@@ -303,8 +325,12 @@ func meAudience(body []byte) (string, error) {
 // authorization server from its exact-string resource allowlist) gets the
 // same trailing-slash trim so `https://mcp.zetic.ai/` and
 // `https://mcp.zetic.ai` — one origin in every client's eyes — cannot split.
-// Beyond that the comparison is an exact string match, per RFC 8707's
-// treat-resources-as-opaque-strings posture.
+// Beyond that the comparison is an exact, CASE-SENSITIVE string match, per
+// RFC 8707's treat-resources-as-opaque-strings posture. CanonicalResource
+// lowercases the configured side's scheme and host, so the authorization
+// server's resource allowlist (ZETIC_OAUTH_ALLOWED_RESOURCES) must keep its
+// entries lowercase — an uppercase allowlist entry would mint auds this
+// comparison rejects.
 func resourceMatches(canonical, aud string) bool {
 	return strings.TrimSuffix(aud, "/") == canonical
 }

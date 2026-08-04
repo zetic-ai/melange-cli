@@ -54,7 +54,7 @@ melange mcp [flags]
       --allowed-origins strings   With --transport http, browser Origins allowed to call the server (empty rejects all)
   -h, --help                      help for mcp
       --listen string             Address to listen on with --transport http (use 0.0.0.0:PORT in a container) (default "127.0.0.1:8080")
-      --resource string           With --transport http, this server's canonical resource URL as an OAuth protected resource (also read from MELANGE_MCP_RESOURCE); implies token validation and rejects OAuth tokens bound to a different resource
+      --resource string           With --transport http, this server's canonical resource URL as an OAuth protected resource (also read from MELANGE_MCP_RESOURCE); implies token validation and rejects OAuth tokens bound to a different resource (compared case-sensitively beyond the lowercased scheme and host)
       --transport string          Transport to serve on: "stdio" or "http" (default "stdio")
       --validate-tokens           With --transport http, verify each bearer token against the API before serving it
 ```

@@ -362,6 +362,12 @@ func TestHTTPResourceBadValueIsUsageError(t *testing.T) {
 		{"not a URL", "not a url", "relative junk must be refused"},
 		{"http on a public host", "http://mcp.zetic.ai", "http is only for localhost development"},
 		{"query component", "https://mcp.zetic.ai?x=1", "RFC 9728 resource identifiers carry no query"},
+		// The classic --resource "$UNSET_VAR": an explicitly SET but empty
+		// value must be refused, never treated as "no resource configured" —
+		// that would silently run passthrough while the operator believes
+		// audience enforcement is on.
+		{"set but empty", "", "a set-but-empty resource must not silently disable enforcement"},
+		{"set but whitespace", "   ", "a whitespace resource must not silently disable enforcement"},
 	}
 	for _, tc := range cases {
 		t.Run("flag "+tc.name, func(t *testing.T) {

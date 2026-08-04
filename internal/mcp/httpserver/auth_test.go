@@ -371,6 +371,50 @@ func TestMeVerifierOAuthAudience(t *testing.T) {
 			"an audience-checked positive is served from cache inside the TTL")
 	})
 
+	t.Run("canary: zoa_ bearer without an aud key fails closed", func(t *testing.T) {
+		// The backend contract puts an aud key (string or null) on EVERY
+		// zoa_ bearer's /v1/me response — its absence is the PAT-shape
+		// discriminator. If the field is ever renamed or moved, treating the
+		// OAuth response as "unbound" would silently turn audience
+		// enforcement off for every OAuth token; the verifier must fail
+		// closed (a retryable 500, not a 401 that burns the credential).
+		const bearer = "zoa_contract_drift_1259921049"
+		stub := staticBodyStub(t, meBody("drifted"))
+		logs := &syncBuffer{}
+		v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(),
+			slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+		_, err := v.Verify(ctx, bearer, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errValidationUnavailable,
+			"a missing aud on an OAuth bearer is contract drift, not a verdict on the token")
+		assert.NotErrorIs(t, err, auth.ErrInvalidToken)
+		assert.NotContains(t, err.Error(), bearer)
+		assert.Contains(t, logs.String(), "aud", "the drift detail must reach the operator log")
+		assert.NotContains(t, logs.String(), bearer, "the bearer must never reach the server log")
+	})
+
+	t.Run("canary fires even without a configured resource", func(t *testing.T) {
+		// The canary is about the response shape, not this server's config:
+		// a zoa_ bearer answered with the PAT shape is drift wherever it
+		// happens (zoa_ acceptance and the aud enrichment shipped together,
+		// so no real backend produces this).
+		stub := staticBodyStub(t, meBody("drifted"))
+		v := newTestMeVerifier(stub.URL, newFakeClock())
+		_, err := v.Verify(ctx, "zoa_contract_drift_no_resource", nil)
+		assert.ErrorIs(t, err, errValidationUnavailable)
+	})
+
+	t.Run("ztp_ bearer without an aud key stays accepted", func(t *testing.T) {
+		// The canary is zoa_-scoped: a PAT's response never carries the key,
+		// and PATs must keep working on the HTTP transport.
+		stub := staticBodyStub(t, meBody("patty"))
+		v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(), nil)
+		info, err := v.Verify(ctx, "ztp_plain_pat_1442249570", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "patty@example.com", info.UserID)
+	})
+
 	t.Run("no configured resource skips enforcement", func(t *testing.T) {
 		// Without a resource identity the server has nothing to compare aud
 		// against; enforcement requires --resource. Plain --validate-tokens

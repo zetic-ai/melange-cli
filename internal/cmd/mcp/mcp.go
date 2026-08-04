@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -108,7 +107,8 @@ that overran its deadline, 2 usage error, 130 interrupted (stdio).`,
 	cmd.Flags().StringVar(&resource, "resource", "",
 		"With --transport http, this server's canonical resource URL as an OAuth protected "+
 			"resource (also read from MELANGE_MCP_RESOURCE); implies token validation and "+
-			"rejects OAuth tokens bound to a different resource")
+			"rejects OAuth tokens bound to a different resource (compared case-sensitively "+
+			"beyond the lowercased scheme and host)")
 
 	return cmd
 }
@@ -147,16 +147,20 @@ type httpConfig struct {
 
 // resolveResource resolves the canonical resource URL: --resource wins, else
 // MELANGE_MCP_RESOURCE, else "" (no resource identity, no audience
-// enforcement). A set-but-invalid value from either source is a usage error
-// (exit 2), never a silent fallback: an operator who named a resource
-// identity must not run a server that enforces a different one — or none.
+// enforcement). A SET value from either source — including set-but-empty,
+// the classic --resource "$UNSET_VAR" — is always validated, and an invalid
+// one is a usage error (exit 2), never a silent fallback: an operator who
+// named a resource identity must not run a server that enforces a different
+// one, or none at all. Only a genuinely absent flag AND unset env var mean
+// "no resource configured".
 func resolveResource(cmd *cobra.Command, flagValue string) (string, error) {
 	raw, source := flagValue, "--resource"
 	if !cmd.Flags().Changed("resource") {
-		raw, source = strings.TrimSpace(os.Getenv("MELANGE_MCP_RESOURCE")), "MELANGE_MCP_RESOURCE"
-	}
-	if raw == "" {
-		return "", nil
+		env, set := os.LookupEnv("MELANGE_MCP_RESOURCE")
+		if !set {
+			return "", nil
+		}
+		raw, source = env, "MELANGE_MCP_RESOURCE"
 	}
 	resource, err := httpserver.CanonicalResource(raw)
 	if err != nil {
