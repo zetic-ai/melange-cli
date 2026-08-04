@@ -62,9 +62,11 @@ func TestHTTPOnlyFlagsRequireHTTPTransport(t *testing.T) {
 		{"listen", []string{"mcp", "--listen", "127.0.0.1:9"}},
 		{"validate-tokens", []string{"mcp", "--validate-tokens"}},
 		{"allowed-origins", []string{"mcp", "--allowed-origins", "https://app.zetic.ai"}},
+		{"resource", []string{"mcp", "--resource", "https://mcp.zetic.ai"}},
 		{"listen with explicit stdio", []string{"mcp", "--transport", "stdio", "--listen", "127.0.0.1:9"}},
 		{"validate-tokens with explicit stdio", []string{"mcp", "--transport", "stdio", "--validate-tokens"}},
 		{"allowed-origins with explicit stdio", []string{"mcp", "--transport", "stdio", "--allowed-origins", "https://a"}},
+		{"resource with explicit stdio", []string{"mcp", "--transport", "stdio", "--resource", "https://mcp.zetic.ai"}},
 		{"several at once", []string{"mcp", "--listen", "127.0.0.1:9", "--validate-tokens"}},
 	}
 	for _, tt := range tests {
@@ -96,6 +98,7 @@ func TestMCPHelp(t *testing.T) {
 	for _, want := range []string{
 		"--transport", "stdio", "http",
 		"--listen", "--validate-tokens", "--allowed-origins",
+		"--resource", "MELANGE_MCP_RESOURCE",
 		"Authorization: Bearer", "/healthz",
 	} {
 		assert.Contains(t, help, want, "help must document %q", want)
@@ -344,6 +347,100 @@ func TestHTTPAllowedOriginsReachesTheServer(t *testing.T) {
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 	assert.Equal(t, http.StatusForbidden, resp2.StatusCode, "other browser origins stay rejected")
+}
+
+// TestHTTPResourceBadValueIsUsageError pins that an unusable canonical
+// resource URL — from the flag or from MELANGE_MCP_RESOURCE — is a usage
+// error (exit 2) naming its source, never a server that starts with a
+// different (or absent) identity than the operator configured.
+func TestHTTPResourceBadValueIsUsageError(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  string
+		reason string
+	}{
+		{"not a URL", "not a url", "relative junk must be refused"},
+		{"http on a public host", "http://mcp.zetic.ai", "http is only for localhost development"},
+		{"query component", "https://mcp.zetic.ai?x=1", "RFC 9728 resource identifiers carry no query"},
+	}
+	for _, tc := range cases {
+		t.Run("flag "+tc.name, func(t *testing.T) {
+			_, _, err := run(t, "mcp", "--transport", "http", "--listen", "127.0.0.1:0",
+				"--resource", tc.value)
+			require.Error(t, err, tc.reason)
+			assert.Equal(t, 2, cmdutil.ExitCode(err), "a bad --resource is a usage error (exit 2)")
+			assert.Contains(t, err.Error(), "--resource", "the error must name the flag")
+		})
+		t.Run("env "+tc.name, func(t *testing.T) {
+			t.Setenv("MELANGE_MCP_RESOURCE", tc.value)
+			_, _, err := run(t, "mcp", "--transport", "http", "--listen", "127.0.0.1:0")
+			require.Error(t, err, tc.reason)
+			assert.Equal(t, 2, cmdutil.ExitCode(err), "a bad MELANGE_MCP_RESOURCE is a usage error (exit 2)")
+			assert.Contains(t, err.Error(), "MELANGE_MCP_RESOURCE", "the error must name the env var")
+		})
+	}
+}
+
+// TestHTTPResourceConflictsWithNoValidate pins the contradiction as a usage
+// error: --resource means every bearer is validated (audience enforcement
+// lives inside validation), so an explicit --validate-tokens=false must be
+// refused rather than silently resolved either way.
+func TestHTTPResourceConflictsWithNoValidate(t *testing.T) {
+	_, _, err := run(t, "mcp", "--transport", "http", "--listen", "127.0.0.1:0",
+		"--resource", "https://mcp.zetic.ai", "--validate-tokens=false")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "--resource")
+	assert.Contains(t, err.Error(), "--validate-tokens")
+}
+
+// newOAuthMeStub serves GET /v1/me with the OAuth-enriched body: every bearer
+// gets the same identity with token.aud = aud, mimicking an authorization
+// server that bound all its tokens to one resource.
+func newOAuthMeStub(t *testing.T, aud string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/me" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"user":{"email":"o@example.com","nickname":"o"},`+
+			`"account":{"name":"acct","type":"personal"},`+
+			`"token":{"name":"client","scopes":["read","write"],"aud":%q}}`, aud)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// TestHTTPResourceEnforcesAudience drives the audience contract through the
+// real command: with a canonical resource configured (via the env var — the
+// flag path is covered above), a token bound to this server is served and a
+// token bound elsewhere is refused at the door, without --validate-tokens
+// ever being passed.
+func TestHTTPResourceEnforcesAudience(t *testing.T) {
+	t.Run("matching audience is served", func(t *testing.T) {
+		stub := newOAuthMeStub(t, "https://mcp.zetic.ai")
+		t.Setenv("MELANGE_HOST", stub)
+		t.Setenv("MELANGE_MCP_RESOURCE", "https://mcp.zetic.ai")
+
+		s := serveHTTP(t, &cmdutil.Factory{})
+		resp := s.post(t, "zoa_bound_here", initializeBody)
+		assert.Equal(t, http.StatusOK, resp.StatusCode,
+			"a token bound to this resource must be served")
+	})
+
+	t.Run("foreign audience is refused at the door", func(t *testing.T) {
+		stub := newOAuthMeStub(t, "https://another-resource.example")
+		t.Setenv("MELANGE_HOST", stub)
+		t.Setenv("MELANGE_MCP_RESOURCE", "https://mcp.zetic.ai")
+
+		s := serveHTTP(t, &cmdutil.Factory{})
+		resp := s.post(t, "zoa_bound_elsewhere", initializeBody)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+			"a token bound to a different resource must be refused")
+		assert.Equal(t, "Bearer", resp.Header.Get("WWW-Authenticate"))
+	})
 }
 
 // newMeStub serves GET /v1/me, echoing the presented bearer back as the

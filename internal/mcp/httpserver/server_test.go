@@ -151,6 +151,20 @@ func TestNewValidatesConfig(t *testing.T) {
 	srv, err := New(Config{Listen: ":0", APIHost: "https://api.zetic.ai", ValidateTokens: true})
 	require.NoError(t, err)
 	assert.NotNil(t, srv)
+
+	// An invalid Resource is refused at construction — the audience an
+	// operator declared must never be silently dropped or reshaped.
+	_, err = New(Config{Listen: ":0", APIHost: "https://api.zetic.ai",
+		Resource: "http://mcp.zetic.ai"})
+	assert.ErrorContains(t, err, "Resource")
+
+	// A valid Resource is stored in canonical form: the same value feeds the
+	// audience comparison and the RFC 9728 metadata document, so equivalent
+	// operator spellings must collapse to one identity.
+	srv, err = New(Config{Listen: ":0", APIHost: "https://api.zetic.ai",
+		Resource: "https://MCP.Zetic.AI/"})
+	require.NoError(t, err)
+	assert.Equal(t, "https://mcp.zetic.ai", srv.cfg.Resource)
 }
 
 func TestHealthzServesUnauthenticated(t *testing.T) {

@@ -78,8 +78,16 @@ type Config struct {
 	AllowedOrigins []string
 	// ValidateTokens verifies bearers against GET /v1/me (MeVerifier) before
 	// any tool runs; false relays any non-empty bearer to the API unchecked
-	// (PassthroughVerifier).
+	// (PassthroughVerifier) unless Resource is set, which forces validation.
 	ValidateTokens bool
+	// Resource is this server's canonical resource URL as an OAuth 2.1
+	// protected resource (RFC 8707/9728), e.g. "https://mcp.zetic.ai".
+	// Setting it turns on MeVerifier regardless of ValidateTokens — audience
+	// enforcement cannot happen without validating — and rejects OAuth
+	// bearers bound to a different resource. Empty disables audience
+	// enforcement (the PAT-only/dev posture). Validated and normalized by
+	// New via CanonicalResource.
+	Resource string
 
 	// ipLimit, when non-nil, replaces the production pre-auth limiter tuning.
 	// Test-only seam, unexported so no caller outside this package can weaken
@@ -124,6 +132,17 @@ func New(cfg Config) (*Server, error) {
 	if cfg.APIHost == "" {
 		return nil, errors.New("httpserver: APIHost is required")
 	}
+	if cfg.Resource != "" {
+		// The command layer validates first (usage error, exit 2); this is
+		// the defense for programmatic callers, and it re-normalizes so the
+		// stored config — which Task 2's RFC 9728 metadata document serves —
+		// is always in canonical form.
+		resource, err := CanonicalResource(cfg.Resource)
+		if err != nil {
+			return nil, fmt.Errorf("httpserver: invalid Resource: %w", err)
+		}
+		cfg.Resource = resource
+	}
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -142,9 +161,14 @@ func New(cfg Config) (*Server, error) {
 		Logger:              logger,
 	})
 
+	// A configured Resource forces MeVerifier even without ValidateTokens:
+	// an operator who declared a resource identity asked for audience
+	// enforcement, and PassthroughVerifier can never provide it (it validates
+	// nothing and populates no TokenInfo). Passthrough remains only for the
+	// case where neither knob is set.
 	verifier := auth.TokenVerifier(PassthroughVerifier)
-	if cfg.ValidateTokens {
-		verifier = NewMeVerifier(s.apiOptions, logger).Verify
+	if cfg.ValidateTokens || cfg.Resource != "" {
+		verifier = NewMeVerifier(s.apiOptions, cfg.Resource, logger).Verify
 	}
 	s.limiter = newRateLimiter(nil)
 	ipPolicy := ipLimitPolicy
