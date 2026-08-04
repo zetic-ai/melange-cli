@@ -422,6 +422,18 @@ func TestDebugTransportDisabledInHTTPMode(t *testing.T) {
 	assert.False(t, isErr, "tool call failed: %s", text)
 
 	assert.NotContains(t, logs.String(), secret, "bearer token leaked into server logs")
+
+	// The SDK-noise filter sits in this same log path (every per-request
+	// server is built through mcpserver.New): the three per-connection INFO
+	// lines — three PER REQUEST in stateless mode, with an empty session_id —
+	// must not reach the sink even at debug level, while the hygiene sweep
+	// above proves the filtered path still never carries bearer material.
+	for _, noisy := range []string{
+		"server connecting", "server session connected", "server session disconnected",
+	} {
+		assert.NotContains(t, logs.String(), noisy,
+			"the SDK's per-request %q line must be filtered from the HTTP server log", noisy)
+	}
 }
 
 // TestShutdownDrainsInflightRequests exercises the shutdown contract with a

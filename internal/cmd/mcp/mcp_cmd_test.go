@@ -516,15 +516,33 @@ func TestStdioWarnsThatResourceEnvIsIgnored(t *testing.T) {
 	assert.Contains(t, warning, "level=WARN", "an ignored security posture is a warning, not a debug line")
 }
 
-// TestStdioIsQuietWithoutResourceEnv is the other half: the warning must fire
-// only when there is something to warn about, or it becomes noise every agent
-// client shows its user on every launch.
-func TestStdioIsQuietWithoutResourceEnv(t *testing.T) {
+// TestStdioWarnsOnSetButEmptyResourceEnv pins the guard to the same
+// set-vs-unset line resolveResource draws for http: MELANGE_MCP_RESOURCE=""
+// (the classic export FOO="$UNSET_VAR") is a CONFIGURED value there — http
+// validates and refuses it — so stdio must warn about it too, not silently
+// treat it as absent.
+func TestStdioWarnsOnSetButEmptyResourceEnv(t *testing.T) {
 	t.Setenv("MELANGE_MCP_RESOURCE", "")
 	stdinAtEOF(t)
 
 	_, stderr, err := run(t, "mcp")
 	require.NoError(t, err)
+	assert.Contains(t, stderr.String(), "MELANGE_MCP_RESOURCE",
+		"a set-but-empty resource env var is configured on http, so stdio must warn about it")
+}
+
+// TestStdioIsQuietWithoutResourceEnv is the other half: the warning must fire
+// only when there is something to warn about, or it becomes noise every agent
+// client shows its user on every launch.
+func TestStdioIsQuietWithoutResourceEnv(t *testing.T) {
+	// t.Setenv registers restoration of the real value; the genuine test
+	// condition is the variable being absent entirely.
+	t.Setenv("MELANGE_MCP_RESOURCE", "placeholder")
+	require.NoError(t, os.Unsetenv("MELANGE_MCP_RESOURCE"))
+	stdinAtEOF(t)
+
+	_, stderr, err := run(t, "mcp")
+	require.NoError(t, err)
 	assert.NotContains(t, stderr.String(), "MELANGE_MCP_RESOURCE",
-		"an unset (or empty) resource env var must produce no warning")
+		"an unset resource env var must produce no warning")
 }
