@@ -173,6 +173,9 @@ For remote agent clients, serve the Streamable HTTP transport. The server
 itself holds no credentials: every request must carry its own token as
 `Authorization: Bearer <token>`, so one deployment serves many callers.
 
+The server speaks plain HTTP; terminate TLS in front of it (load balancer,
+reverse proxy, or ingress). The `https://` client URLs below assume that.
+
 ```sh
 melange mcp --transport http --listen 0.0.0.0:8080
 ```

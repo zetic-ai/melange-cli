@@ -65,7 +65,8 @@ From OpenAI's developer docs:
 
 ## What this project has today
 
-- A production-quality MCP server in the released CLI: `melange mcp` — 18
+- A production-quality MCP server in the CLI (unreleased; the first release
+  shipping `melange mcp` is still pending — see gap 11): `melange mcp` — 18
   tools on stdio, 17 over Streamable HTTP (`upload_model` is stdio-only).
   See `internal/cmd/mcp/mcp.go` and the catalog in `llms.txt`.
 - **Tool annotations**: every tool sets `ReadOnlyHint`, `DestructiveHint`,
