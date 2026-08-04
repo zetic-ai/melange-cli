@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -474,4 +475,56 @@ func newMeStub(t *testing.T, observe func(bearer string)) string {
 	}))
 	t.Cleanup(srv.Close)
 	return srv.URL
+}
+
+// stdinAtEOF points the process's stdin at an already-closed pipe, so a stdio
+// MCP server started by the test serves nothing and returns immediately. The
+// SDK's StdioTransport reads os.Stdin directly — there is no seam to inject —
+// so the file itself is what the test controls.
+func stdinAtEOF(t *testing.T) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	original := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() {
+		os.Stdin = original
+		_ = r.Close()
+	})
+}
+
+// TestStdioWarnsThatResourceEnvIsIgnored pins the env-var half of the
+// mis-transport signal. --resource on stdio is a hard usage error
+// (TestHTTPOnlyFlagsRequireHTTPTransport) because an operator who typed it
+// believes audience enforcement is on; MELANGE_MCP_RESOURCE creates the same
+// false belief and must not be swallowed either. It warns rather than fails
+// because an env var is ambient — the same shell or container that configures
+// the HTTP deployment may export it for every process, and a stdio session
+// there is not a misuse worth refusing to serve.
+func TestStdioWarnsThatResourceEnvIsIgnored(t *testing.T) {
+	t.Setenv("MELANGE_MCP_RESOURCE", "https://mcp.zetic.ai")
+	stdinAtEOF(t)
+
+	_, stderr, err := run(t, "mcp")
+	require.NoError(t, err, "an ambient env var must not stop the stdio server from serving")
+	assert.Equal(t, 0, cmdutil.ExitCode(err), "the warning is not a usage error")
+
+	warning := stderr.String()
+	assert.Contains(t, warning, "MELANGE_MCP_RESOURCE", "the warning must name the ignored variable")
+	assert.Contains(t, warning, "--transport http", "the warning must name the transport that would honor it")
+	assert.Contains(t, warning, "level=WARN", "an ignored security posture is a warning, not a debug line")
+}
+
+// TestStdioIsQuietWithoutResourceEnv is the other half: the warning must fire
+// only when there is something to warn about, or it becomes noise every agent
+// client shows its user on every launch.
+func TestStdioIsQuietWithoutResourceEnv(t *testing.T) {
+	t.Setenv("MELANGE_MCP_RESOURCE", "")
+	stdinAtEOF(t)
+
+	_, stderr, err := run(t, "mcp")
+	require.NoError(t, err)
+	assert.NotContains(t, stderr.String(), "MELANGE_MCP_RESOURCE",
+		"an unset (or empty) resource env var must produce no warning")
 }

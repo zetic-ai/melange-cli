@@ -116,6 +116,10 @@ type Server struct {
 	// requests. Set to the drainTimeout constant by New; tests shorten it to
 	// reach the forced-close path without a 25-second wait.
 	drainTimeout time.Duration
+	// verifierKind names the bearer verifier New actually installed ("me" or
+	// "passthrough"). Recorded at the point of decision so the startup posture
+	// line can never drift from the verifier in the handler chain.
+	verifierKind string
 
 	mu   sync.Mutex
 	addr net.Addr
@@ -183,8 +187,10 @@ func New(cfg Config) (*Server, error) {
 	// nothing and populates no TokenInfo). Passthrough remains only for the
 	// case where neither knob is set.
 	verifier := auth.TokenVerifier(PassthroughVerifier)
+	s.verifierKind = "passthrough"
 	if cfg.ValidateTokens || cfg.Resource != "" {
 		verifier = NewMeVerifier(s.apiOptions, cfg.Resource, logger).Verify
+		s.verifierKind = "me"
 	}
 	s.limiter = newRateLimiter(nil)
 	ipPolicy := ipLimitPolicy
@@ -269,6 +275,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.addr = ln.Addr()
 	s.mu.Unlock()
 	s.logger.Info("mcp http server listening", "addr", ln.Addr().String())
+	s.logAuthPosture()
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- s.httpServer.Serve(ln) }()
@@ -290,6 +297,31 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	<-serveErr // Serve has returned http.ErrServerClosed.
 	return nil
+}
+
+// logAuthPosture states, once at startup, which token enforcement this
+// process is actually running under.
+//
+// Startup is the only cheap moment to catch a misconfigured posture, because
+// nothing later distinguishes one. A misspelled MELANGE_MCP_RESOURCE (or a
+// --resource that never reached the process) is indistinguishable at runtime
+// from "no resource was ever configured": the server binds, answers /healthz,
+// serves every tool, and simply enforces no audience while publishing no
+// discovery document. Naming the verifier and the canonical resource — or
+// saying plainly that there is none — turns that silent posture into one
+// greppable line an operator can diff against what they meant to deploy.
+//
+// Configuration only is logged. No bearer, token hash, or API credential is
+// in scope here, and TestStartupLogsEnforcementPosture pins that.
+func (s *Server) logAuthPosture() {
+	resource := s.cfg.Resource
+	if resource == "" {
+		resource = "none"
+	}
+	s.logger.Info("mcp http server auth posture",
+		"verifier", s.verifierKind,
+		"resource", resource,
+		"audience_enforcement", s.cfg.Resource != "")
 }
 
 // Addr reports the bound listen address, or nil before ListenAndServe binds

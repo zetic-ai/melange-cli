@@ -511,3 +511,99 @@ func TestStatelessRejectsGET(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 }
+
+// TestStartupLogsEnforcementPosture pins the operator-facing startup line.
+//
+// The failure it exists for is silent: a misspelled MELANGE_MCP_RESOURCE, or a
+// --resource that never reached the process, produces a server that binds,
+// passes health checks, and serves every tool while enforcing no audience and
+// publishing no discovery document — indistinguishable from a deployment that
+// was never meant to have a resource identity. So both postures must state
+// themselves at startup, and the line must be safe to leave on in production:
+// configuration only, never credential material.
+func TestStartupLogsEnforcementPosture(t *testing.T) {
+	const secret = "posture-log-secret-2718281828"
+
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+		want   []string
+	}{
+		{
+			// The dangerous default: nothing configured, nothing enforced.
+			// It has to say so out loud, because it is exactly what a typo in
+			// the env var name silently produces.
+			name:   "passthrough with no resource",
+			mutate: nil,
+			want: []string{
+				"mcp http server auth posture",
+				"verifier=passthrough", "resource=none", "audience_enforcement=false",
+			},
+		},
+		{
+			// Validation without a resource identity: bearers are checked,
+			// but no audience is enforced. Distinguishing this from the
+			// resource posture is the point of logging both fields.
+			name:   "validation without a resource",
+			mutate: func(c *Config) { c.ValidateTokens = true },
+			want: []string{
+				"verifier=me", "resource=none", "audience_enforcement=false",
+			},
+		},
+		{
+			// The configured posture, reported in canonical form (the trailing
+			// slash is gone) so an operator can compare it byte-for-byte
+			// against the authorization server's allowlist entry.
+			name:   "resource configured",
+			mutate: func(c *Config) { c.Resource = "https://MCP.zetic.ai/" },
+			want: []string{
+				"verifier=me", "resource=https://mcp.zetic.ai", "audience_enforcement=true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stub := newMeStub(t, nil)
+			logs := &syncBuffer{}
+			cfg := Config{
+				Listen:    "127.0.0.1:0",
+				APIHost:   stub.URL,
+				UserAgent: "melange-cli-test/0.0.0",
+				Version:   "v0.0.0-test",
+				Logger:    slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+			}
+			if tt.mutate != nil {
+				tt.mutate(&cfg)
+			}
+			srv, err := New(cfg)
+			require.NoError(t, err)
+
+			ctx, stop := context.WithCancel(context.Background())
+			served := make(chan error, 1)
+			go func() { served <- srv.ListenAndServe(ctx) }()
+			require.Eventually(t, func() bool { return srv.Addr() != nil },
+				5*time.Second, 10*time.Millisecond, "server never bound its listener")
+
+			// Drive one real request with a secret bearer so the hygiene
+			// assertion below covers a startup that actually served traffic,
+			// not just an idle process.
+			postMCP(t, "http://"+srv.Addr().String(), secret, "", strings.NewReader(initializeBody))
+
+			stop()
+			select {
+			case err := <-served:
+				require.NoError(t, err)
+			case <-time.After(30 * time.Second):
+				t.Fatal("ListenAndServe did not return after cancel")
+			}
+
+			out := logs.String()
+			for _, want := range tt.want {
+				assert.Contains(t, out, want, "startup posture line must state %q", want)
+			}
+			assert.NotContains(t, out, secret, "the startup logs must never carry bearer material")
+			assert.NotContains(t, out, "Bearer "+secret)
+		})
+	}
+}

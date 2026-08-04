@@ -27,6 +27,11 @@ import (
 // setting: an operator who typed --listen believes something is listening.
 var httpOnlyFlags = []string{"listen", "validate-tokens", "allowed-origins", "resource"}
 
+// resourceEnvVar is the environment fallback for --resource. Named once
+// because both transports must agree on it: http reads it, stdio warns that
+// it is not reading it.
+const resourceEnvVar = "MELANGE_MCP_RESOURCE"
+
 // NewCmdMCP returns the `melange mcp` command.
 func NewCmdMCP(f *cmdutil.Factory) *cobra.Command {
 	var (
@@ -127,10 +132,34 @@ func rejectHTTPOnlyFlags(cmd *cobra.Command) error {
 	return nil
 }
 
+// warnResourceEnvIgnored tells a stdio operator that MELANGE_MCP_RESOURCE is
+// not being honored on this transport.
+//
+// rejectHTTPOnlyFlags makes --resource on stdio a hard usage error for the
+// same underlying reason — a mis-transported operator must never believe an
+// enforcement posture is configured when none is. The env var deliberately
+// gets a warning instead of exit 2: a flag is typed for this invocation and
+// can only mean "I want this now", while an environment variable is ambient.
+// The shell profile, container image, or unit file that configures an HTTP
+// deployment may export it for every process on the box, and failing
+// `melange mcp` there would break stdio sessions that never asked for OAuth.
+// A warning is loud without being fatal — the stdio logger's floor is warn,
+// so this line always prints.
+func warnResourceEnvIgnored(logger *slog.Logger) {
+	if os.Getenv(resourceEnvVar) == "" {
+		return
+	}
+	logger.Warn("ignoring "+resourceEnvVar+" on the stdio transport: OAuth audience "+
+		"enforcement and RFC 9728 discovery exist only with --transport http",
+		"transport", "stdio")
+}
+
 // runStdio serves MCP on the process's own stdin/stdout.
 func runStdio(cmd *cobra.Command, f *cmdutil.Factory) error {
+	deps := newDeps(f)
+	warnResourceEnvIgnored(deps.Logger)
 	// stdio runs on the caller's machine, so local-only tools are in scope.
-	srv := mcpserver.New(newDeps(f), mcpserver.Options{EnableLocalTools: true})
+	srv := mcpserver.New(deps, mcpserver.Options{EnableLocalTools: true})
 
 	err := srv.Run(cmd.Context(), &mcpsdk.StdioTransport{})
 	if isCleanDisconnect(err) {
@@ -159,11 +188,11 @@ type httpConfig struct {
 func resolveResource(cmd *cobra.Command, flagValue string) (string, error) {
 	raw, source := flagValue, "--resource"
 	if !cmd.Flags().Changed("resource") {
-		env, set := os.LookupEnv("MELANGE_MCP_RESOURCE")
+		env, set := os.LookupEnv(resourceEnvVar)
 		if !set {
 			return "", nil
 		}
-		raw, source = env, "MELANGE_MCP_RESOURCE"
+		raw, source = env, resourceEnvVar
 	}
 	resource, err := httpserver.CanonicalResource(raw)
 	if err != nil {
