@@ -59,6 +59,9 @@ type requestModelDownloadArgs struct {
 // gets charged.
 func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownloadArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in requestModelDownloadArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
 			return d.toolError(err), nil, nil
