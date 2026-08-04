@@ -408,9 +408,11 @@ caller's machine. Grouped by workflow:
   accept import_model). import_model (public HuggingFace repo into an
   llm-type repository; returns immediately with the new model key while
   conversion continues in the background). upload_model (stdio only; local
-  model file plus optional inputs/external data; not billable; on an
-  interrupted or failed upload the error names a session id — call again
-  with resume_session_id, already-acknowledged bytes are never re-sent;
+  model file plus optional inputs/external data — pass absolute paths,
+  since relative paths resolve against the SERVER process's working
+  directory, not the user's shell; not billable; on an interrupted or
+  failed upload the error names a session id — call again with
+  resume_session_id, already-acknowledged bytes are never re-sent;
   bucketed .pt2 and manifest uploads stay CLI-only: melange model upload).
 - Monitor conversion — never block: get_conversion_status returns
   immediately by default; wait_seconds (0-120) polls with backoff and still
