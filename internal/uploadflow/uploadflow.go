@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
@@ -221,7 +222,7 @@ type TerminalStateError struct {
 }
 
 func (e *TerminalStateError) Error() string {
-	return fmt.Sprintf("session %s is %s; start a new upload", e.SessionID, lowerState(e.State))
+	return fmt.Sprintf("session %s is %s; start a new upload", e.SessionID, strings.ToLower(e.State))
 }
 
 // deref returns "" for nil string pointers.

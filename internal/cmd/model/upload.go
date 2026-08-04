@@ -274,12 +274,6 @@ func parseBucketFlags(values []string) ([]upload.BucketSpec, error) {
 	return buckets, nil
 }
 
-// manifestOptions preserves the wire conversion under its historical local
-// name; the implementation moved to uploadflow with the session flow.
-func manifestOptions(specs []upload.BucketSpec) *gen.ManifestOptions {
-	return uploadflow.ManifestOptions(specs)
-}
-
 // ---------------------------------------------------------------------------
 // dry run
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/text"
 	"github.com/zetic-ai/melange-cli/internal/upload"
+	"github.com/zetic-ai/melange-cli/internal/uploadflow"
 )
 
 type env struct {
@@ -220,9 +221,9 @@ func TestUploadBucketDryRunRendersOptionsAndCanonicalPaths(t *testing.T) {
 }
 
 func TestManifestOptionsPreservesBucketWireShape(t *testing.T) {
-	assert.Nil(t, manifestOptions(nil), "ordinary uploads must omit options")
+	assert.Nil(t, uploadflow.ManifestOptions(nil), "ordinary uploads must omit options")
 
-	got := manifestOptions([]upload.BucketSpec{
+	got := uploadflow.ManifestOptions([]upload.BucketSpec{
 		{Index: 0, Dims: []int{1, 3, 224, 224}},
 		{Index: 7, Dims: []int{2, 80}},
 	})

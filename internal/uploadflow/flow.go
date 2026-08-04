@@ -661,10 +661,6 @@ func terminalSessionState(state string) bool {
 	return false
 }
 
-func lowerState(state string) string {
-	return strings.ToLower(state)
-}
-
 // rebuildStateFromServer reconstructs upload state for a resume when the
 // local state file is gone (or corrupt): server arrival status decides which
 // files are already uploaded, local files are matched by their canonical
