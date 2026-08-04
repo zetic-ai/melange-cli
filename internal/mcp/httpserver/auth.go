@@ -118,6 +118,23 @@ const (
 	meCacheMaxEntries = 1024
 )
 
+// oauthGrantExtraKey marks a TokenInfo minted from the OAuth /v1/me response
+// shape (token.aud key present — the same discriminator the zoa_ canary
+// enforces). MeVerifier stamps it; scopeStepUpGate reads it to decide the
+// SHAPE of a scope refusal: OAuth grants get the RFC 6750 403 they can act
+// on, everything else keeps the in-band tool error.
+const oauthGrantExtraKey = "melange.oauth_grant"
+
+// isOAuthGrant reports whether info was minted from an OAuth-grant /v1/me
+// shape (see oauthGrantExtraKey).
+func isOAuthGrant(info *auth.TokenInfo) bool {
+	if info == nil {
+		return false
+	}
+	v, ok := info.Extra[oauthGrantExtraKey].(bool)
+	return ok && v
+}
+
 // errValidationUnavailable is the single, static answer for every
 // token-validation failure whose underlying error carries dynamic text. The
 // SDK copies err.Error() verbatim into the HTTP 500 body (go-sdk v1.7.0
@@ -278,6 +295,16 @@ func (v *MeVerifier) validate(ctx context.Context, token string) (*auth.TokenInf
 			// The account identity, so SDK session-consistency checks have a
 			// stable per-user handle. Never the token.
 			UserID: resp.JSON200.User.Email,
+		}
+		if audPresent {
+			// The aud key's presence is the /v1/me shape discriminator this
+			// verifier already relies on (see the zoa_ canary above): only an
+			// OAuth 2.1 grant answers with it. Recording that on TokenInfo
+			// lets the insufficient_scope gate reserve its RFC 6750 403 for
+			// bearers that can actually run a step-up flow; a PAT holder has
+			// no Authorize flow to trigger. The flag is shape-derived
+			// configuration, never credential material.
+			info.Extra = map[string]any{oauthGrantExtraKey: true}
 		}
 		if exp := resp.JSON200.Token.ExpiresAt; exp != nil {
 			// A real expiry rides along so RequireBearerToken enforces it on

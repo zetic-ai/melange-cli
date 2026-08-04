@@ -331,6 +331,12 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	// shutdownCtx. Buffer 1 so a signal landing before the select below is
 	// never lost. forced distinguishes that abort from a genuine deadline
 	// overrun once Shutdown returns.
+	//
+	// Known blind window, accepted: a signal delivered after the first one
+	// but before this registration is lost — arm-at-drain-start is exactly
+	// what makes a stale or repeated first signal unable to fire the abort
+	// spuriously, and the window is the microseconds between ctx.Done and
+	// here, far shorter than any human or supervisor re-signal interval.
 	sig := make(chan os.Signal, 1)
 	stopSignals := s.stopSignals(sig)
 	defer stopSignals()

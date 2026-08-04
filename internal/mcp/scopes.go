@@ -96,7 +96,16 @@ var writeScopeTools = map[string]bool{
 	"set_default_model":      true,
 	"import_model":           true,
 	"request_model_download": true,
-	"upload_model":           true,
+	// upload_model is stdio-only (HTTP never serves it), so over HTTP a
+	// read-scoped OAuth call to it draws an insufficient_scope 403 — and a
+	// client that steps up and retries then learns the tool does not exist,
+	// where skipping the entry would have said "unknown tool" immediately.
+	// That misdirection is accepted deliberately: the set's invariant is
+	// "equal to the catalog's non-read-only tools" (pinned by
+	// TestRequiresWriteScopeMatchesCatalog over the local superset), and
+	// carving a transport-specific exception here would trade a rare, mildly
+	// slower error path for a second, driftable source of truth.
+	"upload_model": true,
 }
 
 // RequiresWriteScope reports whether tool is a mutating tool that gates on

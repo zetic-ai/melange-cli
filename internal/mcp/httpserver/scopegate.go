@@ -13,11 +13,23 @@ import (
 )
 
 // This file adds the RFC 6750 machine-readable half of scope enforcement: a
-// genuinely scope-blocked tools/call is answered 403 with
-// `WWW-Authenticate: Bearer error="insufficient_scope", scope="write"`, the
-// trigger a step-up-capable OAuth client needs to re-authorize with more
+// genuinely scope-blocked tools/call FROM AN OAUTH BEARER is answered 403
+// with `WWW-Authenticate: Bearer error="insufficient_scope", scope="write"`,
+// the trigger a step-up-capable OAuth client needs to re-authorize with more
 // scope (go-sdk v1.7.0's streamable client, for one, runs its OAuth handler
 // on a 401/403 response and retries the request — mcp/streamable.go).
+//
+// The gate deliberately fires ONLY for tokens minted from the OAuth /v1/me
+// shape (isOAuthGrant, stamped by MeVerifier). A scope-blocked ztp_ PAT keeps
+// the in-band tool error instead: a PAT is not an OAuth grant, so there is no
+// Authorize flow a 403 could trigger — and the 403 is not free. go-sdk
+// v1.7.0's streamable client treats a non-transient non-2xx on a request as
+// terminal for the connection (mcp/streamable.go: checkResponse error →
+// fail() → close(failed), permanent), so for a client with no OAuth handler
+// one scope-blocked call would poison the whole session, read tools
+// included, until reconnect. Emitting the 403 only where a step-up flow can
+// consume it keeps that cost confined to exactly the population that
+// benefits.
 //
 // Why this is middleware and not SDK configuration: the SDK's only scope knob
 // is RequireBearerTokenOptions.Scopes, which its verify() enforces against
@@ -63,6 +75,14 @@ func scopeStepUpGate(resourceMetadataURL string, next http.Handler) http.Handler
 			// No verified grant to enforce (PassthroughVerifier's empty
 			// TokenInfo, or a validated token whose grant names no scopes):
 			// the API stays the sole authority, exactly as in requireScope.
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !isOAuthGrant(info) {
+			// A scope-blocked PAT (or any future non-OAuth credential kind)
+			// cannot step up, so it keeps the in-band tool-error refusal from
+			// requireScope — same remediation text, and the session stays
+			// usable. See the file comment for the full rationale.
 			next.ServeHTTP(w, r)
 			return
 		}
