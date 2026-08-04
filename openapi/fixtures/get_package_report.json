@@ -7,7 +7,7 @@
   },
   "response": {
     "body": {
-      "derivation_version": 2,
+      "derivation_version": 3,
       "model": {
         "key": "<uuid>",
         "version": 1
@@ -23,7 +23,6 @@
           "metric": "memory_inference_peak_mb",
           "run_configuration": {
             "configuration": {
-              "backend": "cpu",
               "threads": 4
             },
             "id": 7,
@@ -42,7 +41,6 @@
           "metric": "tps",
           "run_configuration": {
             "configuration": {
-              "backend": "cpu",
               "threads": 4
             },
             "id": 7,
@@ -61,7 +59,6 @@
           "metric": "ttft_ms",
           "run_configuration": {
             "configuration": {
-              "backend": "cpu",
               "threads": 4
             },
             "id": 7,
@@ -80,7 +77,6 @@
           "metric": "prompt_tokens",
           "run_configuration": {
             "configuration": {
-              "backend": "cpu",
               "threads": 4
             },
             "id": 7,
@@ -99,7 +95,6 @@
           "metric": "generated_tokens",
           "run_configuration": {
             "configuration": {
-              "backend": "cpu",
               "threads": 4
             },
             "id": 7,

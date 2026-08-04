@@ -153,13 +153,13 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				return exporter.Write(ios, envelope)
 			}
 			if len(models) == 0 {
-				if ios.IsStdoutTTY() {
+				if ios.HumanOutput() {
 					fmt.Fprintln(ios.ErrOut, "No models found")
 				}
 				return nil
 			}
 
-			isTTY := ios.IsStdoutTTY()
+			human := ios.HumanOutput()
 			cs := ios.ColorScheme()
 			now := time.Now()
 			tp := tableprinter.New(ios)
@@ -169,18 +169,19 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 				tp.AddField(strconv.Itoa(m.Version))
 				tp.AddField(m.Type)
 				tp.AddField(string(m.State), tableprinter.WithColor(stateColor(cs, string(m.State))))
-				if isTTY {
+				if human {
 					tp.AddField(defaultMark(m.IsDefault))
 				} else {
 					tp.AddField(strconv.FormatBool(m.IsDefault))
 				}
-				if isTTY {
+				if human {
 					tp.AddField(text.RelativeTime(m.CreatedAt, now))
 				} else {
 					tp.AddField(m.CreatedAt.Format(time.RFC3339))
 				}
 				tp.EndRow()
 			}
+			tp.Caption(text.Pluralize(len(models), "model", "models"))
 			return tp.Render()
 		},
 	}

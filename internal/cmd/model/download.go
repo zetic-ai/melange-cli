@@ -156,6 +156,13 @@ authenticated, 130 interrupted.`,
 				return cmdutil.FlagError{Err: errors.New(
 					"--output - cannot be combined with --json, --jq, or --template")}
 			}
+			// A missing --yes is a flag-contract error, so it is decided here —
+			// before the API client is built. Authenticating first would mask it
+			// behind an auth error and send the caller chasing credentials for a
+			// mistake in the invocation itself.
+			if err := requireConfirmable(opts); err != nil {
+				return err
+			}
 			// Validate the writable destination BEFORE anything is charged: a
 			// bad --output must never cost quota.
 			if err := validOutput(opts.output, opts.force); err != nil {
@@ -419,15 +426,31 @@ func preflightWritableDirectory(dir string) error {
 	return nil
 }
 
+// requireConfirmable rejects a billable download that can be neither confirmed
+// interactively nor waived with --yes. It is the single source of that rule:
+// RunE calls it before any client or filesystem work so the usage error is not
+// masked by an auth failure, and confirmBillableDownload calls it again at the
+// charge site so no future caller can reach the prompt without the guard.
+func requireConfirmable(opts *downloadOptions) error {
+	if opts.yes {
+		return nil
+	}
+	ios := opts.f.IOStreams
+	if !ios.IsStdinTTY() || opts.f.NoInput {
+		return cmdutil.FlagError{Err: errors.New(
+			"downloading is billable and requires confirmation; re-run with --yes to confirm non-interactively")}
+	}
+	return nil
+}
+
 // confirmBillableDownload gates the charge. The preview reads the FREE
 // targets listing (artifact names only exist after the billable POST, so the
 // preview shows the target identity and its aggregate size instead) and asks
 // for an explicit yes. Non-interactive runs must pass --yes.
 func confirmBillableDownload(ctx context.Context, opts *downloadOptions, g *gen.ClientWithResponses) error {
 	ios := opts.f.IOStreams
-	if !ios.IsStdinTTY() || opts.f.NoInput {
-		return cmdutil.FlagError{Err: errors.New(
-			"downloading is billable and requires confirmation; re-run with --yes to confirm non-interactively")}
+	if err := requireConfirmable(opts); err != nil {
+		return err
 	}
 
 	resp, err := g.ListModelTargetsWithResponse(ctx, opts.account, opts.name, opts.key)
@@ -452,7 +475,10 @@ func confirmBillableDownload(ctx context.Context, opts *downloadOptions, g *gen.
 			opts.target, opts.key, opts.repo, opts.key, opts.repo)
 	}
 
-	desc := string(target.Kind) + "/" + target.Target
+	desc := string(target.Kind)
+	if target.Precision != nil && *target.Precision != "" {
+		desc += "/" + string(*target.Precision)
+	}
 	if quant := deref(target.QuantType); quant != "" {
 		desc += ", " + quant
 	}

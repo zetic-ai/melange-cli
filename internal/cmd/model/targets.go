@@ -26,10 +26,13 @@ func newCmdTargets(f *cmdutil.Factory) *cobra.Command {
 target is identified by an opaque, stable TARGET_ID — pass it to
 "melange model download --target".
 
-On a terminal this prints a table (TARGET_ID, KIND, TARGET, QUANT,
+On a terminal this prints a table (TARGET_ID, KIND, PRECISION, QUANT,
 COMPATIBILITY, SIZE) with human-readable sizes; COMPATIBILITY is a
 compact soc/os string, or "-" when the target carries no device
-compatibility (LLM targets). When stdout is not a terminal, rows are
+compatibility (LLM targets). PRECISION is "-" for LLM targets, whose
+QUANT states the numeric format instead. The runtime engine that built
+an artifact is not published: choose between targets on PRECISION,
+QUANT and COMPATIBILITY. When stdout is not a terminal, rows are
 tab-separated with sizes in raw bytes and no header. With --json, all API
 target metadata is preserved and output ends with exactly one trailing
 newline.
@@ -74,28 +77,29 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 			}
 			targets := resp.JSON200.Results
 			if len(targets) == 0 {
-				if ios.IsStdoutTTY() {
+				if ios.HumanOutput() {
 					fmt.Fprintln(ios.ErrOut, "No targets found")
 				}
 				return nil
 			}
 
-			isTTY := ios.IsStdoutTTY()
+			human := ios.HumanOutput()
 			tp := tableprinter.New(ios)
-			tp.HeaderRow("target_id", "kind", "target", "quant", "compatibility", "size")
+			tp.HeaderRow("target_id", "kind", "precision", "quant", "compatibility", "size")
 			for _, tgt := range targets {
 				tp.AddField(tgt.TargetId)
 				tp.AddField(string(tgt.Kind))
-				tp.AddField(tgt.Target)
+				tp.AddField(orDash(precisionString(tgt.Precision)))
 				tp.AddField(orDash(deref(tgt.QuantType)))
 				tp.AddField(compatString(tgt.Compatibility))
-				if isTTY {
+				if human {
 					tp.AddField(text.FormatBytes(int64(tgt.DownloadSize)))
 				} else {
 					tp.AddField(strconv.Itoa(tgt.DownloadSize))
 				}
 				tp.EndRow()
 			}
+			tp.Caption(text.Pluralize(len(targets), "target", "targets"))
 			return tp.Render()
 		},
 	}
@@ -131,6 +135,15 @@ func compatString(c *gen.ModelTargetCompatibility) string {
 		out += "/" + p
 	}
 	return out
+}
+
+// precisionString renders the nullable precision. LLM targets carry none —
+// their quant_type states the numeric format instead.
+func precisionString(p *gen.ModelTargetItemPrecision) string {
+	if p == nil {
+		return ""
+	}
+	return string(*p)
 }
 
 // orDash returns "-" for empty strings so table cells stay visibly aligned.

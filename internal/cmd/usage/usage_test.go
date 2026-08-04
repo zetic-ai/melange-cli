@@ -70,7 +70,7 @@ func TestUsageBlockTTY(t *testing.T) {
 	e.reg.Register(httpmock.REST("GET", usagePath),
 		jsonStub(200, `{"active_devices":3,"bandwidth":1024,"model_uploads":7,"prompts":42}`))
 
-	require.NoError(t, run(t, e, "usage"))
+	require.NoError(t, run(t, e, "--no-color", "usage"))
 	out := e.out.String()
 	assert.Contains(t, out, "Active devices:")
 	assert.Contains(t, out, "3")
@@ -123,7 +123,7 @@ func TestUsageQuotasTTYUnlimitedAndPct(t *testing.T) {
 	e.f.IOStreams.SetStdoutTTY(true)
 	e.reg.Register(httpmock.REST("GET", quotasPath), jsonStub(200, quotasBody))
 
-	require.NoError(t, run(t, e, "usage", "quotas"))
+	require.NoError(t, run(t, e, "--no-color", "usage", "quotas"))
 	out := e.out.String()
 	assert.Contains(t, out, "Active devices:  unlimited", "null limit renders unlimited")
 	assert.Contains(t, out, "Bandwidth:       500/1000 (50%)")

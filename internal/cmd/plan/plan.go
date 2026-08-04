@@ -11,6 +11,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
+	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
@@ -86,18 +87,18 @@ func printPlan(ios *iostreams.IOStreams, p *gen.BillingPlanResponse) error {
 	}
 
 	out := ios.Out
-	if ios.IsStdoutTTY() {
-		fmt.Fprintf(out, "%-14s %s\n", "Plan:", plan)
-		if p.IsTrial {
-			if trialEnds != "" {
-				fmt.Fprintf(out, "%-14s yes (ends %s)\n", "Trial:", trialEnds)
-			} else {
-				fmt.Fprintf(out, "%-14s yes\n", "Trial:")
-			}
-		} else {
-			fmt.Fprintf(out, "%-14s no\n", "Trial:")
+	if ios.HumanOutput() {
+		trial := "no"
+		switch {
+		case p.IsTrial && trialEnds != "":
+			trial = fmt.Sprintf("yes (ends %s)", trialEnds)
+		case p.IsTrial:
+			trial = "yes"
 		}
-		return nil
+		fields := tableprinter.NewFields(ios)
+		fields.Add("Plan", plan)
+		fields.Add("Trial", trial)
+		return fields.Render()
 	}
 	fmt.Fprintf(out, "plan\t%s\n", plan)
 	fmt.Fprintf(out, "is_trial\t%t\n", p.IsTrial)
