@@ -33,6 +33,14 @@
 #                         (for a MELANGE_HOST backend with no Airflow behind
 #                         it, where dispatch deterministically 500s).
 #   MCP_E2E_KEEP          =1 keeps the backend container running afterwards.
+#   MCP_E2E_SETUP_ONLY    =1 stops after bring-up + seeding + auth: no legs
+#                         run, the backend container and Airflow stub are left
+#                         running, and the connection env (host, account, both
+#                         PATs, stub pid) is written to MCP_E2E_ENV_FILE
+#                         (0600) for another driver — tools/mcpeval reuses
+#                         this instead of reimplementing bring-up.
+#   MCP_E2E_ENV_FILE      Path that receives the setup-only env file
+#                         (required with MCP_E2E_SETUP_ONLY=1).
 #
 # Idempotent re-runs: every resource is run-scoped (repo mcp-e2e-run-<id>) and
 # stragglers from earlier failed runs (repos matching mcp-e2e-run-*, the
@@ -50,6 +58,8 @@ STUB_PORT="${MCP_E2E_STUB_PORT:-18100}"
 HF_REPO="${MCP_E2E_HF_REPO:-Qwen/Qwen2.5-0.5B-Instruct}"
 SKIP_IMPORT="${MCP_E2E_SKIP_IMPORT:-0}"
 KEEP="${MCP_E2E_KEEP:-0}"
+SETUP_ONLY="${MCP_E2E_SETUP_ONLY:-0}"
+ENV_FILE="${MCP_E2E_ENV_FILE:-}"
 SERVER_CONTAINER="mcp-e2e-server"
 RUN_ID="$(date +%s)-$$"
 RUN_REPO="mcp-e2e-run-${RUN_ID}"
@@ -64,6 +74,7 @@ STUB_PID=""
 HTTP_PID=""
 STARTED_CONTAINER=0
 PAT=""
+PAT_READ=""
 HOST=""
 ACCOUNT=""
 HTTP_ADDR=""
@@ -78,6 +89,10 @@ need() {
 need jq "JSON assertions"
 need curl "API calls"
 need go "building the melange binary"
+
+if [ "$SETUP_ONLY" = "1" ] && [ -z "$ENV_FILE" ]; then
+    fatal "MCP_E2E_SETUP_ONLY=1 needs MCP_E2E_ENV_FILE=<path> to receive the connection env"
+fi
 
 # ── Result collection ───────────────────────────────────────────────────────
 RESULTS=()
@@ -176,6 +191,10 @@ else
             fatal "docker compose build server failed"
     fi
 
+    # Purge a straggler stub (e.g. from a crashed setup-only run) so the bind
+    # below succeeds instead of silently losing to the old process.
+    lsof -ti tcp:"$STUB_PORT" 2>/dev/null | xargs kill 2>/dev/null || true
+
     note "starting Airflow dispatch stub on :$STUB_PORT"
     python3 "$ROOT/script/mcp-e2e-airflow-stub.py" "$STUB_PORT" \
         >"$WORK/stub.log" 2>&1 &
@@ -271,12 +290,61 @@ if target is None:
         remote_paths=["target_models/mcp-e2e-seed/model.onnx"],
     )
 
+# A PUBLIC whisper fixture for tools/mcpeval's library-to-deploy task: the
+# shared e2e DB has no real playground repos, so the library search needs one
+# seeded entry with a READY model and a converted target (same pattern as the
+# mcp-e2e-fixtures repo above; conversions cannot finish here).
+lib_repo = Project.objects.filter(
+    account=account, name="whisper-tiny-mcpeval", deleted_at__isnull=True
+).first()
+if lib_repo is None:
+    lib_repo = Project.objects.create(
+        account=account,
+        name="whisper-tiny-mcpeval",
+        is_private=False,
+        tags=["speech-recognition"],
+        model_type=0,
+        use_case="speech",
+        description="Whisper tiny speech-to-text, converted for on-device inference.",
+        readme="# whisper-tiny\n\nOpenAI Whisper tiny, converted and benchmarked for on-device speech recognition.",
+    )
+lib_model = CommonModel.objects.filter(project=lib_repo, deleted_at__isnull=True).first()
+if lib_model is None:
+    lib_model = CommonModel.objects.create(
+        project=lib_repo,
+        tag=uuid.uuid4().hex,
+        status=CommonModel.ModelStatus.READY,
+        type="general",
+        version=1,
+        source="uploads/mcpeval-whisper/model.onnx",
+        source_type="manual",
+        metadata={"name": "whisper-tiny"},
+        job_args={},
+    )
+lib_target = TargetModel.objects.filter(parent=lib_model, deleted_at__isnull=True).first()
+if lib_target is None:
+    TargetModel.objects.create(
+        parent=lib_model,
+        target=TargetModel.Target.ZETIC_MLANGE_TARGET_ORT,
+        uri="target_models/mcpeval-whisper/model.onnx",
+        download_size=2048,
+        checksums=["9e107d9d372bb6826bd81d3542a419d6"],
+        remote_paths=["target_models/mcpeval-whisper/model.onnx"],
+    )
+
 service = TokenService.factory()
 token = next((t for t in service.list(user) if t.name == "mcp-e2e-script"), None)
 if token is None:
     token = service.create(user, "mcp-e2e-script", ["write"])
 with open("/tmp/mcp-e2e-pat", "w") as fh:
     fh.write(token.hash)
+# A read-only PAT alongside the write one: tools/mcpeval's scope-refusal task
+# needs a credential whose /v1/me grant is exactly ["read"].
+read_token = next((t for t in service.list(user) if t.name == "mcp-e2e-readonly"), None)
+if read_token is None:
+    read_token = service.create(user, "mcp-e2e-readonly", ["read"])
+with open("/tmp/mcp-e2e-pat-read", "w") as fh:
+    fh.write(read_token.hash)
 print("SEEDED")
 PYSEED
         then
@@ -285,9 +353,11 @@ PYSEED
         grep -q SEEDED "$WORK/seed.log" ||
             fatal "seeding did not confirm: $(tail -3 "$WORK/seed.log" | tr '\n' ' ')"
         docker exec "$SERVER_CONTAINER" cat /tmp/mcp-e2e-pat >"$WORK/secret/pat"
-        docker exec "$SERVER_CONTAINER" rm -f /tmp/mcp-e2e-pat
-        chmod 600 "$WORK/secret/pat"
+        docker exec "$SERVER_CONTAINER" cat /tmp/mcp-e2e-pat-read >"$WORK/secret/pat-read"
+        docker exec "$SERVER_CONTAINER" rm -f /tmp/mcp-e2e-pat /tmp/mcp-e2e-pat-read
+        chmod 600 "$WORK/secret/pat" "$WORK/secret/pat-read"
         PAT="$(cat "$WORK/secret/pat")"
+        PAT_READ="$(cat "$WORK/secret/pat-read")"
     fi
 fi
 
@@ -308,6 +378,37 @@ for repo in $(api_get "/v1/repos?search=mcp-e2e-run-&limit=100" |
         "$HOST/v1/repos/$ACCOUNT/$repo" >/dev/null 2>&1 &&
         echo "    purged $ACCOUNT/$repo"
 done
+
+# Setup-only mode: everything a downstream driver needs is up — hand over the
+# connection env and leave the backend + stub running. tools/mcpeval consumes
+# this instead of duplicating bring-up/seeding.
+if [ "$SETUP_ONLY" = "1" ]; then
+    if [ -n "$PAT_READ" ]; then
+        if ! curl -fsS -m 20 -H "Authorization: Bearer $PAT_READ" "$HOST/v1/me" >/dev/null 2>&1; then
+            fatal "the seeded read-only PAT was rejected by $HOST/v1/me"
+        fi
+    fi
+    umask 077
+    {
+        echo "MELANGE_HOST=$HOST"
+        echo "MCPEVAL_ACCOUNT=$ACCOUNT"
+        echo "MCPEVAL_PAT_WRITE=$PAT"
+        echo "MCPEVAL_PAT_READ=$PAT_READ"
+        echo "MCPEVAL_STUB_PID=$STUB_PID"
+        if [ "$STARTED_CONTAINER" -eq 1 ]; then
+            echo "MCPEVAL_CONTAINER=$SERVER_CONTAINER"
+        else
+            echo "MCPEVAL_CONTAINER="
+        fi
+    } >"$ENV_FILE"
+    note "setup-only: backend on $HOST (account $ACCOUNT); env written to $ENV_FILE"
+    # The container and stub deliberately outlive this script; the caller owns
+    # teardown (pids/names are in the env file). Clearing the handles keeps
+    # the EXIT trap from reaping them.
+    KEEP=1
+    STUB_PID=""
+    exit 0
+fi
 
 note "building melange"
 go build -o "$WORK/melange" ./cmd/melange
