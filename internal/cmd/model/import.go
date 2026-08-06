@@ -70,7 +70,7 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
 			ctx := cmd.Context()
 
 			resp, err := g.ImportModelWithResponse(ctx, account, name,
-				&gen.ImportModelParams{IdempotencyKey: newIdempotencyKeyParam()},
+				&gen.ImportModelParams{IdempotencyKey: api.NewIdempotencyKeyParam()},
 				gen.ImportModelJSONRequestBody{HfRepo: args[0]})
 			if err != nil {
 				return err

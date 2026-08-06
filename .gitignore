@@ -10,6 +10,7 @@
 *.test
 coverage.out
 coverage.html
+/mcpeval-out/
 
 # Editor/OS
 .DS_Store

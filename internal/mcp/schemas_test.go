@@ -107,6 +107,48 @@ func TestEveryRegisteredToolHasAnOutputSchemaOrDocumentedException(t *testing.T)
 	}
 }
 
+// TestEveryAdvertisedSchemaIsAnObjectSchema pins the MCP interop requirement
+// that Tool.inputSchema and Tool.outputSchema are OBJECT schemas: the spec's
+// schema.ts literally types both as `{ type: "object"; ... }`, and Claude
+// Code enforces it — one tool advertising a schema without a top-level
+// "type":"object" (e.g. a bare {"anyOf":[...]} union, as the generator once
+// emitted for get_model, search_library, get_model_report, and
+// get_deployment_info) fails the client's tools/list validation and drops the
+// ENTIRE catalog, so a real agent sees zero melange tools.
+//
+// It is a property over everything tools/list advertises, not a fixed tool
+// list, so a future composite tool cannot reintroduce the defect unnoticed.
+func TestEveryAdvertisedSchemaIsAnObjectSchema(t *testing.T) {
+	// EnableLocalTools lists the superset catalog, upload_model included.
+	cs := connectWith(t, "test", Options{EnableLocalTools: true})
+	tools, err := cs.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, tools.Tools)
+
+	// assertObjectSchema checks the schema as it crosses the wire: the JSON
+	// round-trip sees exactly the document a client validates, whatever Go
+	// value the SDK holds it in.
+	assertObjectSchema := func(t *testing.T, field string, schema any) {
+		t.Helper()
+		data, err := json.Marshal(schema)
+		require.NoError(t, err, "%s must marshal", field)
+		var doc map[string]any
+		require.NoError(t, json.Unmarshal(data, &doc), "%s must be a JSON object", field)
+		assert.Equal(t, "object", doc["type"],
+			"%s must declare a top-level \"type\":\"object\" — MCP requires an object schema, and Claude Code drops the whole catalog otherwise", field)
+	}
+
+	for _, tool := range tools.Tools {
+		t.Run(tool.Name, func(t *testing.T) {
+			require.NotNil(t, tool.InputSchema, "every tool must advertise an input schema")
+			assertObjectSchema(t, "inputSchema", tool.InputSchema)
+			if tool.OutputSchema != nil {
+				assertObjectSchema(t, "outputSchema", tool.OutputSchema)
+			}
+		})
+	}
+}
+
 // fixtureBody reads one contract fixture's response body.
 func fixtureBody(t *testing.T, name string) json.RawMessage {
 	t.Helper()

@@ -274,5 +274,6 @@
       "type": "object"
     }
   ],
-  "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope."
+  "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope.",
+  "type": "object"
 }

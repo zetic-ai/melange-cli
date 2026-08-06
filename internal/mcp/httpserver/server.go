@@ -16,8 +16,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -116,6 +120,14 @@ type Server struct {
 	// requests. Set to the drainTimeout constant by New; tests shorten it to
 	// reach the forced-close path without a 25-second wait.
 	drainTimeout time.Duration
+	// stopSignals registers c for the process stop signals (SIGINT/SIGTERM)
+	// and returns how to unregister it. It is called when the drain BEGINS —
+	// arming only then is what makes the next signal unambiguously the second
+	// one — so a repeated stop signal aborts the drain instead of being
+	// swallowed for its full 25 seconds. Set to the os/signal implementation
+	// by New; tests inject their own to deliver a "signal" without touching
+	// the real process.
+	stopSignals func(c chan<- os.Signal) (stop func())
 	// verifierKind names the bearer verifier New actually installed ("me" or
 	// "passthrough"). Recorded at the point of decision so the startup posture
 	// line can never drift from the verifier in the handler chain.
@@ -167,7 +179,11 @@ func New(cfg Config) (*Server, error) {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	s := &Server{cfg: cfg, logger: logger, drainTimeout: drainTimeout, schemaCache: sdk.NewSchemaCache()}
+	s := &Server{cfg: cfg, logger: logger, drainTimeout: drainTimeout, schemaCache: sdk.NewSchemaCache(),
+		stopSignals: func(c chan<- os.Signal) func() {
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+			return func() { signal.Stop(c) }
+		}}
 
 	mcpHandler := sdk.NewStreamableHTTPHandler(s.getServer, &sdk.StreamableHTTPOptions{
 		// Stateless: no Mcp-Session-Id is issued or required, every POST is
@@ -214,6 +230,14 @@ func New(cfg Config) (*Server, error) {
 	// The cost of that order is that nothing keyed on the token can throttle
 	// a caller who never presents a valid one, which is why a second, coarse
 	// limiter runs in FRONT of the whole chain, keyed on the source IP.
+	//
+	// With a scope-populating verifier (MeVerifier), the RFC 6750
+	// insufficient_scope gate sits innermost — behind auth (it reads the
+	// verifier's TokenInfo) and behind the token limiter (a scope-blocked
+	// call spends rate budget like any other) — so a scope-blocked write
+	// tools/call is answered 403 + WWW-Authenticate before the streamable
+	// handler runs. It is never installed for PassthroughVerifier, whose
+	// empty TokenInfo must keep the API as the sole authority (the PR2 trap).
 	// Without it, a single host spraying unique bearers gets an unlimited
 	// budget: in validate mode every spray request reaches /v1/me (negatives
 	// are uncached by design), and in passthrough mode every request mints a
@@ -223,9 +247,13 @@ func New(cfg Config) (*Server, error) {
 	// feels it — it only bites machine-speed sprays from one address. A
 	// distributed spray defeats it by construction; that is the backend's and
 	// the WAF's problem, not a single instance's.
+	var innermost http.Handler = mcpHandler
+	if s.verifierKind == "me" {
+		innermost = scopeStepUpGate(resourceMetadataURL, mcpHandler)
+	}
 	protected := s.ipLimiter.middleware(
 		originMiddleware(cfg.AllowedOrigins,
-			AuthMiddleware(verifier, resourceMetadataURL, s.limiter.middleware(mcpHandler))))
+			AuthMiddleware(verifier, resourceMetadataURL, s.limiter.middleware(innermost))))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
@@ -265,7 +293,11 @@ func New(cfg Config) (*Server, error) {
 // ListenAndServe binds cfg.Listen and serves until ctx is canceled, then
 // drains: in-flight requests get drainTimeout to complete, after which the
 // server returns nil (exit 0). A drain overrun force-closes remaining
-// connections and returns an error (exit 1).
+// connections and returns an error (exit 1). A second stop signal (SIGINT or
+// SIGTERM) during the drain closes connections immediately and returns an
+// error wrapping context.Canceled (exit 130): the operator asked twice, so
+// waiting out the remaining drain window would turn a deliberate "stop now"
+// into an apparent hang.
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	ln, err := net.Listen("tcp", s.cfg.Listen)
 	if err != nil {
@@ -291,8 +323,44 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.logger.Info("mcp http server draining", "timeout", s.drainTimeout.String())
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), s.drainTimeout)
 	defer cancel()
-	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+
+	// Arm the second-signal watcher for exactly the drain window. The first
+	// signal already canceled ctx (the command layer's NotifyContext); a
+	// fresh registration here means the next delivery is unambiguously the
+	// operator's second ask, and it aborts the drain by canceling
+	// shutdownCtx. Buffer 1 so a signal landing before the select below is
+	// never lost. forced distinguishes that abort from a genuine deadline
+	// overrun once Shutdown returns.
+	//
+	// Known blind window, accepted: a signal delivered after the first one
+	// but before this registration is lost — arm-at-drain-start is exactly
+	// what makes a stale or repeated first signal unable to fire the abort
+	// spuriously, and the window is the microseconds between ctx.Done and
+	// here, far shorter than any human or supervisor re-signal interval.
+	sig := make(chan os.Signal, 1)
+	stopSignals := s.stopSignals(sig)
+	defer stopSignals()
+	var forced atomic.Bool
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-sig:
+			forced.Store(true)
+			s.logger.Warn("second stop signal received; closing connections immediately")
+			cancel()
+		case <-shutdownCtx.Done():
+		}
+	}()
+
+	err = s.httpServer.Shutdown(shutdownCtx)
+	cancel()      // release the watcher on a clean drain (idempotent otherwise)
+	<-watcherDone // forced is settled before it is read
+	if err != nil {
 		s.httpServer.Close()
+		if forced.Load() {
+			return fmt.Errorf("second stop signal received before the drain finished; connections force-closed: %w", context.Canceled)
+		}
 		return fmt.Errorf("drain deadline (%s) exceeded, connections force-closed: %w", s.drainTimeout, err)
 	}
 	<-serveErr // Serve has returned http.ErrServerClosed.

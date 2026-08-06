@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/http"
@@ -56,29 +55,6 @@ func splitRepoFlag(value string) (account, name string, err error) {
 			"invalid --repo %q; expected ACCOUNT/REPO", value)}
 	}
 	return parts[0], parts[1], nil
-}
-
-// newIdempotencyKey returns a random UUIDv4. Sent as Idempotency-Key on
-// create/complete/reissue/cancel (all replay-safe per ADR-5) so the api
-// retry transport may safely replay them.
-func newIdempotencyKey() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand never fails on supported platforms; fall back to a
-		// timestamp key rather than aborting an upload over it.
-		return fmt.Sprintf("melange-%d", time.Now().UnixNano())
-	}
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
-}
-
-// newIdempotencyKeyParam returns a fresh key as the pointer type the
-// generated params structs take. The key is generated once per logical
-// call, so the api retry transport replays the same key on 5xx retries.
-func newIdempotencyKeyParam() *gen.IdempotencyKey {
-	k := gen.IdempotencyKey(newIdempotencyKey())
-	return &k
 }
 
 // canceledSilently maps to exit 130 (context.Canceled) while suppressing the

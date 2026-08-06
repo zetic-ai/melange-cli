@@ -326,3 +326,32 @@ func TestPathBearingResourceThroughStack(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, bare.StatusCode,
 		"only the RFC 9728 path for THIS resource is public; near-miss paths stay protected")
 }
+
+// TestDoubleSlashResourceNormalizedThroughStack pins the fail-closed
+// misconfiguration CanonicalResource's path.Clean exists for: an operator
+// configuring `https://host//` used to get a canonical identity of
+// `https://host/` — one no minted aud could match — whose derived well-known
+// path ended in "/", a ServeMux SUBTREE pattern serving the metadata document
+// at every subpath. Both symptoms are pinned here through the full server.
+func TestDoubleSlashResourceNormalizedThroughStack(t *testing.T) {
+	stub := newASStub(t, nil)
+	srv, ts := newTestServer(t, stub.URL, func(c *Config) {
+		c.Resource = "https://mcp.slashy.example//"
+	})
+
+	// The stored identity is the aud-matchable canonical form.
+	assert.Equal(t, "https://mcp.slashy.example", srv.cfg.Resource,
+		"a doubled trailing slash must normalize to the slash-free identity")
+
+	// The document is served at the exact well-known path…
+	doc := getMetadata(t, ts.URL, "/.well-known/oauth-protected-resource")
+	assert.Equal(t, "https://mcp.slashy.example", doc.Resource)
+
+	// …and ONLY there: a subpath is protected surface, not a subtree of
+	// public metadata.
+	sub, err := http.Get(ts.URL + "/.well-known/oauth-protected-resource/anything")
+	require.NoError(t, err)
+	defer func() { _ = sub.Body.Close() }()
+	assert.Equal(t, http.StatusUnauthorized, sub.StatusCode,
+		"the well-known route must be an exact match, never a subtree")
+}

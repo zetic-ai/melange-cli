@@ -16,7 +16,7 @@ LDFLAGS := -s -w \
 # tool directive, so `make gen` is reproducible.
 DOWN_CONVERT := npx --yes @apiture/openapi-down-convert@0.14.2
 
-.PHONY: build test npm-test lint fmt gen gen-check docs docs-check snapshot fixtures-check perf
+.PHONY: build test npm-test lint fmt gen gen-check docs docs-check snapshot fixtures-check perf e2e eval
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) ./cmd/melange
@@ -57,6 +57,21 @@ snapshot:
 # call). Tunables: DURATION/CONCURRENCY/RPS/LIST_BUDGET/READ_SLACK env vars.
 perf:
 	./script/mcp-loadtest.sh
+
+# On-demand live end-to-end proof of `melange mcp` (both transports) against
+# a real backend. Brings up the compose backend itself, or uses MELANGE_HOST +
+# MELANGE_E2E_PAT. NOT part of the blocking PR gate — see the env contract at
+# the top of script/mcp-e2e.sh.
+e2e:
+	./script/mcp-e2e.sh
+
+# On-demand agent evals (tools/mcpeval): score whether REAL Claude agents can
+# accomplish Melange jobs through the MCP server. Needs the claude CLI with
+# Anthropic credentials plus a backend (brings one up via mcp-e2e.sh
+# setup-only when MELANGE_HOST is unset). Costs real tokens; NEVER part of
+# the blocking PR gate. See tools/mcpeval/README.md.
+eval:
+	./script/mcpeval.sh
 
 # Local-dev sync check for the shared contract fixtures: re-copy the backend's
 # committed fixtures and fail if the local copy drifted. The backend

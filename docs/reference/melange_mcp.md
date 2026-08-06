@@ -30,9 +30,14 @@ Only API-backed tools are served: anything
 that would touch the caller's own machine (model uploads) stays stdio-only,
 because the server cannot see the caller's files.
 
+Stopping http: the first SIGINT or SIGTERM starts a graceful drain that lets
+in-flight requests finish (up to 25s); a second signal during the drain stops
+waiting and closes the remaining connections immediately.
+
 Exit codes: 0 clean disconnect (stdio) or completed drain after SIGINT or
 SIGTERM (http), 1 serve failure such as an address already in use or a drain
-that overran its deadline, 2 usage error, 130 interrupted (stdio).
+that overran its deadline, 2 usage error, 130 interrupted (stdio, or an http
+drain cut short by a second stop signal).
 
 ```
 melange mcp [flags]

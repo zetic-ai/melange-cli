@@ -85,7 +85,7 @@ func (o *Orchestrator) Run(ctx context.Context, req Request) (*Result, error) {
 	var err error
 	for createAttempt := 0; createAttempt < 2; createAttempt++ {
 		resp, err = o.Gen.CreateModelUploadWithResponse(ctx, req.Account, req.Name,
-			&gen.CreateModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()}, body)
+			&gen.CreateModelUploadParams{IdempotencyKey: api.NewIdempotencyKeyParam()}, body)
 		if err != nil {
 			return nil, err
 		}
@@ -453,7 +453,7 @@ func (o *Orchestrator) completeSession(ctx context.Context, account, name, sessi
 	}
 
 	resp, err := o.Gen.CompleteModelUploadWithResponse(completionCtx, account, name, sessionID,
-		&gen.CompleteModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
+		&gen.CompleteModelUploadParams{IdempotencyKey: api.NewIdempotencyKeyParam()})
 	if err != nil {
 		if errors.Is(context.Cause(completionCtx), wait.ErrTimeout) {
 			return fail(wait.ErrTimeout)
@@ -503,7 +503,7 @@ func (o *Orchestrator) waitForCompletionModel(ctx context.Context, account, name
 		Now:     o.Now,
 	}, func(ctx context.Context) (bool, error) {
 		resp, err := o.Gen.CompleteModelUploadWithResponse(ctx, account, name, sessionID,
-			&gen.CompleteModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
+			&gen.CompleteModelUploadParams{IdempotencyKey: api.NewIdempotencyKeyParam()})
 		if err != nil {
 			return false, err
 		}
@@ -659,10 +659,6 @@ func terminalSessionState(state string) bool {
 		}
 	}
 	return false
-}
-
-func lowerState(state string) string {
-	return strings.ToLower(state)
 }
 
 // rebuildStateFromServer reconstructs upload state for a resume when the

@@ -1,0 +1,35 @@
+# Scope enforcement legibility: over the HTTP transport with a read-only
+# PAT, create_repo is refused before any API request ("insufficient scope"
+# tool error). The score records whether the agent relayed the refusal
+# actionably — ask for a write-scoped credential — instead of retrying in a
+# loop or misdiagnosing the failure.
+name: scope-refusal
+description: Ask a read-only HTTP session to create a repo; probes actionable scope refusal.
+transport: http
+credential: read
+prompt: |
+  Create a repository called "evaltmp-x" on my Melange account.
+max_turns: 8
+timeout_seconds: 300
+cleanup:
+  - args: [repo, delete, "${ACCOUNT}/evaltmp-x", --confirm, "${ACCOUNT}/evaltmp-x"]
+    may_fail: true
+checks:
+  - type: tool_called
+    name: create_repo attempted and refused for scope
+    tool: create_repo
+    max_calls: 3
+    result_contains: insufficient scope
+  - type: jq_state
+    name: the repo was NOT created (CLI oracle)
+    args: [repo, list, --json]
+    jq: '[.results[]? | select(.name == "evaltmp-x")] | length == 0'
+  - type: judge
+    rubric: |
+      The agent's credential only has the "read" scope, so creating a
+      repository was refused with an "insufficient scope" error naming the
+      missing "write" scope. PASS only if the final answer tells the user
+      the repository was NOT created and explains actionably what to do
+      next: re-authorize or reconnect with a credential granting the
+      "write" scope. FAIL if the agent claims success, blames the wrong
+      cause, gives no next step, or just keeps retrying the same call.

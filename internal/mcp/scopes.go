@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -60,14 +61,67 @@ func (d Deps) requireScope(ctx context.Context, scope string) *mcp.CallToolResul
 	if scopeSatisfied(info.Scopes, scope) {
 		return nil
 	}
-	// Scope names are grant vocabulary ("read", "write"), never credential
-	// bytes, so echoing them is hygienic and tells the agent precisely what
-	// re-authorization to ask for.
-	return d.toolError(fmt.Errorf(
+	return d.toolError(errors.New(scopeRefusalText(scope, info.Scopes)))
+}
+
+// scopeRefusalText is the agent-actionable refusal for a scope-blocked call.
+// It is the single source of that text: requireScope returns it as a tool
+// error (the in-band backstop), and the HTTP transport's insufficient_scope
+// gate (httpserver) sends the same bytes in its RFC 6750 403 body, so an
+// agent reads identical remediation whichever layer refused.
+//
+// Scope names are grant vocabulary ("read", "write"), never credential bytes,
+// so echoing them is hygienic and tells the agent precisely what
+// re-authorization to ask for.
+func scopeRefusalText(scope string, granted []string) string {
+	return fmt.Sprintf(
 		"insufficient scope: this operation needs the %q scope, but the token was granted only %q. "+
 			"No API request was made. Re-authorize granting the %q scope "+
 			"(or reconnect with a credential that includes it), then call the tool again",
-		scope, strings.Join(info.Scopes, " "), scope))
+		scope, strings.Join(granted, " "), scope)
+}
+
+// writeScopeTools names every tool whose handler gates on the write scope —
+// the catalog's mutating tools. The HTTP transport's insufficient_scope gate
+// consumes this via RequiresWriteScope to answer a genuinely scope-blocked
+// tools/call with an RFC 6750 403 before the streamable handler runs.
+// TestRequiresWriteScopeMatchesCatalog pins this set to the registered
+// catalog's ReadOnlyHint annotations, so a new mutating tool cannot ship
+// without joining it (and TestMutatingToolCasesCoverCatalog already forces it
+// to carry the in-handler gate).
+var writeScopeTools = map[string]bool{
+	"create_repo":            true,
+	"update_repo":            true,
+	"delete_repo":            true,
+	"set_default_model":      true,
+	"import_model":           true,
+	"request_model_download": true,
+	// upload_model is stdio-only (HTTP never serves it), so over HTTP a
+	// read-scoped OAuth call to it draws an insufficient_scope 403 — and a
+	// client that steps up and retries then learns the tool does not exist,
+	// where skipping the entry would have said "unknown tool" immediately.
+	// That misdirection is accepted deliberately: the set's invariant is
+	// "equal to the catalog's non-read-only tools" (pinned by
+	// TestRequiresWriteScopeMatchesCatalog over the local superset), and
+	// carving a transport-specific exception here would trade a rare, mildly
+	// slower error path for a second, driftable source of truth.
+	"upload_model": true,
+}
+
+// RequiresWriteScope reports whether tool is a mutating tool that gates on
+// the write scope.
+func RequiresWriteScope(tool string) bool { return writeScopeTools[tool] }
+
+// WriteScopeGranted reports whether a granted scope set covers the write
+// scope, with exactly the semantics of the in-handler gate.
+func WriteScopeGranted(granted []string) bool { return scopeSatisfied(granted, scopeWrite) }
+
+// WriteScopeRefusalText is the write-scope refusal message for a token
+// granted only the given scopes — byte-identical to the tool-error text
+// requireScope produces, so the HTTP 403 body and the in-band refusal can
+// never drift apart.
+func WriteScopeRefusalText(granted []string) string {
+	return scopeRefusalText(scopeWrite, granted)
 }
 
 // scopeSatisfied reports whether the granted scope set covers need. Write

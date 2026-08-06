@@ -71,9 +71,14 @@ Only API-backed tools are served: anything
 that would touch the caller's own machine (model uploads) stays stdio-only,
 because the server cannot see the caller's files.
 
+Stopping http: the first SIGINT or SIGTERM starts a graceful drain that lets
+in-flight requests finish (up to 25s); a second signal during the drain stops
+waiting and closes the remaining connections immediately.
+
 Exit codes: 0 clean disconnect (stdio) or completed drain after SIGINT or
 SIGTERM (http), 1 serve failure such as an address already in use or a drain
-that overran its deadline, 2 usage error, 130 interrupted (stdio).`,
+that overran its deadline, 2 usage error, 130 interrupted (stdio, or an http
+drain cut short by a second stop signal).`,
 		Example: `  # Register with Claude Code
   claude mcp add melange -- melange mcp
 
@@ -145,8 +150,13 @@ func rejectHTTPOnlyFlags(cmd *cobra.Command) error {
 // `melange mcp` there would break stdio sessions that never asked for OAuth.
 // A warning is loud without being fatal — the stdio logger's floor is warn,
 // so this line always prints.
+//
+// The guard is LookupEnv, not Getenv, to stay consistent with resolveResource:
+// http treats a SET-but-empty MELANGE_MCP_RESOURCE as configured (and fails it
+// as invalid), so stdio must warn about that same spelling rather than treat
+// it as absent.
 func warnResourceEnvIgnored(logger *slog.Logger) {
-	if os.Getenv(resourceEnvVar) == "" {
+	if _, set := os.LookupEnv(resourceEnvVar); !set {
 		return
 	}
 	logger.Warn("ignoring "+resourceEnvVar+" on the stdio transport: OAuth audience "+

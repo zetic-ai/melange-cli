@@ -801,7 +801,8 @@
           "type": "object"
         }
       ],
-      "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key)."
+      "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key).",
+      "type": "object"
     }
   },
   {
@@ -1227,7 +1228,8 @@
           "type": "object"
         }
       ],
-      "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope."
+      "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope.",
+      "type": "object"
     }
   },
   {
@@ -2595,7 +2597,8 @@
           "type": "object"
         }
       ],
-      "description": "One of the three report shapes, selected by report_type: general, llm, or package."
+      "description": "One of the three report shapes, selected by report_type: general, llm, or package.",
+      "type": "object"
     }
   },
   {
@@ -3389,7 +3392,8 @@
           "type": "object"
         }
       ],
-      "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope."
+      "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope.",
+      "type": "object"
     }
   },
   {
@@ -3597,6 +3601,243 @@
         "updated_at"
       ],
       "title": "RepoResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Upload a local model file (with optional sample inputs and external data) into a repository through a resumable upload session, then register it and start conversion. Not billable. File paths are read by the MCP SERVER process, so they must be absolute or relative to the server process's working directory — not the user's. Success returns the envelope {\"session\": <upload-complete response>, \"model\": <model reference>}; \"model\" appears once registration produced one, and with wait_seconds a \"status\" key carries the latest conversion status the wait observed. If the upload is interrupted or fails, the error names the session id: fix the issue, then call upload_model again with resume_session_id to continue — already-acknowledged bytes are never re-sent, and once the session reaches VERIFYING, DISPATCH_PENDING, or CONVERTING the resume replays completion without needing the local files. Conversion usually outlives one call: follow up with get_conversion_status on the returned model key rather than blocking on a long wait. Bucketed .pt2 uploads and manifest files are CLI-only for now ('melange model upload').",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "external": {
+          "description": "External data file paths, e.g. ONNX external weights.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "inputs": {
+          "description": "Sample input file paths; order defines each input's input_index.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "model_file": {
+          "description": "Path to the model file, readable by the server process (absolute, or relative to the server's working directory). Required unless resume_session_id is set.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Target repository in ACCOUNT/NAME form (example: zetic/whisper-tiny). No default account is applied.",
+          "type": "string"
+        },
+        "resume_session_id": {
+          "description": "Session id from an earlier failed or interrupted upload_model call: continue that session instead of starting a new upload. Pass the same model_file/inputs/external when bytes are still missing; a session that is already VERIFYING, DISPATCH_PENDING, or CONVERTING needs no files.",
+          "type": "string"
+        },
+        "wait_seconds": {
+          "description": "Seconds to wait for registration and conversion after the transfer, 0-120. The budget is shared: completion is replayed and then conversion status is polled until it runs out. 0 returns as soon as the session completes.",
+          "maximum": 120,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "name": "upload_model",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "upload_model envelope: session is the raw upload-complete response; model repeats its model reference when registration produced one; status is the latest conversion status a wait_seconds poll observed.",
+      "properties": {
+        "model": {
+          "description": "Reference to the CommonModel a completed session registered.",
+          "properties": {
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "version"
+          ],
+          "title": "ModelRef",
+          "type": "object"
+        },
+        "session": {
+          "description": "Session state after a complete call (ADR-5 status vocabulary).\n\n`state` is the session state machine value; verification/promotion\nfailures surface as `state == \"FAILED\"` + `failure_code` on a 200 —\nthe POST itself succeeded, the SESSION failed. `terminal` means the\nsession will not transition further (CONVERTING is terminal for the\nsession: conversion progress continues on the model status endpoint).",
+          "properties": {
+            "failure_code": {
+              "title": "Failure Code",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "description": "Reference to the CommonModel a completed session registered.",
+                  "properties": {
+                    "key": {
+                      "title": "Key",
+                      "type": "string"
+                    },
+                    "version": {
+                      "title": "Version",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "version"
+                  ],
+                  "title": "ModelRef",
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state": {
+              "enum": [
+                "CREATED",
+                "UPLOADING",
+                "VERIFYING",
+                "DISPATCH_PENDING",
+                "CONVERTING",
+                "FAILED",
+                "CANCELED",
+                "EXPIRED"
+              ],
+              "title": "State",
+              "type": "string"
+            },
+            "terminal": {
+              "title": "Terminal",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "state",
+            "terminal"
+          ],
+          "title": "CompleteModelUploadResponse",
+          "type": "object"
+        },
+        "status": {
+          "description": "Public conversion status of a model (the CLI `--wait` poll target).\n\n`state` is a STABLE public enum (lowercase snake) mapped from the\ninternal model status; `failure_code` is always a sanitized stable code,\nnever raw pipeline exception text.",
+          "properties": {
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "download_ready": {
+              "title": "Download Ready",
+              "type": "boolean"
+            },
+            "failure_code": {
+              "title": "Failure Code",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "progress": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Progress",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "retry_after": {
+              "maximum": 300,
+              "minimum": 1,
+              "title": "Retry After",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "stage": {
+              "enum": [
+                "convert",
+                "benchmark",
+                null
+              ],
+              "title": "Stage",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "state": {
+              "enum": [
+                "converting",
+                "optimizing",
+                "ready",
+                "failed"
+              ],
+              "title": "State",
+              "type": "string"
+            },
+            "terminal": {
+              "title": "Terminal",
+              "type": "boolean"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "terminal",
+            "download_ready",
+            "created_at",
+            "updated_at",
+            "failure_code",
+            "stage",
+            "progress",
+            "retry_after"
+          ],
+          "title": "ModelStatusResponse",
+          "type": "object"
+        }
+      },
+      "required": [
+        "session"
+      ],
       "type": "object"
     }
   },

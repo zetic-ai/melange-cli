@@ -146,7 +146,7 @@ var catalog = []tool{
 		}
 		return anyOf(
 			"The model alone, or with include_targets the {\"model\", \"targets\"} envelope.",
-			model, withTargets), nil
+			model, withTargets)
 	}},
 	{"get_conversion_status", op("get_model_status")},
 	{"set_default_model", op("set_default_model")},
@@ -163,7 +163,7 @@ var catalog = []tool{
 		return anyOf(
 			"The deployment options catalog (called with no arguments) or one model "+
 				"version's deployment guide (called with repo and model_key).",
-			options, guide), nil
+			options, guide)
 	}},
 	{"get_model_report", func(g *generator) (map[string]any, error) {
 		var shapes []map[string]any
@@ -177,7 +177,7 @@ var catalog = []tool{
 		return anyOf(
 			"One of the three report shapes, selected by report_type: "+
 				"general, llm, or package.",
-			shapes...), nil
+			shapes...)
 	}},
 	{"search_library", func(g *generator) (map[string]any, error) {
 		page, err := g.op("list_library_models")
@@ -196,7 +196,7 @@ var catalog = []tool{
 		return anyOf(
 			"The model page alone, or with include_providers the "+
 				"{\"models\", \"providers\"} envelope.",
-			page, withProviders), nil
+			page, withProviders)
 	}},
 	{"get_library_model", op("get_library_model")},
 	{"request_model_download", op("create_download_authorization")},
@@ -235,12 +235,24 @@ func op(operationID string) func(g *generator) (map[string]any, error) {
 }
 
 // anyOf composes alternative shapes a tool returns depending on its arguments.
-func anyOf(description string, shapes ...map[string]any) map[string]any {
+//
+// The union carries a top-level "type": "object": the MCP spec types
+// Tool.outputSchema as an object schema (schema.ts literally requires
+// `type: "object"`), and clients such as Claude Code reject — and then drop —
+// an entire catalog whose outputSchema lacks it. That top-level type is only
+// sound when every branch is itself an object schema, so anyOf refuses any
+// branch that is not.
+func anyOf(description string, shapes ...map[string]any) (map[string]any, error) {
 	alts := make([]any, len(shapes))
 	for i, s := range shapes {
+		if s["type"] != "object" {
+			return nil, fmt.Errorf(
+				"anyOf branch %d has type %v, not \"object\": a top-level \"type\":\"object\" would be unsound, and MCP outputSchema requires an object schema",
+				i, s["type"])
+		}
 		alts[i] = s
 	}
-	return map[string]any{"description": description, "anyOf": alts}
+	return map[string]any{"type": "object", "description": description, "anyOf": alts}, nil
 }
 
 // prop names one envelope key and the operation whose response fills it.
@@ -548,6 +560,15 @@ func (g *generator) writeAll(dir string) error {
 		schema, err := entry.build(g)
 		if err != nil {
 			return fmt.Errorf("%s: %w", entry.name, err)
+		}
+		// MCP types Tool.outputSchema as an object schema — `"type": "object"`
+		// at the top level is required, and clients (Claude Code among them)
+		// drop the whole catalog over a tool that violates it. Enforced here so
+		// no future build func can reintroduce a bare union or scalar schema.
+		if schema["type"] != "object" {
+			return fmt.Errorf(
+				"%s: top-level type is %v, not \"object\"; MCP requires every outputSchema to be an object schema",
+				entry.name, schema["type"])
 		}
 		schema["$schema"] = draft2020
 

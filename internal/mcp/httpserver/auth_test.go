@@ -603,6 +603,12 @@ func TestCanonicalResource(t *testing.T) {
 		{"https://mcp.zetic.ai/", "https://mcp.zetic.ai"},
 		{"https://MCP.Zetic.AI", "https://mcp.zetic.ai"},
 		{"https://mcp.zetic.ai/mcp/", "https://mcp.zetic.ai/mcp"},
+		// path.Clean cases: `https://host//` used to canonicalize to
+		// `https://host/` — an identity no minted aud matches, whose RFC 9728
+		// well-known path was a ServeMux subtree pattern.
+		{"https://mcp.zetic.ai//", "https://mcp.zetic.ai"},
+		{"https://mcp.zetic.ai//mcp//", "https://mcp.zetic.ai/mcp"},
+		{"https://mcp.zetic.ai/a/../mcp", "https://mcp.zetic.ai/mcp"},
 		{"  https://mcp.zetic.ai  ", "https://mcp.zetic.ai"},
 		{"http://localhost:8321", "http://localhost:8321"},
 		{"http://127.0.0.1:9090", "http://127.0.0.1:9090"},

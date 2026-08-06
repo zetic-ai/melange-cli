@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -422,6 +424,18 @@ func TestDebugTransportDisabledInHTTPMode(t *testing.T) {
 	assert.False(t, isErr, "tool call failed: %s", text)
 
 	assert.NotContains(t, logs.String(), secret, "bearer token leaked into server logs")
+
+	// The SDK-noise filter sits in this same log path (every per-request
+	// server is built through mcpserver.New): the three per-connection INFO
+	// lines — three PER REQUEST in stateless mode, with an empty session_id —
+	// must not reach the sink even at debug level, while the hygiene sweep
+	// above proves the filtered path still never carries bearer material.
+	for _, noisy := range []string{
+		"server connecting", "server session connected", "server session disconnected",
+	} {
+		assert.NotContains(t, logs.String(), noisy,
+			"the SDK's per-request %q line must be filtered from the HTTP server log", noisy)
+	}
 }
 
 // TestShutdownDrainsInflightRequests exercises the shutdown contract with a
@@ -493,6 +507,79 @@ func TestShutdownDrainsInflightRequests(t *testing.T) {
 		assert.NoError(t, err, "clean drain must return nil (exit 0)")
 	case <-time.After(10 * time.Second):
 		t.Fatal("ListenAndServe did not return after drain")
+	}
+}
+
+// TestSecondStopSignalClosesImmediately pins the double-signal contract: the
+// first stop signal begins the 25-second drain, and a SECOND one during that
+// drain must close connections immediately — an operator (or supervisor)
+// asking twice means "stop now", and swallowing the repeat for the full drain
+// window reads as a hang. The forced stop is interrupted work, so the error
+// maps to exit 130 (context.Canceled), distinct from both the clean drain
+// (nil, exit 0) and a drain-deadline overrun (exit 1).
+func TestSecondStopSignalClosesImmediately(t *testing.T) {
+	inflight := make(chan struct{}, 1)
+	release := make(chan struct{})
+	defer close(release) // never leave the API stub goroutine blocked
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		inflight <- struct{}{}
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, meBody("ana"))
+	}))
+	t.Cleanup(stub.Close)
+
+	srv, err := New(Config{
+		Listen:    "127.0.0.1:0",
+		APIHost:   stub.URL,
+		UserAgent: "melange-cli-test/0.0.0",
+		Version:   "v0.0.0-test",
+	})
+	require.NoError(t, err)
+	// The production drainTimeout (25s) stays: the point is that the second
+	// signal wins WITHOUT waiting anywhere near the deadline.
+	secondSignal := make(chan os.Signal, 1)
+	armed := make(chan struct{})
+	srv.stopSignals = func(c chan<- os.Signal) func() {
+		go func() {
+			<-armed
+			c <- <-secondSignal
+		}()
+		return func() {}
+	}
+
+	serveCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+	served := make(chan error, 1)
+	go func() { served <- srv.ListenAndServe(serveCtx) }()
+	require.Eventually(t, func() bool { return srv.Addr() != nil },
+		5*time.Second, 10*time.Millisecond, "server never bound its listener")
+
+	// Park one request in flight so the drain cannot complete on its own.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	session := connectSession(t, ctx, "http://"+srv.Addr().String(), "token-a")
+	go func() { _, _, _ = callWhoami(ctx, session) }()
+	select {
+	case <-inflight:
+	case <-time.After(10 * time.Second):
+		t.Fatal("tool call never reached the API stub")
+	}
+
+	// First signal: the command layer cancels the serve context (drain
+	// begins). Second signal: delivered through the drain-scoped watcher.
+	stop()
+	close(armed)
+	secondSignal <- syscall.SIGTERM
+
+	select {
+	case err := <-served:
+		require.Error(t, err, "a forced stop abandons in-flight work and must not exit 0")
+		assert.ErrorIs(t, err, context.Canceled,
+			"the forced stop is an interruption (exit 130), not a serve failure")
+		assert.Contains(t, err.Error(), "second stop signal")
+	case <-time.After(5 * time.Second):
+		t.Fatal("second stop signal did not end the drain immediately (25s drain window still running)")
 	}
 }
 

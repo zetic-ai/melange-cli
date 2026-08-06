@@ -199,7 +199,7 @@ func runDownload(ctx context.Context, opts *downloadOptions) (retErr error) {
 	if err != nil {
 		return err
 	}
-	lease, err := downloadstate.Acquire(ctx, identity, output, newIdempotencyKey)
+	lease, err := downloadstate.Acquire(ctx, identity, output, api.NewIdempotencyKey)
 	if err != nil {
 		return err
 	}

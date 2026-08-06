@@ -1,0 +1,34 @@
+# Library browsing without importing: the search_library description says a
+# library entry's full_name works directly with get_deployment_info and that
+# an agent should "never import a library model just to read its public
+# benchmarks". This task pins that the description actually steers a real
+# agent away from importing just to produce a deployment guide.
+name: library-to-deploy
+description: Find a whisper model in the public library and surface iOS deployment code.
+transport: stdio
+credential: write
+prompt: |
+  Find a whisper model in Melange's public model library and show me how to
+  deploy it to iOS.
+max_turns: 12
+timeout_seconds: 420
+checks:
+  - type: tool_called
+    tool: search_library
+  - type: tool_called
+    tool: get_deployment_info
+  - type: tool_not_called
+    name: did not import just to read a guide
+    tool: import_model
+  - type: tool_not_called
+    name: did not create any repo for a read-only question
+    tool: create_repo
+  - type: judge
+    rubric: |
+      The agent was asked how to deploy a public library whisper model to
+      iOS. PASS only if the final answer surfaces concrete deployment code
+      or SDK instructions for iOS (e.g. Swift/iOS SDK snippets, dependency
+      setup, or the guide content returned by the deployment tool) tied to a
+      real library model it found. FAIL if it only describes what it would
+      do, invents code without having fetched a guide, or reports the model
+      cannot be deployed.

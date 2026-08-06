@@ -88,12 +88,16 @@ func renderTools(t *testing.T, tools []*mcp.Tool) []byte {
 	return buf.Bytes()
 }
 
-// TestToolsListGoldenSnapshot pins the full advertised catalog — every tool's
-// name, description, annotations, and complete input and output schemas, as a
-// real client receives them over the wire — against a golden file. Any change
-// to the tool surface shows up as a reviewable diff to
-// testdata/tools_list_stdio.json; regenerate deliberately with -update.
-func TestToolsListGoldenSnapshot(t *testing.T) {
+// TestToolsListBaseGoldenSnapshot pins the BASE catalog — the tool set served
+// without EnableLocalTools, which is exactly what the HTTP transport
+// advertises (httpserver builds every per-request server with
+// EnableLocalTools: false) — against a golden file: every tool's name,
+// description, annotations, and complete input and output schemas, as a real
+// client receives them over the wire. Any change to the tool surface shows up
+// as a reviewable diff to testdata/tools_list_base.json; regenerate
+// deliberately with -update. Production stdio serves the superset pinned by
+// TestToolsListStdioGoldenSnapshot.
+func TestToolsListBaseGoldenSnapshot(t *testing.T) {
 	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
 	tools := listAllTools(t, cs)
 	require.NotEmpty(t, tools)
@@ -110,7 +114,7 @@ func TestToolsListGoldenSnapshot(t *testing.T) {
 	}
 
 	rendered := renderTools(t, tools)
-	golden := filepath.Join("testdata", "tools_list_stdio.json")
+	golden := filepath.Join("testdata", "tools_list_base.json")
 	if *update {
 		require.NoError(t, os.MkdirAll(filepath.Dir(golden), 0o755))
 		require.NoError(t, os.WriteFile(golden, rendered, 0o644))
@@ -119,7 +123,7 @@ func TestToolsListGoldenSnapshot(t *testing.T) {
 	require.NoError(t, err, "golden file missing; generate it with -update")
 	assert.Equal(t, string(want), string(rendered),
 		"tools/list drifted from the golden snapshot; if the change is intended, "+
-			"regenerate with: go test ./internal/mcp -run TestToolsListGoldenSnapshot -update")
+			"regenerate with: go test ./internal/mcp -run TestToolsListBaseGoldenSnapshot -update")
 }
 
 // TestEveryToolStatesItsBlastRadius holds the whole catalog to the
@@ -145,34 +149,53 @@ func TestEveryToolStatesItsBlastRadius(t *testing.T) {
 	}
 }
 
-// TestToolsListLocalGoldenSnapshot pins the EnableLocalTools catalog against
-// its own golden file. Together with TestToolsListGoldenSnapshot this is the
-// two-golden gate that replaced the pre-upload sentinel
-// (TestEnableLocalToolsCatalogIsIdenticalToday): the stdio golden stays frozen
-// without upload_model, and the local variant carries it.
-func TestToolsListLocalGoldenSnapshot(t *testing.T) {
-	stdio := listAllTools(t, connectWith(t, "test", Options{}))
-	local := listAllTools(t, connectWith(t, "test", Options{EnableLocalTools: true}))
+// TestToolsListStdioGoldenSnapshot pins the catalog PRODUCTION STDIO serves —
+// runStdio passes EnableLocalTools: true, so the real stdio surface is the
+// base catalog plus the local-only tools — against its own golden file.
+// Together with TestToolsListBaseGoldenSnapshot this is the two-golden gate
+// that replaced the pre-upload sentinel
+// (TestEnableLocalToolsCatalogIsIdenticalToday): the base golden stays frozen
+// without upload_model, and the stdio superset carries it.
+func TestToolsListStdioGoldenSnapshot(t *testing.T) {
+	base := listAllTools(t, connectWith(t, "test", Options{}))
+	stdio := listAllTools(t, connectWith(t, "test", Options{EnableLocalTools: true}))
 
 	// The flag adds exactly the local-only tools — today upload_model — and
-	// changes nothing else: every stdio tool definition appears verbatim.
-	stdioNames := make(map[string]bool, len(stdio))
-	for _, tool := range stdio {
-		stdioNames[tool.Name] = true
+	// changes nothing else.
+	baseNames := make(map[string]bool, len(base))
+	for _, tool := range base {
+		baseNames[tool.Name] = true
 	}
-	assert.False(t, stdioNames["upload_model"], "the stdio catalog must not carry upload_model")
+	assert.False(t, baseNames["upload_model"], "the base catalog must not carry upload_model")
 	var added []string
-	for _, tool := range local {
-		if !stdioNames[tool.Name] {
+	for _, tool := range stdio {
+		if !baseNames[tool.Name] {
 			added = append(added, tool.Name)
 		}
 	}
 	assert.Equal(t, []string{"upload_model"}, added,
 		"EnableLocalTools adds exactly upload_model")
-	assert.Len(t, local, len(stdio)+1)
+	assert.Len(t, stdio, len(base)+1)
 
-	rendered := renderTools(t, local)
-	golden := filepath.Join("testdata", "tools_list_local.json")
+	// Every shared tool definition appears VERBATIM: the flag may only add
+	// tools, never reshape one. Comparing each tool's rendered bytes (not just
+	// names and count) makes the claim enforceable — a description or schema
+	// that differs between the two catalogs fails here, tool by tool.
+	baseRendered := make(map[string][]byte, len(base))
+	for _, tool := range base {
+		baseRendered[tool.Name] = renderTools(t, []*mcp.Tool{tool})
+	}
+	for _, tool := range stdio {
+		want, shared := baseRendered[tool.Name]
+		if !shared {
+			continue // upload_model, asserted above
+		}
+		assert.Equal(t, string(want), string(renderTools(t, []*mcp.Tool{tool})),
+			"tool %s must be byte-identical in the base and stdio catalogs", tool.Name)
+	}
+
+	rendered := renderTools(t, stdio)
+	golden := filepath.Join("testdata", "tools_list_stdio.json")
 	if *update {
 		require.NoError(t, os.MkdirAll(filepath.Dir(golden), 0o755))
 		require.NoError(t, os.WriteFile(golden, rendered, 0o644))
@@ -180,6 +203,6 @@ func TestToolsListLocalGoldenSnapshot(t *testing.T) {
 	want, err := os.ReadFile(golden)
 	require.NoError(t, err, "golden file missing; generate it with -update")
 	assert.Equal(t, string(want), string(rendered),
-		"the EnableLocalTools tools/list drifted from the golden snapshot; if the change "+
-			"is intended, regenerate with: go test ./internal/mcp -run TestToolsListLocalGoldenSnapshot -update")
+		"the stdio (EnableLocalTools) tools/list drifted from the golden snapshot; if the change "+
+			"is intended, regenerate with: go test ./internal/mcp -run TestToolsListStdioGoldenSnapshot -update")
 }
