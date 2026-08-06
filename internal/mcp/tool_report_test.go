@@ -20,19 +20,19 @@ func reportBody(kind string) string {
 	switch kind {
 	case "general":
 		stats := `{"min":12.5,"max":12.5,"median":12.5,"avg":12.5}`
-		return `{"derivation_version":2,"model":{"key":"whisper-tiny-1","version":1},` +
-			`"records":[{"device":` + device + `,"ap_type":"cpu","target":"tflite","precision":"fp32",` +
+		return `{"derivation_version":3,"model":{"key":"whisper-tiny-1","version":1},` +
+			`"records":[{"device":` + device + `,"ap_type":"cpu","variant":"v1","precision":"fp32",` +
 			`"run":0,"metric":"latency_ms","value":12.5,"unit":"ms"}],` +
 			`"summary":{"latency_ms":{"fp32":` + stats + `,"fp16":null,"int8":null,"all":` + stats + `},` +
 			`"snr_db":{"fp32":null,"fp16":null,"int8":null,"all":null},` +
 			`"memory_mb":{"fp32":null,"fp16":null,"int8":null,"all":null}}}`
 	case "llm":
-		return `{"derivation_version":2,"model":{"key":"whisper-tiny-1","version":1},` +
-			`"records":[{"device":` + device + `,"ap_type":"cpu","target":"llama.cpp","quant_type":"q4_k_m",` +
+		return `{"derivation_version":3,"model":{"key":"whisper-tiny-1","version":1},` +
+			`"records":[{"device":` + device + `,"ap_type":"cpu","variant":"v1","quant_type":"q4_k_m",` +
 			`"dataset":null,"run":0,"metric":"tps","value":42.5,"unit":"tokens_per_s"}],` +
 			`"summary":{"quants":{"q4_k_m":{"best_tps":42.5,"best_ttft_ms":null,` +
 			`"best_memory_mb":null,"best_accuracy":0.61}},` +
-			`"accuracy":[{"target":"llama.cpp","quant_type":"q4_k_m","dataset":"mmlu","score":0.61}]}}`
+			`"accuracy":[{"quant_type":"q4_k_m","dataset":"mmlu","score":0.61}]}}`
 	case "package":
 		aggregates := `{"tps":{"min":42.5,"max":42.5,"median":42.5,"avg":42.5},"ttft_ms":null,` +
 			`"memory_inference_peak_mb":null}`

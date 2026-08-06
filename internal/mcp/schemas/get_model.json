@@ -161,7 +161,7 @@
             },
             "results": {
               "items": {
-                "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable — clients must not parse it. `target`\nand `quant_type` are stable lowercase names derived from the internal\nenums; `compatibility` is null when the row carries no device\ncompatibility information (LLM targets and the all-null sentinel).",
+                "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable — clients must not parse it; pass it\nback to the download endpoints to select this artifact.\n\nThe runtime engine that produced the artifact is deliberately NOT\npublished. Choose between targets on the properties that describe the\nartifact to its consumer: `precision` for general targets, `quant_type`\nfor LLM targets, and `compatibility` for the device it was built for —\nincluding `compatibility.ap_types`, the accelerator classes (cpu/gpu/npu)\nit can run on.\n\n`compatibility` is null when the row carries no device compatibility\ninformation: LLM targets and the all-null sentinel. For those rows no\naccelerator information is published at all, and two artifacts alike in\n`precision` and `quant_type` are distinguishable only by `target_id` and\n`download_size`.",
                 "properties": {
                   "compatibility": {
                     "anyOf": [
@@ -229,16 +229,25 @@
                     "title": "Kind",
                     "type": "string"
                   },
+                  "precision": {
+                    "enum": [
+                      "fp32",
+                      "fp16",
+                      "int8",
+                      null
+                    ],
+                    "title": "Precision",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "quant_type": {
                     "title": "Quant Type",
                     "type": [
                       "string",
                       "null"
                     ]
-                  },
-                  "target": {
-                    "title": "Target",
-                    "type": "string"
                   },
                   "target_id": {
                     "title": "Target Id",
@@ -248,7 +257,6 @@
                 "required": [
                   "target_id",
                   "kind",
-                  "target",
                   "download_size",
                   "created_at"
                 ],
