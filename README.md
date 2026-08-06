@@ -4,7 +4,52 @@ Give your AI agent access to [Melange](https://melange.zetic.ai), an on-device A
 
 ## Install
 
-### 1. Install the CLI
+One line on macOS or Linux — installs the CLI and the
+[agent skill](https://agentskills.io) that drives it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install.sh | sh
+```
+
+Restart your coding agent afterward so it can discover the skill. Re-run the
+same line any time to update both.
+
+The installer downloads the release binary for your platform, verifies its
+SHA-256 checksum, and installs the skill for universal agents and Claude Code.
+When [`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/) is
+on your PATH it also verifies the release-workflow signature; pass
+`| sh -s -- --require-signature` to make that mandatory.
+
+<details>
+<summary>Installer options</summary>
+
+Append flags after `sh -s --`, or set the matching environment variable:
+
+| Flag | Environment variable | Effect |
+| --- | --- | --- |
+| `--version v1.2.3` | `MELANGE_VERSION` | Install a specific release instead of the latest |
+| `--install-dir DIR` | `MELANGE_INSTALL_DIR` | Binary directory; defaults to `/usr/local/bin`, falling back to `~/.local/bin` |
+| `--cli-only` | `MELANGE_SKIP_SKILL=1` | Skip the agent skill |
+| `--skill-only` | `MELANGE_SKIP_CLI=1` | Skip the CLI |
+| `--agent "A B"` | `MELANGE_SKILL_AGENTS` | Agents to install the skill for; defaults to `universal claude-code` |
+| `--require-signature` | `MELANGE_REQUIRE_SIGNATURE=1` | Fail unless the release signature is verified |
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install.sh \
+  | sh -s -- --version v1.2.3 --agent "universal claude-code codex"
+```
+
+The skill is installed with [`npx skills`](https://github.com/vercel-labs/skills)
+when a recent Node is available, and copied straight into the agent skill
+directories otherwise.
+
+</details>
+
+<details>
+<summary>Alternatives: Homebrew, npm, Go, and manual installation</summary>
+
+These install the CLI only — add the agent skill separately with the
+`npx skills add` command below.
 
 **Homebrew** (macOS or Linux):
 
@@ -12,21 +57,10 @@ Give your AI agent access to [Melange](https://melange.zetic.ai), an on-device A
 brew install zetic-ai/tap/melange
 ```
 
-**npm** (macOS, Linux, or Windows):
+**npm** (macOS, Linux, or Windows — the only supported path on Windows):
 
 ```sh
 npm install -g @zetic-ai/melange-cli
-```
-
-<details>
-<summary>Alternatives: Installer script, Go, and manual installation</summary>
-
-The macOS/Linux installer requires
-[`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/) and
-verifies the release-workflow signature and checksum:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install.sh | sh
 ```
 
 With a current Go toolchain:
@@ -39,12 +73,8 @@ Prebuilt binaries for macOS, Linux, and Windows on amd64/arm64, with checksums
 and SBOMs, are available on the
 [releases page](https://github.com/zetic-ai/melange-cli/releases).
 
-</details>
-
-### 2. Install the agent skill
-
-An [agent skill](https://agentskills.io) is required for driving `melange` from
-Claude Code, Codex, Cursor, OpenCode, and other compatible coding agents.
+The agent skill, for driving `melange` from Claude Code, Codex, Cursor,
+OpenCode, and other compatible coding agents:
 
 ```sh
 # Install for universal agents and Claude Code
@@ -53,12 +83,11 @@ npx skills add zetic-ai/melange-cli --skill melange-cli \
 
 # Or choose one or more supported agents interactively
 npx skills add zetic-ai/melange-cli --skill melange-cli --global
-
-# Update the installed skill after a melange-cli release
-npx skills update melange-cli --global
 ```
 
 Restart your agent afterward so it can discover the skill.
+
+</details>
 
 ## Authentication
 
@@ -151,27 +180,17 @@ Compare Gemma4 with another llm available in Melange. Use only benchmark values 
 Show throughput and peak memory for iPhone 16 and Galaxy S25 where available.
 ```
 
-## Update 
+## Update
 
-### CLI
-
-**Homebrew** (macOS or Linux):
+Re-run the installer to update the CLI and the skill together:
 
 ```sh
-brew upgrade zetic-ai/tap/melange
+curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install.sh | sh
 ```
 
-**npm** (macOS, Linux, or Windows):
-
-```sh
-npm update -g @zetic-ai/melange-cli
-```
-
-### Agent skill
-
-```sh
-npx skills update melange-cli --global
-```
+If you installed the CLI another way, update it the same way you installed it —
+`brew upgrade zetic-ai/tap/melange` or `npm update -g @zetic-ai/melange-cli` —
+and update the skill with `npx skills update melange-cli --global`.
 
 ## Documentation
 
