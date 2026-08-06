@@ -16,7 +16,7 @@ LDFLAGS := -s -w \
 # tool directive, so `make gen` is reproducible.
 DOWN_CONVERT := npx --yes @apiture/openapi-down-convert@0.14.2
 
-.PHONY: build test npm-test lint fmt gen gen-check docs docs-check snapshot fixtures-check
+.PHONY: build test npm-test lint fmt gen gen-check docs docs-check snapshot fixtures-check perf
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) ./cmd/melange
@@ -52,6 +52,11 @@ docs-check:
 
 snapshot:
 	goreleaser release --snapshot --clean --skip=sign
+
+# On-demand MCP HTTP load soak (NOT run in CI; nightly wiring is CLI-PR5's
+# call). Tunables: DURATION/CONCURRENCY/RPS/LIST_BUDGET/READ_SLACK env vars.
+perf:
+	./script/mcp-loadtest.sh
 
 # Local-dev sync check for the shared contract fixtures: re-copy the backend's
 # committed fixtures and fail if the local copy drifted. The backend

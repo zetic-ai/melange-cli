@@ -1,6 +1,10 @@
 package mcp
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
 
 // Deps carries the shared dependencies every MCP tool handler receives.
 type Deps struct {
@@ -10,6 +14,24 @@ type Deps struct {
 	Version string
 	// Logger receives server diagnostics; nil means discard.
 	Logger *slog.Logger
+	// AuthHints overrides the remediation text attached to credential
+	// failures. The zero value keeps the stdio defaults.
+	AuthHints AuthHints
+}
+
+// AuthHints carries transport-specific remediation text for credential
+// failures in tool errors. The stdio transport tells the caller to run
+// 'melange auth login' on their own machine; an HTTP transport serves remote
+// clients for whom that advice is wrong, so it supplies its own text. An
+// empty field falls back to the stdio default, keeping existing stdio
+// behavior byte-identical.
+type AuthHints struct {
+	// Unauthenticated is appended to authentication failures: a missing
+	// credential or an API authentication_error (HTTP 401).
+	Unauthenticated string
+	// Forbidden is appended to permission failures: an API permission_error
+	// (HTTP 403), typically missing token scopes.
+	Forbidden string
 }
 
 // Options configures which parts of the tool catalog a server exposes.
@@ -18,6 +40,16 @@ type Options struct {
 	// runs on the same machine as the caller (e.g. file uploads over stdio).
 	// False hides them, as an HTTP transport must.
 	EnableLocalTools bool
+	// SchemaCache, when non-nil, lets the SDK reuse resolved tool schemas
+	// across every server built with the same cache. The HTTP transport
+	// builds one server per request for token isolation and passes one
+	// process-wide cache so schema resolution is paid once, not per request;
+	// combined with this package's memoized schema pointers (the cache keys
+	// provided schemas by pointer identity) that removes almost all of the
+	// per-request construction cost. Nil — stdio's default — keeps the SDK
+	// resolving per server, exactly as before. It lives on Options, not Deps,
+	// because it shapes construction and is never seen by a tool handler.
+	SchemaCache *mcp.SchemaCache
 }
 
 // logger returns the configured logger, or a discard logger when nil, so

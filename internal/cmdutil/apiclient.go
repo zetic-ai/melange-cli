@@ -28,6 +28,30 @@ func DebugEnabled() bool {
 	return envTruthy(os.Getenv("MELANGE_DEBUG"))
 }
 
+// UserAgent is the User-Agent every outgoing Melange API request carries,
+// whatever builds the client — the CLI's own commands or the MCP HTTP
+// server's per-request clients. One function so the API only ever sees one
+// shape of this string.
+func UserAgent(version string) string {
+	return fmt.Sprintf("melange-cli/%s (%s; %s)", version, runtime.GOOS, runtime.GOARCH)
+}
+
+// APITimeout resolves the per-request API timeout from MELANGE_API_TIMEOUT,
+// falling back to api.DefaultRequestTimeout. A set-but-unparsable value is a
+// hard error rather than a silent fallback: an operator who asked for a
+// specific timeout must not get a different one.
+func APITimeout() (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv("MELANGE_API_TIMEOUT"))
+	if raw == "" {
+		return api.DefaultRequestTimeout, nil
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("MELANGE_API_TIMEOUT must be a positive duration (for example 30s or 2m), got %q", raw)
+	}
+	return parsed, nil
+}
+
 // NewAPIClient builds an api.Client for the given host and token, honoring
 // the factory's base transport override and a truthy MELANGE_DEBUG (debug
 // lines go to stderr). token may be empty for unauthenticated clients.
@@ -36,18 +60,14 @@ func NewAPIClient(f *Factory, host, token string) (*api.Client, error) {
 	if DebugEnabled() {
 		debug = f.IOStreams.ErrOut
 	}
-	timeout := api.DefaultRequestTimeout
-	if raw := strings.TrimSpace(os.Getenv("MELANGE_API_TIMEOUT")); raw != "" {
-		parsed, err := time.ParseDuration(raw)
-		if err != nil || parsed <= 0 {
-			return nil, fmt.Errorf("MELANGE_API_TIMEOUT must be a positive duration (for example 30s or 2m), got %q", raw)
-		}
-		timeout = parsed
+	timeout, err := APITimeout()
+	if err != nil {
+		return nil, err
 	}
 	return api.NewClient(api.Options{
 		Host:      host,
 		Token:     token,
-		UserAgent: fmt.Sprintf("melange-cli/%s (%s; %s)", f.Version, runtime.GOOS, runtime.GOARCH),
+		UserAgent: UserAgent(f.Version),
 		Debug:     debug,
 		Transport: f.HTTPTransport,
 		Timeout:   timeout,

@@ -136,7 +136,7 @@ func TestToolErrorMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := toolError(tt.err)
+			res := Deps{}.toolError(tt.err)
 			assert.True(t, res.IsError, "toolError must set IsError")
 			assert.Nil(t, res.StructuredContent, "tool errors are text-only")
 			text := textOf(t, res)
@@ -152,11 +152,55 @@ func TestToolErrorMapping(t *testing.T) {
 
 func TestToolErrorExactAuthText(t *testing.T) {
 	// Pin the full rendering once so remediation placement can't drift.
-	res := toolError(&api.Error{
+	res := Deps{}.toolError(&api.Error{
 		StatusCode: 401, Type: "authentication_error",
 		Message: "invalid token", RequestID: "req_1",
 	})
 	want := "melange API: invalid token (authentication_error, HTTP 401, request req_1)\n" +
 		"To fix: run 'melange auth login' or set MELANGE_API_KEY."
 	assert.Equal(t, want, textOf(t, res))
+}
+
+func TestToolErrorCustomAuthHints(t *testing.T) {
+	// The AuthHints seam: a transport that supplies its own remediation text
+	// must see it verbatim in place of the stdio defaults, on every path that
+	// renders an auth hint.
+	d := Deps{AuthHints: AuthHints{
+		Unauthenticated: "HTTP-UNAUTH-HINT: reconnect with a fresh token.",
+		Forbidden:       "HTTP-SCOPE-HINT: mint a token with more scopes.",
+	}}
+
+	t.Run("authentication_error uses the Unauthenticated hint", func(t *testing.T) {
+		res := d.toolError(&api.Error{
+			StatusCode: 401, Type: "authentication_error",
+			Message: "invalid token", RequestID: "req_1",
+		})
+		want := "melange API: invalid token (authentication_error, HTTP 401, request req_1)\n" +
+			"HTTP-UNAUTH-HINT: reconnect with a fresh token."
+		assert.Equal(t, want, textOf(t, res))
+	})
+
+	t.Run("permission_error uses the Forbidden hint", func(t *testing.T) {
+		res := d.toolError(&api.Error{
+			StatusCode: 403, Type: "permission_error",
+			Message: "token lacks the write scope", RequestID: "req_2",
+		})
+		text := textOf(t, res)
+		assert.Contains(t, text, "HTTP-SCOPE-HINT: mint a token with more scopes.")
+		assert.NotContains(t, text, "melange auth status")
+	})
+
+	t.Run("unresolved token uses the Unauthenticated hint", func(t *testing.T) {
+		res := d.toolError(cmdutil.AuthError{Err: errors.New("no token")})
+		text := textOf(t, res)
+		assert.Contains(t, text, "HTTP-UNAUTH-HINT: reconnect with a fresh token.")
+		assert.NotContains(t, text, "MELANGE_API_KEY")
+	})
+
+	t.Run("partial hints fall back per field", func(t *testing.T) {
+		partial := Deps{AuthHints: AuthHints{Unauthenticated: "CUSTOM-401."}}
+		res := partial.toolError(&api.Error{StatusCode: 403, Type: "permission_error", Message: "nope"})
+		assert.Contains(t, textOf(t, res),
+			"Your token may lack the required scopes; run 'melange auth status' to inspect them.")
+	})
 }

@@ -12,6 +12,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/zalando/go-keyring v0.2.8
+	go.uber.org/goleak v1.3.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	golang.org/x/text v0.40.0
