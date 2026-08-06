@@ -1,0 +1,39 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.zetic/melange",
+  "title": "Melange",
+  "description": "ZETIC Melange on-device AI: model library, uploads, conversion, benchmarks, deployment guides.",
+  "version": "0.4.0",
+  "repository": {
+    "url": "https://github.com/zetic-ai/melange-cli",
+    "source": "github"
+  },
+  "websiteUrl": "https://melange.zetic.ai",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@zetic-ai/melange-cli",
+      "version": "0.4.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "valueHint": "mcp"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "MELANGE_API_KEY",
+          "description": "Melange Personal Access Token (https://melange.zetic.ai/settings?tab=pat). Optional if a token was stored with `melange auth login`; credentials are resolved lazily on the first tool call.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
