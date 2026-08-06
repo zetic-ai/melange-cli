@@ -275,6 +275,38 @@ func TestStatelessNoSessionRequired(t *testing.T) {
 	}
 }
 
+// TestHTTPCatalogExcludesLocalTools pins the transport invariance the upload
+// tool introduced: HTTP servers are built with EnableLocalTools false, so the
+// catalog served to remote clients must never advertise upload_model — the
+// server cannot see the caller's files, and the tool would silently read the
+// SERVER's filesystem instead.
+func TestHTTPCatalogExcludesLocalTools(t *testing.T) {
+	stub := newMeStub(t, map[string]string{"token-a": "ana"})
+	_, ts := newTestServer(t, stub.URL, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	session := connectSession(t, ctx, ts.URL, "token-a")
+
+	var names []string
+	var cursor string
+	for {
+		res, err := session.ListTools(ctx, &sdk.ListToolsParams{Cursor: cursor})
+		require.NoError(t, err)
+		for _, tool := range res.Tools {
+			names = append(names, tool.Name)
+		}
+		if res.NextCursor == "" {
+			break
+		}
+		cursor = res.NextCursor
+	}
+
+	assert.Contains(t, names, "whoami", "the API-backed catalog is served")
+	assert.NotContains(t, names, "upload_model",
+		"local-only tools must stay hidden from the HTTP catalog")
+}
+
 func TestMaxRequestBodyBytesEnforced(t *testing.T) {
 	_, ts := newTestServer(t, "https://api.invalid", nil)
 

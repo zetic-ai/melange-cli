@@ -89,7 +89,7 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 			return d.toolError(err), nil, nil
 		}
 		if in.IncludeURLs {
-			return rawResult(resp.Body), nil, nil
+			return rawResult(resp.Body)
 		}
 		redacted, err := redactAuthorization(resp.Body)
 		if err != nil {
@@ -99,7 +99,7 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 			// back to the raw body, which carries the credentials.
 			return nil, nil, fmt.Errorf("redacting download authorization: %w", err)
 		}
-		return rawResult(redacted), nil, nil
+		return rawResult(redacted)
 	}
 }
 

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -19,20 +17,8 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 	"github.com/zetic-ai/melange-cli/internal/text"
 	"github.com/zetic-ai/melange-cli/internal/upload"
+	"github.com/zetic-ai/melange-cli/internal/uploadflow"
 	"github.com/zetic-ai/melange-cli/internal/wait"
-)
-
-// hashNoteThreshold is the file size above which a "hashing" progress note
-// is printed to stderr during manifest digesting.
-const hashNoteThreshold = 100 * 1024 * 1024
-
-// Upload-session states that retain the repository's single active slot
-// (ADR-5 vocabulary, compared case-insensitively).
-const (
-	sessionStateCreated         = "CREATED"
-	sessionStateUploading       = "UPLOADING"
-	sessionStateVerifying       = "VERIFYING"
-	sessionStateDispatchPending = "DISPATCH_PENDING"
 )
 
 type uploadOptions struct {
@@ -229,42 +215,35 @@ func runUploadCommand(ctx context.Context, opts *uploadOptions, args []string) e
 	return runUpload(ctx, opts, specs)
 }
 
-// buildSpecs digests the local files named by flags or --input-manifest.
-// Usage-shaped problems (missing args, duplicate basenames) map to exit 2.
+// buildSpecs digests the local files named by flags or --input-manifest via
+// uploadflow.BuildSpecs. Usage-shaped problems (missing args, duplicate
+// basenames) map to exit 2.
 func buildSpecs(opts *uploadOptions, args []string) ([]upload.FileSpec, error) {
-	ios := opts.f.IOStreams
-	note := func(path string, size int64) {
-		if size >= hashNoteThreshold {
-			fmt.Fprintf(ios.ErrOut, "Hashing %s (%s)...\n",
-				text.SanitizeTerminalInline(filepath.Base(path)), text.FormatBytes(size))
+	in := uploadflow.ManifestInputs{
+		Inputs:        opts.inputs,
+		External:      opts.external,
+		InputManifest: opts.inputManifest,
+	}
+	if len(args) == 1 {
+		in.ModelFile = args[0]
+	}
+	if in.InputManifest == "" && in.ModelFile != "" && len(opts.bucket) > 0 {
+		bucketSpecs, err := parseBucketFlags(opts.bucket)
+		if err != nil {
+			return nil, err
 		}
+		in.Buckets = bucketSpecs
 	}
 
-	var specs []upload.FileSpec
-	var err error
-	if opts.inputManifest != "" {
-		specs, opts.bucketSpecs, err = upload.LoadManifestDocV2(opts.inputManifest, note)
-	} else {
-		if len(args) != 1 {
-			return nil, cmdutil.FlagError{Err: errors.New(
-				"MODEL_FILE is required (or pass --input-manifest); see `melange model upload --help`")}
-		}
-		if len(opts.bucket) > 0 {
-			opts.bucketSpecs, err = parseBucketFlags(opts.bucket)
-			if err == nil {
-				specs, err = upload.BuildBucketedManifest(
-					args[0], opts.inputs, opts.external, opts.bucketSpecs, note)
-			}
-		} else {
-			specs, err = upload.BuildManifest(args[0], opts.inputs, opts.external, note)
-		}
-	}
+	specs, buckets, err := uploadflow.BuildSpecs(in, &uploadEvents{f: opts.f})
 	if err != nil {
-		if errors.Is(err, upload.ErrDuplicateFilename) || errors.Is(err, upload.ErrInvalidManifest) {
-			return nil, cmdutil.FlagError{Err: err}
+		var uerr *uploadflow.UsageError
+		if errors.As(err, &uerr) {
+			return nil, cmdutil.FlagError{Err: uerr.Err}
 		}
 		return nil, err
 	}
+	opts.bucketSpecs = buckets
 	return specs, nil
 }
 
@@ -293,6 +272,12 @@ func parseBucketFlags(values []string) ([]upload.BucketSpec, error) {
 		buckets = append(buckets, upload.BucketSpec{Index: index, Dims: dims})
 	}
 	return buckets, nil
+}
+
+// manifestOptions preserves the wire conversion under its historical local
+// name; the implementation moved to uploadflow with the session flow.
+func manifestOptions(specs []upload.BucketSpec) *gen.ManifestOptions {
+	return uploadflow.ManifestOptions(specs)
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +362,7 @@ func renderDryRun(opts *uploadOptions, specs []upload.FileSpec) error {
 }
 
 // ---------------------------------------------------------------------------
-// real upload
+// real upload (thin adapters over internal/uploadflow)
 // ---------------------------------------------------------------------------
 
 func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec) error {
@@ -385,205 +370,132 @@ func runUpload(ctx context.Context, opts *uploadOptions, specs []upload.FileSpec
 	if err != nil {
 		return err
 	}
+	res, err := uploadOrchestrator(opts, g).Run(ctx, uploadflow.Request{
+		Account: opts.account,
+		Name:    opts.name,
+		Repo:    opts.repo,
+		Specs:   specs,
+		Buckets: opts.bucketSpecs,
+		Wait:    opts.doWait,
+		Timeout: opts.timeout,
+	})
+	return reportUploadOutcome(ctx, opts, g, res, err)
+}
 
-	body := gen.CreateModelUploadJSONRequestBody{
-		ManifestVersion: gen.N2,
-		Files:           manifestFiles(specs),
-		Options:         manifestOptions(opts.bucketSpecs),
+// uploadOrchestrator wires the flow to this command invocation: the CLI's
+// progress/note rendering, the bare GCS client, and the poll test hooks.
+func uploadOrchestrator(opts *uploadOptions, g *gen.ClientWithResponses) *uploadflow.Orchestrator {
+	return &uploadflow.Orchestrator{
+		Gen:          g,
+		Events:       &uploadEvents{f: opts.f},
+		Bare:         bareHTTPClient(opts.f),
+		StallTimeout: opts.inactivity,
+		Jitter:       pollJitter,
+		Sleep:        pollSleep,
+		Now:          pollNow,
 	}
-	var resp *gen.CreateModelUploadResult
-	for createAttempt := 0; createAttempt < 2; createAttempt++ {
-		resp, err = g.CreateModelUploadWithResponse(ctx, opts.account, opts.name,
-			&gen.CreateModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()}, body)
-		if err != nil {
-			return err
-		}
-		if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-			if resp.StatusCode() != 409 {
-				return aerr
-			}
-			stale, conflictErr := activeSessionConflict(ctx, opts, g, aerr)
-			if stale && createAttempt == 0 {
-				fmt.Fprintln(opts.f.IOStreams.ErrOut,
-					"The conflicting session finished while the upload was starting; retrying once.")
-				continue
-			}
-			if stale {
-				return fmt.Errorf("%w\nThe conflicting session is no longer active; retry the upload", aerr)
-			}
-			return conflictErr
-		}
-		break
-	}
-	if resp == nil {
-		return errors.New("creating upload session produced no response")
-	}
-	session := resp.JSON201
-	if session == nil {
-		session = resp.JSON200 // Idempotency-Key replay of the same manifest
-	}
-	if session == nil {
-		return fmt.Errorf("unexpected response creating upload session (HTTP %d)", resp.StatusCode())
-	}
+}
 
-	st, err := stateFromSession(session, specs, opts.repo)
+// uploadEvents renders uploadflow events on stderr: notes verbatim, per-file
+// transfer progress through the shared progress renderer.
+type uploadEvents struct {
+	f    *cmdutil.Factory
+	prog *progress
+	file string
+}
+
+func (e *uploadEvents) Progress(file string, committed, total int64) {
+	if e.prog == nil || e.file != file {
+		e.prog = newProgress(e.f, file, total)
+		e.file = file
+	}
+	if committed >= total {
+		e.prog.done()
+		e.prog = nil
+		e.file = ""
+		return
+	}
+	e.prog.update(committed)
+}
+
+func (e *uploadEvents) Note(msg string) {
+	fmt.Fprintln(e.f.IOStreams.ErrOut, msg)
+}
+
+// reportUploadOutcome owns everything after the state machine: hint and
+// error formatting, terminal-state cleanup, exporter output, and --wait
+// conversion polling. It also owns closing the session lease on every
+// non-nil result (mirroring the flow's partial-result contract).
+func reportUploadOutcome(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
+	res *uploadflow.Result, err error,
+) error {
+	if res != nil && res.Lease != nil {
+		defer res.Lease.Close() //nolint:errcheck
+	}
 	if err != nil {
-		return err
+		return renderUploadFlowError(opts, err)
 	}
-	lease, err := upload.AcquireSession(ctx, st.SessionID)
-	if err != nil {
-		return fmt.Errorf("locking upload session %s: %w", st.SessionID, err)
-	}
-	defer lease.Close() //nolint:errcheck
-	if err := st.Save(); err != nil {
-		return err
-	}
-
-	var total int64
-	for _, s := range specs {
-		total += s.Size
-	}
-	fmt.Fprintf(opts.f.IOStreams.ErrOut, "Upload session %s: %d files, %s to %s\n",
-		text.SanitizeTerminalInline(st.SessionID), len(st.Files), text.FormatBytes(total),
-		text.SanitizeTerminalInline(opts.repo))
-
-	return transferAndComplete(ctx, opts, g, st, lease)
+	return completeReport(ctx, opts, g, res)
 }
 
-// manifestOptions converts validated local bucket declarations to the exact
-// OpenAPI wire shape. A nil pointer omits options for ordinary models.
-func manifestOptions(specs []upload.BucketSpec) *gen.ManifestOptions {
-	if len(specs) == 0 {
-		return nil
+// renderUploadFlowError translates uploadflow's typed errors into the CLI's
+// printed hints, usage errors, and exit codes.
+func renderUploadFlowError(opts *uploadOptions, err error) error {
+	var uerr *uploadflow.UsageError
+	if errors.As(err, &uerr) {
+		return cmdutil.FlagError{Err: uerr.Err}
 	}
-	buckets := make([]gen.ManifestBucket, len(specs))
-	for i, bucket := range specs {
-		buckets[i] = gen.ManifestBucket{Index: bucket.Index, Dims: bucket.Dims}
-	}
-	return &gen.ManifestOptions{Buckets: &buckets}
-}
 
-// manifestFiles converts local specs into the wire manifest.
-func manifestFiles(specs []upload.FileSpec) []gen.ManifestFile {
-	files := make([]gen.ManifestFile, len(specs))
-	for i, s := range specs {
-		mf := gen.ManifestFile{
-			ClientFileId: s.ClientFileID,
-			Role:         gen.ManifestFileRole(s.Role),
-			Filename:     s.Filename,
-			Size:         int(s.Size),
-			Crc32c:       s.CRC32C,
+	var cerr *uploadflow.ConflictError
+	if errors.As(err, &cerr) {
+		if cerr.Stale {
+			return fmt.Errorf("%w\nThe conflicting session is no longer active; retry the upload", cerr.Err)
 		}
-		if s.SHA256 != "" {
-			sha := s.SHA256
-			mf.Sha256 = &sha
+		if cerr.SessionID == "" {
+			return fmt.Errorf("%w\nList sessions with: melange model upload --sessions -R %s", cerr.Err, opts.repo)
 		}
-		if s.Role == upload.RoleInput {
-			idx := s.InputIndex
-			mf.InputIndex = &idx
-			if s.BucketIndex != nil {
-				bucket := *s.BucketIndex
-				mf.BucketIndex = &bucket
+		printActiveSessionGuidance(opts, cerr.SessionID, cerr.State)
+		return cmdutil.ErrSilent
+	}
+
+	var terr *uploadflow.TerminalStateError
+	if errors.As(err, &terr) {
+		// Terminal sessions can never be resumed: keeping the state file
+		// (and its session URIs) would only mislead a later --resume.
+		warnRemoveUploadState(opts.f.IOStreams, terr.SessionID)
+		return terr
+	}
+
+	var serr *uploadflow.SessionError
+	if errors.As(err, &serr) {
+		switch serr.Phase {
+		case uploadflow.PhaseTransfer:
+			if errors.Is(serr.Err, context.Canceled) {
+				printResumeHint(opts, serr.SessionID, serr.Repo)
+				return canceledSilently{}
 			}
-		}
-		files[i] = mf
-	}
-	return files
-}
-
-// stateFromSession joins the server's issued files with the local specs.
-func stateFromSession(session *gen.ModelUploadResponse, specs []upload.FileSpec, repo string) (*upload.State, error) {
-	issued := make(map[string]gen.IssuedSessionFile, len(session.Files))
-	for _, f := range session.Files {
-		issued[f.ClientFileId] = f
-	}
-	st := &upload.State{
-		SessionID: session.Id,
-		Repo:      repo,
-		Tag:       session.Tag,
-		CreatedAt: time.Now().UTC(),
-	}
-	for _, s := range specs {
-		isf, ok := issued[s.ClientFileID]
-		if !ok {
-			return nil, fmt.Errorf("server response is missing file %s (%s)", s.ClientFileID, s.Filename)
-		}
-		st.Files = append(st.Files, &upload.StateFile{
-			ClientFileID:  s.ClientFileID,
-			LocalPath:     s.Path,
-			CanonicalPath: isf.CanonicalPath,
-			UploadURL:     deref(isf.UploadUrl),
-			Size:          s.Size,
-			CRC32C:        s.CRC32C,
-		})
-	}
-	return st, nil
-}
-
-// activeSessionConflict turns a 409 on create into state-aware remediation.
-// Its bool result is true when the conflicting session became terminal during
-// conflict resolution, so the caller may safely retry session creation once.
-// Only pre-completion sessions are offered resume/cancel commands.
-func activeSessionConflict(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, orig error) (bool, error) {
-	preferredID := ""
-	var apiErr *api.Error
-	if errors.As(orig, &apiErr) {
-		preferredID = apiErr.ActiveUploadID
-	}
-	sessionID, state, stale := resolveActiveSession(ctx, opts, g, preferredID)
-	if stale {
-		return true, nil
-	}
-	if sessionID == "" {
-		return false, fmt.Errorf("%w\nList sessions with: melange model upload --sessions -R %s", orig, opts.repo)
-	}
-	printActiveSessionGuidance(opts, sessionID, state)
-	return false, cmdutil.ErrSilent
-}
-
-// resolveActiveSession prefers the structured conflict ID. Its detail endpoint
-// provides the authoritative state; the list endpoint is a compatibility
-// fallback for older servers and for a transient detail lookup failure.
-func resolveActiveSession(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, preferredID string) (string, string, bool) {
-	if preferredID != "" {
-		if resp, err := g.GetModelUploadWithResponse(ctx, opts.account, opts.name, preferredID); err == nil &&
-			api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) == nil && resp.JSON200 != nil {
-			state := string(resp.JSON200.State)
-			if activeUploadSessionState(state) {
-				return preferredID, state, false
+			return fmt.Errorf("%w\nThe session is preserved; resume with: melange model upload --resume %s -R %s",
+				serr.Err, serr.SessionID, serr.Repo)
+		default: // uploadflow.PhaseComplete
+			if errors.Is(serr.Err, wait.ErrTimeout) {
+				return completionTimeout(opts, serr.SessionID)
 			}
-			if terminalSessionState(state) {
-				return preferredID, state, true
+			if errors.Is(serr.Err, context.Canceled) {
+				printCompletionResumeHint(opts, serr.SessionID)
+				return canceledSilently{}
 			}
+			return completionRecoveryError(opts, serr.SessionID, serr.Err)
 		}
 	}
 
-	resp, err := g.ListModelUploadsWithResponse(ctx, opts.account, opts.name)
-	if err != nil || api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body) != nil || resp.JSON200 == nil {
-		return preferredID, "", false
-	}
-	for _, session := range resp.JSON200.Results {
-		if preferredID != "" && session.Id != preferredID {
-			continue
-		}
-		state := string(session.State)
-		if activeUploadSessionState(state) {
-			return session.Id, state, false
-		}
-	}
-	// The create returned an active-slot conflict, but the authoritative list
-	// now contains no active slot holder. The old session crossed a terminal
-	// boundary during the race; one create retry is safe.
-	return preferredID, "", true
+	return err
 }
 
-func activeUploadSessionState(state string) bool {
-	switch strings.ToUpper(state) {
-	case sessionStateCreated, sessionStateUploading, sessionStateVerifying, sessionStateDispatchPending:
-		return true
-	default:
-		return false
-	}
+func printResumeHint(opts *uploadOptions, sessionID, repo string) {
+	errOut := opts.f.IOStreams.ErrOut
+	fmt.Fprintf(errOut, "\nInterrupted. The upload session is preserved; already-uploaded bytes will not be re-sent.\n")
+	fmt.Fprintf(errOut, "Resume with: melange model upload --resume %s -R %s\n",
+		text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(repo))
 }
 
 func printActiveSessionGuidance(opts *uploadOptions, sessionID, state string) {
@@ -602,10 +514,10 @@ func printActiveSessionGuidance(opts *uploadOptions, sessionID, state string) {
 		opts.account, opts.name, safeSessionID)
 	fmt.Fprintf(&b, "\nInspect it:  melange api %s --jq .state\n", detailPath)
 	switch normalizedState {
-	case sessionStateCreated, sessionStateUploading:
+	case uploadflow.SessionStateCreated, uploadflow.SessionStateUploading:
 		fmt.Fprintf(&b, "Resume it:   melange model upload --resume %s -R %s\n", safeSessionID, opts.repo)
 		fmt.Fprintf(&b, "Cancel it:   melange model upload --cancel %s -R %s --yes\n", safeSessionID, opts.repo)
-	case sessionStateVerifying, sessionStateDispatchPending:
+	case uploadflow.SessionStateVerifying, uploadflow.SessionStateDispatchPending:
 		fmt.Fprintln(&b, "The files are server-owned; resume completion without local artifacts:")
 		fmt.Fprintf(&b, "  melange model upload --resume %s -R %s --wait\n", safeSessionID, opts.repo)
 	default:
@@ -614,225 +526,18 @@ func printActiveSessionGuidance(opts *uploadOptions, sessionID, state string) {
 	_, _ = fmt.Fprint(errOut, text.SanitizeTerminal(b.String()))
 }
 
-// transferAndComplete uploads all pending files then completes the session.
-// Interrupts (Ctrl-C) preserve the session and print the resume command.
-func transferAndComplete(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
-	st *upload.State, lease *upload.SessionLease,
-) error {
-	up := &upload.Uploader{
-		Client:       bareHTTPClient(opts.f),
-		StallTimeout: opts.inactivity,
-	}
-	if err := transferAll(ctx, opts, g, st, up); err != nil {
-		if errors.Is(err, context.Canceled) {
-			printResumeHint(opts, st)
-			return canceledSilently{}
-		}
-		return fmt.Errorf("%w\nThe session is preserved; resume with: melange model upload --resume %s -R %s",
-			err, st.SessionID, st.Repo)
-	}
-	return completeAndReport(ctx, opts, g, st, lease)
-}
-
-func printResumeHint(opts *uploadOptions, st *upload.State) {
-	errOut := opts.f.IOStreams.ErrOut
-	fmt.Fprintf(errOut, "\nInterrupted. The upload session is preserved; already-uploaded bytes will not be re-sent.\n")
-	fmt.Fprintf(errOut, "Resume with: melange model upload --resume %s -R %s\n",
-		text.SanitizeTerminalInline(st.SessionID), text.SanitizeTerminalInline(st.Repo))
-}
-
-// transferAll uploads files sequentially. The per-file loop is the seam for
-// future --concurrency support.
-func transferAll(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State, up *upload.Uploader) error {
-	for _, sf := range st.Files {
-		if sf.Uploaded {
-			continue
-		}
-		if err := transferOne(ctx, opts, g, st, up, sf); err != nil {
-			return err
-		}
-		sf.Uploaded = true
-		saveState(st)
-	}
-	return nil
-}
-
-// transferOne moves one file: open (or re-open) the resumable session, query
-// the committed offset when resuming, stream the remaining chunks, and — on
-// an expired signed URL or session — reissue through the API once and
-// restart the file.
-func transferOne(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State, up *upload.Uploader, sf *upload.StateFile) error {
-	prog := newProgress(opts.f, filepath.Base(sf.LocalPath), sf.Size)
-	reissued := false
-	reissue := func() error {
-		if reissued {
-			return fmt.Errorf("upload URL for %s expired twice; try again or --cancel %s", sf.CanonicalPath, st.SessionID)
-		}
-		reissued = true
-		if err := reissueURL(ctx, opts, g, st, sf); err != nil {
-			return err
-		}
-		sf.SessionURI = ""
-		sf.Offset = 0
-		saveState(st)
-		return nil
-	}
-
-	for {
-		var from int64
-		if sf.SessionURI == "" {
-			if sf.UploadURL == "" {
-				if err := reissue(); err != nil {
-					return err
-				}
-			}
-			uri, err := up.StartSession(ctx, sf.UploadURL)
-			if errors.Is(err, upload.ErrSessionExpired) {
-				if rerr := reissue(); rerr != nil {
-					return rerr
-				}
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			sf.SessionURI = uri
-			sf.Offset = 0
-			if err := st.Save(); err != nil {
-				// The session URI is a bearer credential and the only way to
-				// resume without opening a new session. Never transfer a byte
-				// until it is durably persisted.
-				return fmt.Errorf("persisting resumable upload session before transfer: %w", err)
-			}
-		} else {
-			// Resuming an existing session: the server's committed offset is
-			// authoritative — the state offset is only a hint.
-			off, done, err := up.QueryOffset(ctx, sf.SessionURI, sf.Size)
-			if errors.Is(err, upload.ErrSessionExpired) {
-				if rerr := reissue(); rerr != nil {
-					return rerr
-				}
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			if done {
-				sf.Offset = sf.Size
-				prog.done()
-				return nil
-			}
-			from = off
-		}
-
-		err := up.UploadFile(ctx, sf.SessionURI, sf.LocalPath, sf.Size, from, func(committed int64) {
-			sf.Offset = committed
-			prog.update(committed)
-			saveState(st)
-		})
-		if errors.Is(err, upload.ErrSessionExpired) {
-			if rerr := reissue(); rerr != nil {
-				return rerr
-			}
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		prog.done()
-		return nil
-	}
-}
-
-// reissueURL fetches a fresh signed resumable-start URL for one file.
-func reissueURL(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, st *upload.State, sf *upload.StateFile) error {
-	resp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, st.SessionID,
-		gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: []string{sf.ClientFileID}})
-	if err != nil {
-		return err
-	}
-	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-		return fmt.Errorf("reissuing upload URL for %s: %w", sf.CanonicalPath, aerr)
-	}
-	if resp.JSON200 == nil {
-		return fmt.Errorf("unexpected response reissuing upload URL (HTTP %d)", resp.StatusCode())
-	}
-	for _, f := range resp.JSON200.Files {
-		if f.ClientFileId == sf.ClientFileID && f.UploadUrl != nil {
-			sf.UploadURL = *f.UploadUrl
-			return nil
-		}
-	}
-	return fmt.Errorf("server did not reissue an upload URL for %s", sf.ClientFileID)
-}
-
-// saveState persists progress best-effort: a failed save must never abort a
-// running upload (the server offset query recovers on resume anyway).
-func saveState(st *upload.State) {
-	_ = st.Save()
-}
-
-// completeAndReport finishes the session and reports the outcome. Completion
-// is itself asynchronous: VERIFYING, DISPATCH_PENDING, and even CONVERTING may
-// temporarily carry no model reference. Those responses keep local recovery
-// state; --wait deliberately replays complete with fresh idempotency keys
-// until the model reference or a terminal failure is observable.
-func completeAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
-	st *upload.State, lease *upload.SessionLease,
-) error {
-	return completeSessionAndReport(ctx, opts, g, st.SessionID, lease)
-}
-
-func completeSessionAndReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
-	sessionID string, lease *upload.SessionLease,
+// completeReport reports a finished completion state machine. Completion is
+// itself asynchronous: VERIFYING, DISPATCH_PENDING, and even CONVERTING may
+// temporarily carry no model reference; those responses keep local recovery
+// state (the flow already replayed complete when --wait asked for it).
+func completeReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
+	res *uploadflow.Result,
 ) error {
 	ios := opts.f.IOStreams
-	waitStarted := completionClockNow()
-	completionCtx := ctx
-	cancelCompletion := func() {}
-	if opts.doWait {
-		completionCtx, cancelCompletion = context.WithTimeoutCause(ctx, opts.timeout, wait.ErrTimeout)
-	}
-	defer cancelCompletion()
+	sessionID := res.SessionID
+	lease := res.Lease
+	out := res.Response
 
-	resp, err := g.CompleteModelUploadWithResponse(completionCtx, opts.account, opts.name, sessionID,
-		&gen.CompleteModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
-	if err != nil {
-		if errors.Is(context.Cause(completionCtx), wait.ErrTimeout) {
-			return completionTimeout(opts, sessionID)
-		}
-		if errors.Is(err, context.Canceled) {
-			printCompletionResumeHint(opts, sessionID)
-			return canceledSilently{}
-		}
-		return completionRecoveryError(opts, sessionID, err)
-	}
-	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-		return completionRecoveryError(opts, sessionID, aerr)
-	}
-	if resp.JSON200 == nil {
-		return fmt.Errorf("unexpected response completing upload session (HTTP %d)", resp.StatusCode())
-	}
-
-	if opts.doWait && resp.JSON200.Model == nil && recoverableCompletionState(string(resp.JSON200.State)) {
-		remaining := remainingCompletionBudget(waitStarted, opts.timeout)
-		if remaining <= 0 {
-			return completionTimeout(opts, sessionID)
-		}
-		resp, err = waitForCompletionModel(completionCtx, opts, g, sessionID, remaining)
-		if errors.Is(err, wait.ErrTimeout) {
-			return completionTimeout(opts, sessionID)
-		}
-		if errors.Is(err, context.Canceled) {
-			printCompletionResumeHint(opts, sessionID)
-			return canceledSilently{}
-		}
-		if err != nil {
-			return completionRecoveryError(opts, sessionID, err)
-		}
-	}
-
-	out := resp.JSON200
 	if strings.EqualFold(string(out.State), "FAILED") {
 		fmt.Fprintf(ios.ErrOut, "✗ Upload verification failed: %s (session %s)\n",
 			text.SanitizeTerminalInline(deref(out.FailureCode)), text.SanitizeTerminalInline(out.Id))
@@ -844,12 +549,12 @@ func completeSessionAndReport(ctx context.Context, opts *uploadOptions, g *gen.C
 			return err
 		}
 		if opts.exporter != nil {
-			_ = opts.exporter.Write(ios, json.RawMessage(resp.Body))
+			_ = opts.exporter.Write(ios, json.RawMessage(res.Completion))
 		}
 		return cmdutil.ErrSilent
 	}
 
-	if terminalCompletionWithoutModel(out) {
+	if uploadflow.TerminalCompletionWithoutModel(out) {
 		warnRemoveUploadState(ios, sessionID)
 		if err := lease.Close(); err != nil {
 			return err
@@ -870,7 +575,7 @@ func completeSessionAndReport(ctx context.Context, opts *uploadOptions, g *gen.C
 		fmt.Fprintf(ios.ErrOut, "Resume with: melange model upload --resume %s -R %s\n",
 			text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
 		if opts.exporter != nil {
-			return opts.exporter.Write(ios, json.RawMessage(resp.Body))
+			return opts.exporter.Write(ios, json.RawMessage(res.Completion))
 		}
 		return nil
 	}
@@ -883,11 +588,11 @@ func completeSessionAndReport(ctx context.Context, opts *uploadOptions, g *gen.C
 	}
 
 	if opts.doWait {
-		modelJSON, err := completedModelJSON(resp.Body)
+		modelJSON, err := uploadflow.CompletedModelJSON(res.Completion)
 		if err != nil {
 			return err
 		}
-		remaining := remainingCompletionBudget(waitStarted, opts.timeout)
+		remaining := remainingCompletionBudget(res.WaitStarted, opts.timeout)
 		if remaining <= 0 {
 			fmt.Fprintf(ios.ErrOut, "Timed out after %s; the model is still processing.\n", opts.timeout)
 			fmt.Fprintf(ios.ErrOut, "Check again with: melange model status %s -R %s\n",
@@ -895,63 +600,17 @@ func completeSessionAndReport(ctx context.Context, opts *uploadOptions, g *gen.C
 				text.SanitizeTerminalInline(opts.repo))
 			return cmdutil.ErrSilent
 		}
-		return waitForModelWithResultWithin(completionCtx, opts.f, g, opts.account, opts.name,
+		// Mirror the flow's completion deadline so model-status polling keeps
+		// the original shared --timeout budget semantics.
+		waitCtx, cancelWait := context.WithTimeoutCause(ctx, remaining, wait.ErrTimeout)
+		defer cancelWait()
+		return waitForModelWithResultWithin(waitCtx, opts.f, g, opts.account, opts.name,
 			out.Model.Key, remaining, opts.timeout, opts.exporter, modelJSON)
 	}
 	if opts.exporter != nil {
-		return opts.exporter.Write(ios, json.RawMessage(resp.Body))
+		return opts.exporter.Write(ios, json.RawMessage(res.Completion))
 	}
 	return nil
-}
-
-func waitForCompletionModel(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses,
-	sessionID string, timeout time.Duration,
-) (*gen.CompleteModelUploadResult, error) {
-	var last *gen.CompleteModelUploadResult
-	err := wait.Poll(ctx, wait.Options{
-		Timeout: timeout,
-		Jitter:  pollJitter,
-		Sleep:   pollSleep,
-		Now:     pollNow,
-	}, func(ctx context.Context) (bool, error) {
-		resp, err := g.CompleteModelUploadWithResponse(ctx, opts.account, opts.name, sessionID,
-			&gen.CompleteModelUploadParams{IdempotencyKey: newIdempotencyKeyParam()})
-		if err != nil {
-			return false, err
-		}
-		if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-			return false, aerr
-		}
-		if resp.JSON200 == nil {
-			return false, fmt.Errorf("unexpected response completing upload session (HTTP %d)", resp.StatusCode())
-		}
-		last = resp
-		out := resp.JSON200
-		return out.Model != nil || strings.EqualFold(string(out.State), "FAILED") ||
-			terminalCompletionWithoutModel(out), nil
-	})
-	return last, err
-}
-
-func recoverableCompletionState(state string) bool {
-	switch strings.ToUpper(state) {
-	case sessionStateVerifying, sessionStateDispatchPending, "CONVERTING":
-		return true
-	default:
-		return false
-	}
-}
-
-func terminalCompletionWithoutModel(out *gen.CompleteModelUploadResponse) bool {
-	if out == nil || out.Model != nil {
-		return false
-	}
-	switch strings.ToUpper(string(out.State)) {
-	case "CANCELED", "EXPIRED":
-		return true
-	default:
-		return false
-	}
 }
 
 func completionClockNow() time.Time {
@@ -985,188 +644,31 @@ func printCompletionResumeHint(opts *uploadOptions, sessionID string) {
 		text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
 }
 
-func completedModelJSON(body []byte) (json.RawMessage, error) {
-	var response struct {
-		Model json.RawMessage `json:"model"`
-	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("decoding completed upload model: %w", err)
-	}
-	if len(response.Model) == 0 || string(response.Model) == "null" {
-		return nil, errors.New("decoding completed upload model: response carried no model reference")
-	}
-	return response.Model, nil
-}
-
 // ---------------------------------------------------------------------------
 // resume
 // ---------------------------------------------------------------------------
 
 func runResume(ctx context.Context, opts *uploadOptions, args []string) error {
-	lease, err := upload.AcquireSession(ctx, opts.resumeID)
-	if err != nil {
-		return fmt.Errorf("locking upload session %s: %w", opts.resumeID, err)
-	}
-	defer lease.Close() //nolint:errcheck
-
 	g, err := genClient(opts.f)
 	if err != nil {
 		return err
 	}
-
-	st, err := upload.LoadState(opts.resumeID)
-	switch {
-	case err == nil:
-		if st.Repo != opts.repo {
-			return cmdutil.FlagError{Err: fmt.Errorf(
-				"session %s belongs to %s, not %s", opts.resumeID, st.Repo, opts.repo)}
-		}
-	case errors.Is(err, os.ErrNotExist):
-		st = nil // rebuild from the server below
-	case errors.Is(err, upload.ErrStateCorrupt):
-		fmt.Fprintf(opts.f.IOStreams.ErrOut, "! %s\n",
-			text.SanitizeTerminalInline(err.Error()))
-		st = nil // treat as missing: rebuild from the server below
-	default:
-		return err
+	ro := uploadflow.ResumeOptions{
+		Account: opts.account,
+		Name:    opts.name,
+		Repo:    opts.repo,
+		Wait:    opts.doWait,
+		Timeout: opts.timeout,
 	}
-
-	// Once all bytes are server-owned, resuming means replaying completion;
-	// local artifacts are no longer required. The replay is safe and uses a
-	// fresh idempotency key so an earlier intermediate response is not cached.
-	detail, err := fetchUploadSession(ctx, opts, g)
-	if err != nil {
-		return err
-	}
-	if recoverableCompletionState(string(detail.State)) {
-		return completeSessionAndReport(ctx, opts, g, opts.resumeID, lease)
-	}
-
-	// Other terminal sessions can never be resumed, with or without local
-	// state.
-	if terminalSessionState(string(detail.State)) {
-		warnRemoveUploadState(opts.f.IOStreams, opts.resumeID)
-		return fmt.Errorf("session %s is %s; start a new upload", opts.resumeID, strings.ToLower(string(detail.State)))
-	}
-
-	if st == nil {
-		st, err = rebuildStateFromServer(ctx, opts, g, detail, args)
-		if err != nil {
-			return err
+	if len(args) > 0 || opts.inputManifest != "" {
+		// Digest lazily: hashing happens only when the local state file is
+		// actually missing and the session must be rebuilt from the server.
+		ro.BuildSpecs = func() ([]upload.FileSpec, error) {
+			return buildSpecs(opts, args)
 		}
 	}
-
-	fmt.Fprintf(opts.f.IOStreams.ErrOut, "Resuming upload session %s (%d files)\n",
-		text.SanitizeTerminalInline(st.SessionID), len(st.Files))
-	return transferAndComplete(ctx, opts, g, st, lease)
-}
-
-// fetchUploadSession GETs one upload session's server-side detail.
-func fetchUploadSession(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses) (*gen.ModelUploadDetailResponse, error) {
-	resp, err := g.GetModelUploadWithResponse(ctx, opts.account, opts.name, opts.resumeID)
-	if err != nil {
-		return nil, err
-	}
-	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-		return nil, aerr
-	}
-	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("unexpected response fetching upload session (HTTP %d)", resp.StatusCode())
-	}
-	return resp.JSON200, nil
-}
-
-// terminalSessionState reports whether a session state (ADR-5 vocabulary,
-// compared case-insensitively) is terminal — such a session can never be
-// resumed.
-func terminalSessionState(state string) bool {
-	for _, terminal := range []string{"FAILED", "CANCELED", "EXPIRED", "CONVERTING", "COMPLETED"} {
-		if strings.EqualFold(state, terminal) {
-			return true
-		}
-	}
-	return false
-}
-
-// rebuildStateFromServer reconstructs upload state for --resume when the
-// local state file is gone (or corrupt): server arrival status decides which
-// files are already uploaded, local files are matched by their canonical
-// destination, and fresh URLs are reissued for the remainder.
-func rebuildStateFromServer(ctx context.Context, opts *uploadOptions, g *gen.ClientWithResponses, detail *gen.ModelUploadDetailResponse, args []string) (*upload.State, error) {
-	if len(args) == 0 && opts.inputManifest == "" {
-		return nil, fmt.Errorf(
-			"no local state found for session %s; pass the original MODEL_FILE/--input/--external-data (or --input-manifest) arguments so local files can be matched to the session", opts.resumeID)
-	}
-	specs, err := buildSpecs(opts, args)
-	if err != nil {
-		return nil, err
-	}
-
-	// Match local specs to server files by canonical destination.
-	byCanonical := make(map[string]gen.ModelUploadFileStatus, len(detail.Files))
-	for _, f := range detail.Files {
-		byCanonical[f.CanonicalPath] = f
-	}
-	st := &upload.State{
-		SessionID: detail.Id,
-		Repo:      opts.repo,
-		Tag:       detail.Tag,
-		CreatedAt: time.Now().UTC(),
-	}
-	var pending []string
-	pendingFiles := map[string]*upload.StateFile{}
-	for _, s := range specs {
-		canonical := strings.Replace(upload.CanonicalPathPreview(s), "{tag}", detail.Tag, 1)
-		server, ok := byCanonical[canonical]
-		if !ok {
-			return nil, fmt.Errorf(
-				"%s does not match any file in session %s (expected destination %s); pass the same files as the original upload", s.Path, opts.resumeID, canonical)
-		}
-		sf := &upload.StateFile{
-			ClientFileID:  server.ClientFileId,
-			LocalPath:     s.Path,
-			CanonicalPath: canonical,
-			Size:          s.Size,
-			CRC32C:        s.CRC32C,
-			Uploaded:      server.Uploaded,
-		}
-		if server.Uploaded {
-			sf.Offset = s.Size
-		} else {
-			pending = append(pending, server.ClientFileId)
-			pendingFiles[server.ClientFileId] = sf
-		}
-		st.Files = append(st.Files, sf)
-	}
-
-	if len(pending) > 0 {
-		rresp, err := g.ReissueUploadFilesWithResponse(ctx, opts.account, opts.name, opts.resumeID,
-			gen.ReissueUploadFilesJSONRequestBody{ClientFileIds: pending})
-		if err != nil {
-			return nil, err
-		}
-		if aerr := api.GenError(rresp.StatusCode(), rresp.HTTPResponse, rresp.Body); aerr != nil {
-			return nil, aerr
-		}
-		if rresp.JSON200 == nil {
-			return nil, fmt.Errorf("unexpected response reissuing upload URLs (HTTP %d)", rresp.StatusCode())
-		}
-		for _, f := range rresp.JSON200.Files {
-			if sf, ok := pendingFiles[f.ClientFileId]; ok && f.UploadUrl != nil {
-				sf.UploadURL = *f.UploadUrl
-			}
-		}
-		for id, sf := range pendingFiles {
-			if sf.UploadURL == "" {
-				return nil, fmt.Errorf("server did not reissue an upload URL for %s", id)
-			}
-		}
-	}
-
-	if err := st.Save(); err != nil {
-		return nil, err
-	}
-	return st, nil
+	res, err := uploadOrchestrator(opts, g).Resume(ctx, opts.resumeID, ro)
+	return reportUploadOutcome(ctx, opts, g, res, err)
 }
 
 // ---------------------------------------------------------------------------

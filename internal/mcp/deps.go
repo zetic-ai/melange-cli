@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"log/slog"
+	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -17,6 +18,12 @@ type Deps struct {
 	// AuthHints overrides the remediation text attached to credential
 	// failures. The zero value keeps the stdio defaults.
 	AuthHints AuthHints
+	// Bare is the HTTP client the local upload tool uses against signed
+	// storage URLs. Like the CLI's bare client, it must carry NO API
+	// transport chain — no Authorization header, no debug logging — because
+	// signed URLs and resumable session URIs are credentials. Nil selects a
+	// plain default-transport client; tests inject their mock transport.
+	Bare *http.Client
 }
 
 // AuthHints carries transport-specific remediation text for credential
@@ -59,4 +66,13 @@ func (d Deps) logger() *slog.Logger {
 		return d.Logger
 	}
 	return slog.New(slog.DiscardHandler)
+}
+
+// bareClient returns the configured bare storage client, or a plain client
+// over the default transport, so callers never need a nil check.
+func (d Deps) bareClient() *http.Client {
+	if d.Bare != nil {
+		return d.Bare
+	}
+	return &http.Client{}
 }

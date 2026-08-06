@@ -129,7 +129,9 @@ func TestToolsListGoldenSnapshot(t *testing.T) {
 // the signal a human-in-the-loop client uses to decide whether to prompt.
 // import_model is the only tool that genuinely leaves the Melange API.
 func TestEveryToolStatesItsBlastRadius(t *testing.T) {
-	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	// The local variant is the superset catalog, so upload_model is held to
+	// the same discipline as every stdio tool.
+	cs := connectWith(t, "test", Options{EnableLocalTools: true})
 	for _, tool := range listAllTools(t, cs) {
 		t.Run(tool.Name, func(t *testing.T) {
 			require.NotNil(t, tool.Annotations, "%s has no annotations", tool.Name)
@@ -143,14 +145,41 @@ func TestEveryToolStatesItsBlastRadius(t *testing.T) {
 	}
 }
 
-// TestEnableLocalToolsCatalogIsIdenticalToday asserts the EnableLocalTools
-// variant advertises exactly the stdio catalog: no stdio-only tools exist yet,
-// so a second golden file would be a byte-for-byte copy. The upload PR, which
-// introduces the first local tool, must replace this equality with its own
-// golden snapshot (e.g. testdata/tools_list_local.json).
-func TestEnableLocalToolsCatalogIsIdenticalToday(t *testing.T) {
-	stdio := renderTools(t, listAllTools(t, connectWith(t, "test", Options{})))
-	local := renderTools(t, listAllTools(t, connectWith(t, "test", Options{EnableLocalTools: true})))
-	assert.Equal(t, string(stdio), string(local),
-		"EnableLocalTools changed the catalog: add a second golden file for the local variant")
+// TestToolsListLocalGoldenSnapshot pins the EnableLocalTools catalog against
+// its own golden file. Together with TestToolsListGoldenSnapshot this is the
+// two-golden gate that replaced the pre-upload sentinel
+// (TestEnableLocalToolsCatalogIsIdenticalToday): the stdio golden stays frozen
+// without upload_model, and the local variant carries it.
+func TestToolsListLocalGoldenSnapshot(t *testing.T) {
+	stdio := listAllTools(t, connectWith(t, "test", Options{}))
+	local := listAllTools(t, connectWith(t, "test", Options{EnableLocalTools: true}))
+
+	// The flag adds exactly the local-only tools — today upload_model — and
+	// changes nothing else: every stdio tool definition appears verbatim.
+	stdioNames := make(map[string]bool, len(stdio))
+	for _, tool := range stdio {
+		stdioNames[tool.Name] = true
+	}
+	assert.False(t, stdioNames["upload_model"], "the stdio catalog must not carry upload_model")
+	var added []string
+	for _, tool := range local {
+		if !stdioNames[tool.Name] {
+			added = append(added, tool.Name)
+		}
+	}
+	assert.Equal(t, []string{"upload_model"}, added,
+		"EnableLocalTools adds exactly upload_model")
+	assert.Len(t, local, len(stdio)+1)
+
+	rendered := renderTools(t, local)
+	golden := filepath.Join("testdata", "tools_list_local.json")
+	if *update {
+		require.NoError(t, os.MkdirAll(filepath.Dir(golden), 0o755))
+		require.NoError(t, os.WriteFile(golden, rendered, 0o644))
+	}
+	want, err := os.ReadFile(golden)
+	require.NoError(t, err, "golden file missing; generate it with -update")
+	assert.Equal(t, string(want), string(rendered),
+		"the EnableLocalTools tools/list drifted from the golden snapshot; if the change "+
+			"is intended, regenerate with: go test ./internal/mcp -run TestToolsListLocalGoldenSnapshot -update")
 }

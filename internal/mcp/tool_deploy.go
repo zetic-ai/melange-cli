@@ -102,7 +102,7 @@ func getDeploymentInfoHandler(d Deps) mcp.ToolHandlerFor[deploymentInfoArgs, any
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -115,5 +115,5 @@ func deploymentOptions(ctx context.Context, d Deps, g *gen.ClientWithResponses) 
 	if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 		return d.toolError(err), nil, nil
 	}
-	return rawResult(resp.Body), nil, nil
+	return rawResult(resp.Body)
 }
