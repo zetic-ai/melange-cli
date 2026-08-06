@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -24,7 +25,12 @@ import (
 // httpOnlyFlags are the flags that only mean something with --transport http.
 // Passing one with stdio is a usage error rather than a silently ignored
 // setting: an operator who typed --listen believes something is listening.
-var httpOnlyFlags = []string{"listen", "validate-tokens", "allowed-origins"}
+var httpOnlyFlags = []string{"listen", "validate-tokens", "allowed-origins", "resource"}
+
+// resourceEnvVar is the environment fallback for --resource. Named once
+// because both transports must agree on it: http reads it, stdio warns that
+// it is not reading it.
+const resourceEnvVar = "MELANGE_MCP_RESOURCE"
 
 // NewCmdMCP returns the `melange mcp` command.
 func NewCmdMCP(f *cmdutil.Factory) *cobra.Command {
@@ -33,6 +39,7 @@ func NewCmdMCP(f *cmdutil.Factory) *cobra.Command {
 		listen         string
 		validateTokens bool
 		allowedOrigins []string
+		resource       string
 	)
 
 	cmd := &cobra.Command{
@@ -48,15 +55,21 @@ server starts even when logged out and reports authentication errors per
 tool call instead of exiting.
 
 http serves the MCP Streamable HTTP transport on --listen for remote agent
-clients. Every request must carry its own credential as
-"Authorization: Bearer <personal access token>": the server itself has no
-credentials and never reads the local keyring or MELANGE_API_KEY, so one
-deployment serves many callers without sharing a token. Requests are
-stateless (no session ids), GET /healthz is an unauthenticated liveness
-probe, and browser Origins are rejected unless listed in --allowed-origins.
-Only API-backed tools are served: anything that would touch the caller's own
-machine (model uploads) stays stdio-only, because the server cannot see the
-caller's files.
+clients. Every request must carry its own credential — a personal access
+token or an OAuth access token — as "Authorization: Bearer <token>": the
+server itself has no credentials and never reads the local keyring or
+MELANGE_API_KEY, so one deployment serves many callers without sharing a
+token. Requests are stateless (no session ids), GET /healthz is an
+unauthenticated liveness probe, and browser Origins are rejected unless
+listed in --allowed-origins. Setting --resource (or MELANGE_MCP_RESOURCE)
+declares the server's canonical URL as an OAuth protected resource: every
+bearer is then validated against the API, OAuth tokens bound to a different
+resource are rejected, and the server publishes RFC 9728 discovery metadata
+at /.well-known/oauth-protected-resource — 401 challenges point there so
+OAuth-capable clients can locate the authorization server on their own.
+Only API-backed tools are served: anything
+that would touch the caller's own machine (model uploads) stays stdio-only,
+because the server cannot see the caller's files.
 
 Exit codes: 0 clean disconnect (stdio) or completed drain after SIGINT or
 SIGTERM (http), 1 serve failure such as an address already in use or a drain
@@ -82,6 +95,7 @@ that overran its deadline, 2 usage error, 130 interrupted (stdio).`,
 					listen:         listen,
 					validateTokens: validateTokens,
 					allowedOrigins: allowedOrigins,
+					resource:       resource,
 				})
 			default:
 				return cmdutil.FlagError{Err: fmt.Errorf(
@@ -98,6 +112,11 @@ that overran its deadline, 2 usage error, 130 interrupted (stdio).`,
 		"With --transport http, verify each bearer token against the API before serving it")
 	cmd.Flags().StringSliceVar(&allowedOrigins, "allowed-origins", nil,
 		"With --transport http, browser Origins allowed to call the server (empty rejects all)")
+	cmd.Flags().StringVar(&resource, "resource", "",
+		"With --transport http, this server's canonical resource URL as an OAuth protected "+
+			"resource (also read from MELANGE_MCP_RESOURCE); implies token validation and "+
+			"rejects OAuth tokens bound to a different resource (compared case-sensitively "+
+			"beyond the lowercased scheme and host)")
 
 	return cmd
 }
@@ -113,10 +132,34 @@ func rejectHTTPOnlyFlags(cmd *cobra.Command) error {
 	return nil
 }
 
+// warnResourceEnvIgnored tells a stdio operator that MELANGE_MCP_RESOURCE is
+// not being honored on this transport.
+//
+// rejectHTTPOnlyFlags makes --resource on stdio a hard usage error for the
+// same underlying reason — a mis-transported operator must never believe an
+// enforcement posture is configured when none is. The env var deliberately
+// gets a warning instead of exit 2: a flag is typed for this invocation and
+// can only mean "I want this now", while an environment variable is ambient.
+// The shell profile, container image, or unit file that configures an HTTP
+// deployment may export it for every process on the box, and failing
+// `melange mcp` there would break stdio sessions that never asked for OAuth.
+// A warning is loud without being fatal — the stdio logger's floor is warn,
+// so this line always prints.
+func warnResourceEnvIgnored(logger *slog.Logger) {
+	if os.Getenv(resourceEnvVar) == "" {
+		return
+	}
+	logger.Warn("ignoring "+resourceEnvVar+" on the stdio transport: OAuth audience "+
+		"enforcement and RFC 9728 discovery exist only with --transport http",
+		"transport", "stdio")
+}
+
 // runStdio serves MCP on the process's own stdin/stdout.
 func runStdio(cmd *cobra.Command, f *cmdutil.Factory) error {
+	deps := newDeps(f)
+	warnResourceEnvIgnored(deps.Logger)
 	// stdio runs on the caller's machine, so local-only tools are in scope.
-	srv := mcpserver.New(newDeps(f), mcpserver.Options{EnableLocalTools: true})
+	srv := mcpserver.New(deps, mcpserver.Options{EnableLocalTools: true})
 
 	err := srv.Run(cmd.Context(), &mcpsdk.StdioTransport{})
 	if isCleanDisconnect(err) {
@@ -131,6 +174,31 @@ type httpConfig struct {
 	listen         string
 	validateTokens bool
 	allowedOrigins []string
+	resource       string
+}
+
+// resolveResource resolves the canonical resource URL: --resource wins, else
+// MELANGE_MCP_RESOURCE, else "" (no resource identity, no audience
+// enforcement). A SET value from either source — including set-but-empty,
+// the classic --resource "$UNSET_VAR" — is always validated, and an invalid
+// one is a usage error (exit 2), never a silent fallback: an operator who
+// named a resource identity must not run a server that enforces a different
+// one, or none at all. Only a genuinely absent flag AND unset env var mean
+// "no resource configured".
+func resolveResource(cmd *cobra.Command, flagValue string) (string, error) {
+	raw, source := flagValue, "--resource"
+	if !cmd.Flags().Changed("resource") {
+		env, set := os.LookupEnv(resourceEnvVar)
+		if !set {
+			return "", nil
+		}
+		raw, source = env, resourceEnvVar
+	}
+	resource, err := httpserver.CanonicalResource(raw)
+	if err != nil {
+		return "", cmdutil.FlagError{Err: fmt.Errorf("invalid %s: %w", source, err)}
+	}
+	return resource, nil
 }
 
 // runHTTP serves the Streamable HTTP transport until the command's context is
@@ -154,6 +222,19 @@ func runHTTP(cmd *cobra.Command, f *cmdutil.Factory, hc httpConfig) error {
 	if err != nil {
 		return err
 	}
+	resource, err := resolveResource(cmd, hc.resource)
+	if err != nil {
+		return err
+	}
+	if resource != "" && cmd.Flags().Changed("validate-tokens") && !hc.validateTokens {
+		// A resource identity means every bearer must be validated (audience
+		// enforcement happens inside validation), so an explicit
+		// --validate-tokens=false contradicts it. Refusing beats silently
+		// validating against the operator's stated wish — or silently
+		// dropping the enforcement they configured.
+		return cmdutil.FlagError{Err: errors.New(
+			"--resource requires token validation; drop --validate-tokens=false")}
+	}
 
 	srv, err := httpserver.New(httpserver.Config{
 		Listen:         hc.listen,
@@ -164,6 +245,7 @@ func runHTTP(cmd *cobra.Command, f *cmdutil.Factory, hc httpConfig) error {
 		Logger:         serverLogger(f, slog.LevelInfo),
 		AllowedOrigins: hc.allowedOrigins,
 		ValidateTokens: hc.validateTokens,
+		Resource:       resource,
 	})
 	if err != nil {
 		return err

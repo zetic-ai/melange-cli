@@ -120,6 +120,9 @@ type setDefaultModelArgs struct {
 // setDefaultModelHandler wraps PUT .../models/{key}/default.
 func setDefaultModelHandler(d Deps) mcp.ToolHandlerFor[setDefaultModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in setDefaultModelArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
 			return d.toolError(err), nil, nil
@@ -150,6 +153,9 @@ type importModelArgs struct {
 // after a transient failure without starting a second one.
 func importModelHandler(d Deps) mcp.ToolHandlerFor[importModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in importModelArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
 			return d.toolError(err), nil, nil

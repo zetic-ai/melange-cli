@@ -87,8 +87,8 @@ func testAPIOptions(host string) func(string) api.Options {
 	}
 }
 
-// newTestMeVerifier builds a MeVerifier against host with an injected clock
-// and a discarding logger.
+// newTestMeVerifier builds a MeVerifier against host with an injected clock,
+// a discarding logger, and no resource identity (audience enforcement off).
 func newTestMeVerifier(host string, clk *fakeClock) *MeVerifier {
 	return newTestMeVerifierLogging(host, clk, nil)
 }
@@ -97,7 +97,13 @@ func newTestMeVerifier(host string, clk *fakeClock) *MeVerifier {
 // to a caller-supplied logger, so a test can assert what was withheld from the
 // response body actually reached the operator.
 func newTestMeVerifierLogging(host string, clk *fakeClock, logger *slog.Logger) *MeVerifier {
-	v := NewMeVerifier(testAPIOptions(host), logger)
+	return newTestMeVerifierResource(host, "", clk, logger)
+}
+
+// newTestMeVerifierResource is the full-control constructor: resource is the
+// canonical resource URL the verifier enforces audiences against ("" = off).
+func newTestMeVerifierResource(host, resource string, clk *fakeClock, logger *slog.Logger) *MeVerifier {
+	v := NewMeVerifier(testAPIOptions(host), resource, logger)
 	// Safe before the verifier is shared: now is written only here, during
 	// setup, and read under mu once requests start.
 	v.now = clk.Now
@@ -221,7 +227,7 @@ func TestZoaShapedTokenFlowsEndToEnd(t *testing.T) {
 func TestUnauthenticated401Shape(t *testing.T) {
 	handlerInvoked := false
 	sentinel := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { handlerInvoked = true })
-	chain := AuthMiddleware(PassthroughVerifier, sentinel)
+	chain := AuthMiddleware(PassthroughVerifier, "", sentinel)
 
 	cases := []struct {
 		name          string
@@ -300,6 +306,8 @@ func TestMeVerifierMapsScopesAndExpiration(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"read"}, info.Scopes, "scopes must map from the /v1/me token block")
 		assert.True(t, info.Expiration.IsZero(), "absent expires_at maps to zero (AllowMissingExpiration)")
+		assert.Equal(t, "alice@example.com", info.UserID,
+			"the account identity must ride into TokenInfo.UserID (never the token)")
 	})
 
 	t.Run("expires_at maps to Expiration", func(t *testing.T) {
@@ -319,6 +327,316 @@ func TestMeVerifierMapsScopesAndExpiration(t *testing.T) {
 		assert.True(t, expires.Equal(info.Expiration),
 			"expires_at must ride into TokenInfo so the SDK enforces it per request")
 	})
+}
+
+// meOAuthBody renders the enriched /v1/me response an OAuth (zoa_) bearer
+// gets: the PAT shape plus token.aud — a JSON string, or null when the grant
+// named no resource — exactly the backend's MeOAuthResponse
+// (zetic/public/me.py). PAT responses never carry the aud key at all.
+func meOAuthBody(name string, aud *string) string {
+	audJSON := "null"
+	if aud != nil {
+		audJSON = fmt.Sprintf("%q", *aud)
+	}
+	return fmt.Sprintf(`{"user":{"email":"%[1]s@example.com","nickname":"%[1]s"},`+
+		`"account":{"name":"%[1]s","type":"personal"},`+
+		`"token":{"name":"%[1]s-client","scopes":["read","write"],"aud":%[2]s}}`, name, audJSON)
+}
+
+func strPtr(s string) *string { return &s }
+
+// staticBodyStub serves the given body for every /v1/me hit, counting calls.
+func staticBodyStub(t *testing.T, body string) *countingMeStub {
+	t.Helper()
+	s := &countingMeStub{}
+	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+// TestMeVerifierOAuthAudience pins the audience half of the resource-server
+// contract: /v1 deliberately does not enforce aud (the backend documents this
+// as the MCP server's job), so the verifier must reject an OAuth token bound
+// to a different resource, while accepting every unbound credential — PATs
+// (no aud key) and OAuth grants that named no resource (aud null).
+func TestMeVerifierOAuthAudience(t *testing.T) {
+	ctx := context.Background()
+	const canonical = "https://mcp.zetic.ai"
+
+	accepted := []struct {
+		name string
+		body string
+	}{
+		{"matching aud", meOAuthBody("oana", strPtr(canonical))},
+		{"matching aud with trailing slash", meOAuthBody("oana", strPtr(canonical+"/"))},
+		{"null aud: grant named no resource, not audience-bound", meOAuthBody("oana", nil)},
+		{"absent aud: a PAT is not audience-bound", meBody("oana")},
+	}
+	for _, tc := range accepted {
+		t.Run("accepts "+tc.name, func(t *testing.T) {
+			stub := staticBodyStub(t, tc.body)
+			v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(), nil)
+			info, err := v.Verify(ctx, "token-oana", nil)
+			require.NoError(t, err)
+			assert.NotEmpty(t, info.Scopes, "scopes must be populated alongside audience acceptance")
+			assert.Equal(t, "oana@example.com", info.UserID)
+		})
+	}
+
+	t.Run("rejects a mismatched aud with a static 401", func(t *testing.T) {
+		const bearer = "token-wrong-resource-2645751311"
+		stub := staticBodyStub(t, meOAuthBody("mallory", strPtr("https://evil.example")))
+		logs := &syncBuffer{}
+		v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(),
+			slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+		_, err := v.Verify(ctx, bearer, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, auth.ErrInvalidToken, "a mismatched audience is a 401, not a 500")
+		// The SDK copies err.Error() into the 401 body, so the message must
+		// stay static: no aud, no configured resource, no token bytes.
+		assert.NotContains(t, err.Error(), "evil.example")
+		assert.NotContains(t, err.Error(), canonical)
+		assert.NotContains(t, err.Error(), bearer)
+
+		// The withheld detail reaches the operator log — without the bearer.
+		captured := logs.String()
+		assert.Contains(t, captured, "evil.example", "the mismatched aud must reach the server log")
+		assert.Contains(t, captured, canonical, "the expected resource must reach the server log")
+		assert.NotContains(t, captured, bearer, "the bearer must never reach the server log")
+	})
+
+	t.Run("mismatches are never cached", func(t *testing.T) {
+		stub := staticBodyStub(t, meOAuthBody("mallory", strPtr("https://evil.example")))
+		v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(), nil)
+		for i := int64(1); i <= 3; i++ {
+			_, err := v.Verify(ctx, "token-wrong", nil)
+			require.ErrorIs(t, err, auth.ErrInvalidToken)
+			assert.Equal(t, i, stub.calls.Load(),
+				"a rejected audience is a negative result and must not be cached")
+		}
+	})
+
+	t.Run("matching aud is cached like any positive", func(t *testing.T) {
+		stub := staticBodyStub(t, meOAuthBody("oana", strPtr(canonical)))
+		v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(), nil)
+		for i := 0; i < 3; i++ {
+			info, err := v.Verify(ctx, "token-oana", nil)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"read", "write"}, info.Scopes,
+				"cache hits must carry the OAuth scopes")
+		}
+		assert.Equal(t, int64(1), stub.calls.Load(),
+			"an audience-checked positive is served from cache inside the TTL")
+	})
+
+	t.Run("canary: zoa_ bearer without an aud key fails closed", func(t *testing.T) {
+		// The backend contract puts an aud key (string or null) on EVERY
+		// zoa_ bearer's /v1/me response — its absence is the PAT-shape
+		// discriminator. If the field is ever renamed or moved, treating the
+		// OAuth response as "unbound" would silently turn audience
+		// enforcement off for every OAuth token; the verifier must fail
+		// closed (a retryable 500, not a 401 that burns the credential).
+		const bearer = "zoa_contract_drift_1259921049"
+		stub := staticBodyStub(t, meBody("drifted"))
+		logs := &syncBuffer{}
+		v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(),
+			slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+		_, err := v.Verify(ctx, bearer, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errValidationUnavailable,
+			"a missing aud on an OAuth bearer is contract drift, not a verdict on the token")
+		assert.NotErrorIs(t, err, auth.ErrInvalidToken)
+		assert.NotContains(t, err.Error(), bearer)
+		assert.Contains(t, logs.String(), "aud", "the drift detail must reach the operator log")
+		assert.NotContains(t, logs.String(), bearer, "the bearer must never reach the server log")
+	})
+
+	t.Run("canary fires even without a configured resource", func(t *testing.T) {
+		// The canary is about the response shape, not this server's config:
+		// a zoa_ bearer answered with the PAT shape is drift wherever it
+		// happens (zoa_ acceptance and the aud enrichment shipped together,
+		// so no real backend produces this).
+		stub := staticBodyStub(t, meBody("drifted"))
+		v := newTestMeVerifier(stub.URL, newFakeClock())
+		_, err := v.Verify(ctx, "zoa_contract_drift_no_resource", nil)
+		assert.ErrorIs(t, err, errValidationUnavailable)
+	})
+
+	t.Run("ztp_ bearer without an aud key stays accepted", func(t *testing.T) {
+		// The canary is zoa_-scoped: a PAT's response never carries the key,
+		// and PATs must keep working on the HTTP transport.
+		stub := staticBodyStub(t, meBody("patty"))
+		v := newTestMeVerifierResource(stub.URL, canonical, newFakeClock(), nil)
+		info, err := v.Verify(ctx, "ztp_plain_pat_1442249570", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "patty@example.com", info.UserID)
+	})
+
+	t.Run("no configured resource skips enforcement", func(t *testing.T) {
+		// Without a resource identity the server has nothing to compare aud
+		// against; enforcement requires --resource. Plain --validate-tokens
+		// keeps the PR2 posture: validity yes, audience no.
+		stub := staticBodyStub(t, meOAuthBody("oana", strPtr("https://elsewhere.example")))
+		v := newTestMeVerifier(stub.URL, newFakeClock())
+		info, err := v.Verify(ctx, "token-oana", nil)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"read", "write"}, info.Scopes)
+	})
+}
+
+// TestMeVerifierRefreshTokenRejected pins our side of the backend's refusal
+// of zor_ refresh tokens on /v1: the 401 maps to auth.ErrInvalidToken (the
+// SDK's 401) with no token bytes anywhere, and — like every negative — is
+// never cached.
+func TestMeVerifierRefreshTokenRejected(t *testing.T) {
+	ctx := context.Background()
+	const refresh = "zor_refresh_0123456789abcdef"
+	stub := &countingMeStub{}
+	stub.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stub.calls.Add(1)
+		token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(token, "zor_") {
+			// The backend never authenticates a refresh token on /v1
+			// (zetic/public/auth.py rejects everything outside ztp_/zoa_).
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"type":"error","error":{"type":"authentication_error","message":"Unauthorized"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, meBody("ok"))
+	}))
+	t.Cleanup(stub.Close)
+
+	v := newTestMeVerifier(stub.URL, newFakeClock())
+	for i := int64(1); i <= 2; i++ {
+		_, err := v.Verify(ctx, refresh, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, auth.ErrInvalidToken, "a refresh token is a bad credential (401), not an outage (500)")
+		assert.NotContains(t, err.Error(), refresh, "verifier errors must never carry the token")
+		assert.Equal(t, i, stub.calls.Load(), "refresh-token rejections must not be cached")
+	}
+}
+
+// TestResourceConfigEnforcesAudienceThroughStack proves the wiring end to
+// end: Config.Resource ALONE (ValidateTokens deliberately false) must
+// activate the verifier — a resource-declaring operator asked for audience
+// enforcement, and passthrough can never provide it. A token bound elsewhere
+// dies at the door with the challenge and reaches no tool; a matching-aud
+// token and a PAT both run tools.
+func TestResourceConfigEnforcesAudienceThroughStack(t *testing.T) {
+	const (
+		canonical = "https://mcp.zetic.ai"
+		matched   = "zoa_bound_here_1732050808"
+		wrong     = "zoa_bound_elsewhere_2236067977"
+		pat       = "ztp_plain_pat_1414213562"
+	)
+	stub := &countingMeStub{}
+	stub.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stub.calls.Add(1)
+		token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		w.Header().Set("Content-Type", "application/json")
+		switch token {
+		case matched:
+			_, _ = io.WriteString(w, meOAuthBody("bound", strPtr(canonical)))
+		case wrong:
+			_, _ = io.WriteString(w, meOAuthBody("stray", strPtr("https://other.example")))
+		case pat:
+			_, _ = io.WriteString(w, meBody("patty"))
+		default:
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"type":"error","error":{"type":"authentication_error","message":"Unauthorized"}}`)
+		}
+	}))
+	t.Cleanup(stub.Close)
+
+	_, ts := newTestServer(t, stub.URL, func(c *Config) { c.Resource = canonical })
+
+	// The mismatched token is refused at the door: SDK 401 whose challenge
+	// now carries the RFC 9728 discovery pointer (a resource identity is
+	// configured), one upstream check, and neither the resource URLs nor the
+	// token in the body.
+	resp := postMCP(t, ts.URL, wrong, "", strings.NewReader(initializeBody))
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, `Bearer resource_metadata="`+canonical+protectedResourceWellKnown+`"`,
+		resp.Header.Get("WWW-Authenticate"))
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), wrong, "the bearer must never appear in the 401 body")
+	assert.NotContains(t, string(body), "other.example", "the token's aud must never appear in the 401 body")
+	assert.NotContains(t, string(body), canonical, "the configured resource must never appear in the 401 body")
+	assert.Equal(t, int64(1), stub.calls.Load(),
+		"rejection happens at the door — the MCP handler and tools are never reached")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// A token bound to THIS resource runs tools.
+	session := connectSession(t, ctx, ts.URL, matched)
+	text, isErr, err := callWhoami(ctx, session)
+	require.NoError(t, err)
+	assert.False(t, isErr, "a matching-audience token must run tools: %s", text)
+	assert.Contains(t, text, "bound@example.com")
+
+	// A PAT (no aud) stays accepted on the HTTP transport: audience
+	// enforcement narrows bound tokens, it does not exclude PATs.
+	session = connectSession(t, ctx, ts.URL, pat)
+	text, isErr, err = callWhoami(ctx, session)
+	require.NoError(t, err)
+	assert.False(t, isErr, "a PAT must keep working with a resource configured: %s", text)
+	assert.Contains(t, text, "patty@example.com")
+}
+
+// TestCanonicalResource pins the startup grammar of the canonical resource
+// URL: what an operator may configure, and the canonical form everything
+// downstream (audience comparison, the RFC 9728 document) sees.
+func TestCanonicalResource(t *testing.T) {
+	valid := []struct {
+		in, want string
+	}{
+		{"https://mcp.zetic.ai", "https://mcp.zetic.ai"},
+		{"https://mcp.zetic.ai/", "https://mcp.zetic.ai"},
+		{"https://MCP.Zetic.AI", "https://mcp.zetic.ai"},
+		{"https://mcp.zetic.ai/mcp/", "https://mcp.zetic.ai/mcp"},
+		{"  https://mcp.zetic.ai  ", "https://mcp.zetic.ai"},
+		{"http://localhost:8321", "http://localhost:8321"},
+		{"http://127.0.0.1:9090", "http://127.0.0.1:9090"},
+		{"http://[::1]:8080", "http://[::1]:8080"},
+	}
+	for _, tc := range valid {
+		t.Run("valid "+tc.in, func(t *testing.T) {
+			got, err := CanonicalResource(tc.in)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+
+	invalid := []struct {
+		name, in string
+	}{
+		{"empty", ""},
+		{"whitespace only", "   "},
+		{"no scheme", "mcp.zetic.ai"},
+		{"wrong scheme", "ftp://mcp.zetic.ai"},
+		{"http on a public host", "http://mcp.zetic.ai"},
+		{"http on a private, non-loopback IP", "http://192.168.1.10:8080"},
+		{"query component", "https://mcp.zetic.ai?tenant=1"},
+		{"fragment component", "https://mcp.zetic.ai#frag"},
+		{"userinfo", "https://user:pw@mcp.zetic.ai"},
+		{"no host", "https://"},
+		{"unparsable", "://bad"},
+	}
+	for _, tc := range invalid {
+		t.Run("invalid "+tc.name, func(t *testing.T) {
+			_, err := CanonicalResource(tc.in)
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestMeVerifierCachesPositiveResults(t *testing.T) {
@@ -550,9 +868,20 @@ func TestBearerNeverInLogs(t *testing.T) {
 		Verify(ctx, good, nil)
 	require.Error(t, err)
 
+	// Audience mismatch: the other path that deliberately logs detail (the
+	// two resource URLs). It must log the mismatch and still no bearer bytes.
+	const bound = "super-secret-bound-bearer-3141592653"
+	audStub := staticBodyStub(t, meOAuthBody("stray", strPtr("https://elsewhere.example")))
+	_, err = newTestMeVerifierResource(audStub.URL, "https://mcp.zetic.ai", newFakeClock(), logger).
+		Verify(ctx, bound, nil)
+	require.ErrorIs(t, err, auth.ErrInvalidToken)
+
 	captured := logs.String()
 	assert.Contains(t, captured, dialFailureMarker(strings.TrimPrefix(deadURL, "http://")),
 		"the transport-failure detail must be logged, not silently dropped")
+	assert.Contains(t, captured, "elsewhere.example",
+		"the audience-mismatch detail must be logged, not silently dropped")
 	assert.NotContains(t, captured, good, "bearer token leaked into server logs")
 	assert.NotContains(t, captured, bad, "rejected bearer leaked into server logs")
+	assert.NotContains(t, captured, bound, "audience-mismatched bearer leaked into server logs")
 }

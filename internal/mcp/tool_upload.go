@@ -87,6 +87,12 @@ func (e slogEvents) Note(msg string) { e.log.Info("upload_model", "note", msg) }
 // of any of those stages when resume_session_id is set.
 func uploadModelHandler(d Deps) mcp.ToolHandlerFor[uploadModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in uploadModelArgs) (*mcp.CallToolResult, any, error) {
+		// The HTTP transport never registers this tool (EnableLocalTools is
+		// false there), so the gate is defense in depth; over stdio no
+		// TokenInfo exists and nothing changes.
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
 			return d.toolError(err), nil, nil

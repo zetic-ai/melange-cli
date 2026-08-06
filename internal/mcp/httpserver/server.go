@@ -78,8 +78,16 @@ type Config struct {
 	AllowedOrigins []string
 	// ValidateTokens verifies bearers against GET /v1/me (MeVerifier) before
 	// any tool runs; false relays any non-empty bearer to the API unchecked
-	// (PassthroughVerifier).
+	// (PassthroughVerifier) unless Resource is set, which forces validation.
 	ValidateTokens bool
+	// Resource is this server's canonical resource URL as an OAuth 2.1
+	// protected resource (RFC 8707/9728), e.g. "https://mcp.zetic.ai".
+	// Setting it turns on MeVerifier regardless of ValidateTokens — audience
+	// enforcement cannot happen without validating — and rejects OAuth
+	// bearers bound to a different resource. Empty disables audience
+	// enforcement (the PAT-only/dev posture). Validated and normalized by
+	// New via CanonicalResource.
+	Resource string
 
 	// ipLimit, when non-nil, replaces the production pre-auth limiter tuning.
 	// Test-only seam, unexported so no caller outside this package can weaken
@@ -108,6 +116,10 @@ type Server struct {
 	// requests. Set to the drainTimeout constant by New; tests shorten it to
 	// reach the forced-close path without a 25-second wait.
 	drainTimeout time.Duration
+	// verifierKind names the bearer verifier New actually installed ("me" or
+	// "passthrough"). Recorded at the point of decision so the startup posture
+	// line can never drift from the verifier in the handler chain.
+	verifierKind string
 
 	mu   sync.Mutex
 	addr net.Addr
@@ -116,13 +128,40 @@ type Server struct {
 // New validates cfg and assembles the server. The handler chain for the MCP
 // endpoint is (outermost first): IP rate limit -> Origin policy -> bearer
 // auth -> bearer capture -> token rate limit -> streamable handler; /healthz
-// bypasses all of it.
+// and (with a configured Resource) the RFC 9728 metadata document bypass all
+// of it.
 func New(cfg Config) (*Server, error) {
 	if cfg.Listen == "" {
 		return nil, errors.New("httpserver: Listen address is required")
 	}
 	if cfg.APIHost == "" {
 		return nil, errors.New("httpserver: APIHost is required")
+	}
+	if cfg.Resource != "" {
+		// The command layer validates first (usage error, exit 2); this is
+		// the defense for programmatic callers, and it re-normalizes so the
+		// stored config — which Task 2's RFC 9728 metadata document serves —
+		// is always in canonical form.
+		resource, err := CanonicalResource(cfg.Resource)
+		if err != nil {
+			return nil, fmt.Errorf("httpserver: invalid Resource: %w", err)
+		}
+		cfg.Resource = resource
+	}
+	// A resource identity brings OAuth discovery with it: the RFC 9728
+	// document at its well-known path and the resource_metadata challenge
+	// parameter pointing there. Without one there is nothing truthful to
+	// publish — an RFC 9728 document exists to name a resource identifier —
+	// so no route is registered and 401 challenges stay bare.
+	var metadataPath, resourceMetadataURL string
+	if cfg.Resource != "" {
+		var err error
+		metadataPath, resourceMetadataURL, err = protectedResourceMetadataLocation(cfg.Resource)
+		if err != nil {
+			// Unreachable after CanonicalResource above; fail loudly if the
+			// invariant ever breaks rather than serve without discovery.
+			return nil, fmt.Errorf("httpserver: %w", err)
+		}
 	}
 	logger := cfg.Logger
 	if logger == nil {
@@ -142,9 +181,16 @@ func New(cfg Config) (*Server, error) {
 		Logger:              logger,
 	})
 
+	// A configured Resource forces MeVerifier even without ValidateTokens:
+	// an operator who declared a resource identity asked for audience
+	// enforcement, and PassthroughVerifier can never provide it (it validates
+	// nothing and populates no TokenInfo). Passthrough remains only for the
+	// case where neither knob is set.
 	verifier := auth.TokenVerifier(PassthroughVerifier)
-	if cfg.ValidateTokens {
-		verifier = NewMeVerifier(s.apiOptions, logger).Verify
+	s.verifierKind = "passthrough"
+	if cfg.ValidateTokens || cfg.Resource != "" {
+		verifier = NewMeVerifier(s.apiOptions, cfg.Resource, logger).Verify
+		s.verifierKind = "me"
 	}
 	s.limiter = newRateLimiter(nil)
 	ipPolicy := ipLimitPolicy
@@ -179,7 +225,7 @@ func New(cfg Config) (*Server, error) {
 	// the WAF's problem, not a single instance's.
 	protected := s.ipLimiter.middleware(
 		originMiddleware(cfg.AllowedOrigins,
-			AuthMiddleware(verifier, s.limiter.middleware(mcpHandler))))
+			AuthMiddleware(verifier, resourceMetadataURL, s.limiter.middleware(mcpHandler))))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
@@ -190,6 +236,18 @@ func New(cfg Config) (*Server, error) {
 	// itself stays path-agnostic: the deployment, not this binary, decides
 	// what prefix the transport is published under.)
 	mux.HandleFunc("/healthz", healthzMethodNotAllowed)
+	if metadataPath != "" {
+		// OAuth discovery is public by design (RFC 9728 §3.1) and happens
+		// before the client holds any credential, so the document is served
+		// like /healthz — outside the rate limiters, the Origin policy, and
+		// bearer auth. The handler answers browsers from ANY Origin with
+		// Access-Control-Allow-Origin: * on purpose: the operator's
+		// --allowed-origins gates the credentialed MCP endpoint, not public
+		// configuration. All methods route here (no method pattern) so a CORS
+		// preflight OPTIONS gets its 204 instead of a 401 from the protected
+		// chain.
+		mux.Handle(metadataPath, protectedResourceMetadataHandler(cfg.Resource, cfg.APIHost))
+	}
 	mux.Handle("/", protected)
 	s.handler = mux
 
@@ -217,6 +275,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.addr = ln.Addr()
 	s.mu.Unlock()
 	s.logger.Info("mcp http server listening", "addr", ln.Addr().String())
+	s.logAuthPosture()
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- s.httpServer.Serve(ln) }()
@@ -238,6 +297,31 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	<-serveErr // Serve has returned http.ErrServerClosed.
 	return nil
+}
+
+// logAuthPosture states, once at startup, which token enforcement this
+// process is actually running under.
+//
+// Startup is the only cheap moment to catch a misconfigured posture, because
+// nothing later distinguishes one. A misspelled MELANGE_MCP_RESOURCE (or a
+// --resource that never reached the process) is indistinguishable at runtime
+// from "no resource was ever configured": the server binds, answers /healthz,
+// serves every tool, and simply enforces no audience while publishing no
+// discovery document. Naming the verifier and the canonical resource — or
+// saying plainly that there is none — turns that silent posture into one
+// greppable line an operator can diff against what they meant to deploy.
+//
+// Configuration only is logged. No bearer, token hash, or API credential is
+// in scope here, and TestStartupLogsEnforcementPosture pins that.
+func (s *Server) logAuthPosture() {
+	resource := s.cfg.Resource
+	if resource == "" {
+		resource = "none"
+	}
+	s.logger.Info("mcp http server auth posture",
+		"verifier", s.verifierKind,
+		"resource", resource,
+		"audience_enforcement", s.cfg.Resource != "")
 }
 
 // Addr reports the bound listen address, or nil before ListenAndServe binds

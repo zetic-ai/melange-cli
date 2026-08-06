@@ -3,10 +3,13 @@ package httpserver
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -18,15 +21,21 @@ import (
 // This file is the auth assembly point for the MCP endpoint. Two verifiers
 // exist: PassthroughVerifier (the default relay posture — any non-empty
 // bearer flows through to the Melange API, which is the real authority) and
-// MeVerifier (--validate-tokens — bearers are checked against GET /v1/me
-// before any tool runs). /healthz is never behind any of this.
+// MeVerifier (--validate-tokens or a configured --resource — bearers are
+// checked against GET /v1/me before any tool runs, with OAuth audience
+// enforcement when a canonical resource URL is configured). /healthz is never
+// behind any of this.
 
 // AuthMiddleware wraps the MCP handler with bearer authentication: the SDK's
 // RequireBearerToken rejects requests without a well-formed bearer (401) and
 // runs verifier on the token, then bearerToContext captures the raw bearer in
 // the request context for the per-request ClientProvider. Every 401 leaves
 // with a WWW-Authenticate challenge (see challengeWriter).
-func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler {
+//
+// resourceMetadataURL is the absolute URL of this server's RFC 9728
+// protected-resource metadata document, or "" when no resource identity is
+// configured (the document is then not served at all — see metadata.go).
+func AuthMiddleware(verifier auth.TokenVerifier, resourceMetadataURL string, next http.Handler) http.Handler {
 	require := auth.RequireBearerToken(verifier, &auth.RequireBearerTokenOptions{
 		// Melange personal access tokens carry no in-band expiry; their
 		// lifetime is managed server-side. Without this, the middleware would
@@ -34,11 +43,13 @@ func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler
 		// real expires_at into TokenInfo, the SDK still enforces it per
 		// request.
 		AllowMissingExpiration: true,
-		// Seam (CLI-PR4): set ResourceMetadataURL here when the OAuth
-		// protected-resource metadata endpoint (RFC 9728) lands. The SDK then
-		// emits `WWW-Authenticate: Bearer resource_metadata="..."` itself and
-		// challengeWriter's bare fallback goes dormant (it only fires when the
-		// header is absent).
+		// Non-empty, the SDK stamps every 401 with the RFC 9728 discovery
+		// pointer — `WWW-Authenticate: Bearer resource_metadata="<url>"` — the
+		// entry point of the OAuth flow: challenge → metadata document →
+		// authorization_servers[0] → RFC 8414 metadata → authorize/token.
+		// Empty leaves the SDK header unset and challengeWriter supplies the
+		// bare `Bearer` scheme instead.
+		ResourceMetadataURL: resourceMetadataURL,
 	})
 	inner := require(bearerToContext(next))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,11 +62,14 @@ func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler
 //
 // go-sdk v1.7.0's RequireBearerToken only writes the header when
 // ResourceMetadataURL or Scopes produce challenge parameters (auth/auth.go:
-// empty params ⇒ no header at all), and we configure neither yet. This
-// wrapper adds the bare `Bearer` scheme exactly when the SDK left the header
-// unset, so a parameterized SDK header always wins once CLI-PR4 configures
-// ResourceMetadataURL. The 401 decision itself — status, body — stays
-// SDK-generated; only the missing challenge is supplied.
+// empty params ⇒ no header at all). With a resource identity configured the
+// SDK emits the parameterized challenge itself — it Adds the header before
+// http.Error triggers WriteHeader, so this wrapper sees it and goes dormant.
+// Without one, this wrapper adds the bare `Bearer` scheme exactly when the
+// SDK left the header unset. Either way exactly one challenge leaves: the
+// parameterized header is never overridden or duplicated. The 401 decision
+// itself — status, body — stays SDK-generated; only the missing challenge is
+// supplied.
 type challengeWriter struct {
 	http.ResponseWriter
 }
@@ -114,21 +128,37 @@ const (
 var errValidationUnavailable = errors.New("token validation unavailable")
 
 // MeVerifier validates bearer tokens against GET /v1/me on the configured API
-// host (the same host the tools call). Enabled by --validate-tokens: it
-// rejects bad credentials at the door with a 401 instead of letting each tool
-// call fail downstream.
+// host (the same host the tools call). Enabled by --validate-tokens or by
+// configuring --resource: it rejects bad credentials at the door with a 401
+// instead of letting each tool call fail downstream.
+//
+// /v1/me is the authorization server's substitute for token introspection
+// (there is no introspection endpoint by design): it accepts both credential
+// kinds the API mints — ztp_ personal access tokens and zoa_ OAuth 2.1 access
+// tokens — and 401s everything else, including zor_ refresh tokens. Both
+// response shapes share the token block this verifier maps into
+// auth.TokenInfo (scopes, expires_at); OAuth responses additionally carry the
+// grant's RFC 8707 audience, which validate enforces against resource.
 //
 // Positive results are cached for meCacheTTL keyed by SHA-256 of the token —
 // raw token bytes are never held as map keys, so no cache dump or debugger
 // snapshot can yield a credential. Negative results are never cached: a
 // just-created token must work on the next request even if a stale attempt
 // preceded it, and an attacker gains nothing from re-verification (each miss
-// is one upstream 401).
+// is one upstream 401). Audience enforcement happens before the cache store,
+// so every cached entry has already passed it for this verifier's resource
+// (the resource is fixed at construction, never per request).
 type MeVerifier struct {
 	// apiOptions builds the outgoing client options for one bearer; the
 	// server passes (*Server).apiOptions so Debug is always nil (credential
 	// hygiene) and host/UA/timeout match the tools.
 	apiOptions func(bearer string) api.Options
+	// resource is this server's canonical resource URL in CanonicalResource
+	// form, or "" when the operator configured none. Non-empty, it is the
+	// audience OAuth tokens must be bound to; empty, the server has no
+	// identity to compare against and audience enforcement is off (the plain
+	// --validate-tokens posture).
+	resource string
 	// now is the cache clock; tests inject a fake (package seam style, see
 	// internal/wait). Set at construction (or by test setup before first use)
 	// and never mutated concurrently.
@@ -148,14 +178,17 @@ type meCacheEntry struct {
 }
 
 // NewMeVerifier builds a MeVerifier; its Verify method is the
-// auth.TokenVerifier. logger receives the failure detail that is withheld from
-// callers; nil discards it.
-func NewMeVerifier(apiOptions func(bearer string) api.Options, logger *slog.Logger) *MeVerifier {
+// auth.TokenVerifier. resource is the canonical resource URL audience-bound
+// tokens must name (already in CanonicalResource form), or "" to skip
+// audience enforcement. logger receives the failure detail that is withheld
+// from callers; nil discards it.
+func NewMeVerifier(apiOptions func(bearer string) api.Options, resource string, logger *slog.Logger) *MeVerifier {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	return &MeVerifier{
 		apiOptions: apiOptions,
+		resource:   resource,
 		now:        time.Now,
 		logger:     logger,
 		cache:      make(map[[sha256.Size]byte]meCacheEntry),
@@ -205,7 +238,46 @@ func (v *MeVerifier) validate(ctx context.Context, token string) (*auth.TokenInf
 	}
 	switch {
 	case resp.JSON200 != nil:
-		info := &auth.TokenInfo{Scopes: resp.JSON200.Token.Scopes}
+		aud, audPresent, err := meAudience(resp.Body)
+		if err != nil {
+			// Unreachable while the API keeps aud a string-or-null (the same
+			// bytes just parsed as MeResponse); if the shape ever drifts, fail
+			// closed without inventing a verdict on the token. The parse
+			// detail is log-only like every other dynamic error here.
+			v.logger.Error("mcp token validation response parse failed", "error", err)
+			return nil, errValidationUnavailable
+		}
+		if !audPresent && strings.HasPrefix(token, "zoa_") {
+			// Canary for the one silent failure mode of the audience control:
+			// the backend contract (zetic/public/me.py) puts a token.aud key —
+			// string or null — on EVERY zoa_ bearer's response; the key's
+			// absence is the discriminator for the PAT shape. A zoa_ bearer
+			// without it means the field was renamed or moved, and treating
+			// that as "unbound" would silently disable audience enforcement
+			// for every OAuth token. Fail closed instead (zoa_ acceptance and
+			// the aud enrichment shipped together, so no real backend answers
+			// a zoa_ bearer with the PAT shape). Static error out; detail —
+			// never the bearer — to the log.
+			v.logger.Error("mcp token validation contract drift: OAuth bearer answered without an aud field")
+			return nil, errValidationUnavailable
+		}
+		if v.resource != "" && aud != "" && !resourceMatches(v.resource, aud) {
+			// The token is real but bound to a different resource server
+			// (RFC 8707): accepting it here would be the confused-deputy
+			// passthrough the backend documents as OUR half of the contract
+			// (/v1 itself does not enforce aud). The mismatch detail — no
+			// credential, just the two resource URLs — goes to the operator
+			// log; the caller gets a static 401.
+			v.logger.Warn("mcp token validation audience mismatch",
+				"aud", aud, "resource", v.resource)
+			return nil, fmt.Errorf("%w: bearer token is bound to a different resource", auth.ErrInvalidToken)
+		}
+		info := &auth.TokenInfo{
+			Scopes: resp.JSON200.Token.Scopes,
+			// The account identity, so SDK session-consistency checks have a
+			// stable per-user handle. Never the token.
+			UserID: resp.JSON200.User.Email,
+		}
 		if exp := resp.JSON200.Token.ExpiresAt; exp != nil {
 			// A real expiry rides along so RequireBearerToken enforces it on
 			// every request, including cache hits inside the TTL.
@@ -213,10 +285,120 @@ func (v *MeVerifier) validate(ctx context.Context, token string) (*auth.TokenInf
 		}
 		return info, nil
 	case resp.StatusCode() == http.StatusUnauthorized || resp.StatusCode() == http.StatusForbidden:
+		// Covers every credential /v1/me refuses: expired/revoked/unknown
+		// bearers and zor_ refresh tokens, which the API never accepts as
+		// authentication.
 		return nil, fmt.Errorf("%w: bearer token rejected by the Melange API", auth.ErrInvalidToken)
 	default:
 		return nil, fmt.Errorf("token validation failed: /v1/me returned status %d", resp.StatusCode())
 	}
+}
+
+// meAudience extracts the OAuth audience from a raw 200 /v1/me body.
+//
+// The generated client predates the OAuth enrichment, so its MeResponse parse
+// (which this rides alongside) drops the extra field; the shapes are
+// otherwise identical. Per the backend contract (zetic/public/me.py):
+// MeOAuthResponse is MeResponse plus token.aud — present (string or null) for
+// every zoa_ bearer, never present for a ztp_ PAT. present distinguishes the
+// two shapes (the caller's zoa_ canary depends on it); aud == "" with
+// present == true means the grant named no resource (aud null). An empty or
+// null aud is accepted deliberately, exactly like a PAT's absent key —
+// audience enforcement narrows tokens that WERE bound to a resource; it does
+// not exclude credential kinds that carry no binding, or every PAT user on
+// the HTTP transport would break.
+func meAudience(body []byte) (aud string, present bool, err error) {
+	var probe struct {
+		Token struct {
+			Aud json.RawMessage `json:"aud"`
+		} `json:"token"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return "", false, fmt.Errorf("parsing /v1/me token audience: %w", err)
+	}
+	raw := probe.Token.Aud
+	if raw == nil {
+		return "", false, nil // key absent: the PAT shape
+	}
+	if string(raw) == "null" {
+		return "", true, nil // key present, grant named no resource
+	}
+	if err := json.Unmarshal(raw, &aud); err != nil {
+		return "", true, fmt.Errorf("parsing /v1/me token audience: %w", err)
+	}
+	return aud, true, nil
+}
+
+// resourceMatches reports whether aud names this server's canonical resource.
+// canonical is already in CanonicalResource form; aud (minted by the
+// authorization server from its exact-string resource allowlist) gets the
+// same trailing-slash trim so `https://mcp.zetic.ai/` and
+// `https://mcp.zetic.ai` — one origin in every client's eyes — cannot split.
+// Beyond that the comparison is an exact, CASE-SENSITIVE string match, per
+// RFC 8707's treat-resources-as-opaque-strings posture. CanonicalResource
+// lowercases the configured side's scheme and host, so the authorization
+// server's resource allowlist (ZETIC_OAUTH_ALLOWED_RESOURCES) must keep its
+// entries lowercase — an uppercase allowlist entry would mint auds this
+// comparison rejects.
+func resourceMatches(canonical, aud string) bool {
+	return strings.TrimSuffix(aud, "/") == canonical
+}
+
+// CanonicalResource validates and normalizes a canonical resource URL — the
+// identity this server asserts as an OAuth 2.1 protected resource. The same
+// value is the audience MeVerifier enforces and the `resource` field of the
+// RFC 9728 protected-resource metadata document, whose grammar this enforces:
+// an absolute https URL with a host and no query or fragment. Plain http is
+// allowed only for loopback hosts (localhost/127.0.0.1/[::1]) so a local dev
+// loop does not need TLS; anything else non-https would advertise an identity
+// tokens should never be bound to.
+//
+// Normalization: scheme and host are lowercased and one trailing "/" is
+// trimmed, so equivalent spellings configure the same identity. Errors are
+// operator-facing startup text (the flag value never contains credentials);
+// callers map them to a usage error (exit 2).
+func CanonicalResource(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", errors.New("resource URL is empty")
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("resource URL %q is not a valid URL", trimmed)
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	switch u.Scheme {
+	case "https":
+	case "http":
+		if !isLoopbackHost(u.Hostname()) {
+			return "", fmt.Errorf("resource URL %q must use https (http is allowed only for localhost development)", trimmed)
+		}
+	default:
+		return "", fmt.Errorf("resource URL %q must be an absolute https URL", trimmed)
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("resource URL %q has no host", trimmed)
+	}
+	if u.User != nil {
+		return "", fmt.Errorf("resource URL %q must not carry userinfo", trimmed)
+	}
+	if u.RawQuery != "" || u.Fragment != "" || u.RawFragment != "" {
+		// RFC 9728 §2: a protected-resource identifier has no query or
+		// fragment component.
+		return "", fmt.Errorf("resource URL %q must not have a query or fragment", trimmed)
+	}
+	return strings.TrimSuffix(u.String(), "/"), nil
+}
+
+// isLoopbackHost reports whether host names the local machine: the literal
+// "localhost" or a loopback IP (127.0.0.0/8, ::1).
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // cached returns a live cache entry for key, if any.

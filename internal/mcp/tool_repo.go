@@ -115,6 +115,9 @@ func withCreateRepoVocabulary(props map[string]*jsonschema.Schema) {
 // createRepoHandler wraps POST /v1/repos.
 func createRepoHandler(d Deps) mcp.ToolHandlerFor[createRepoArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createRepoArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		if strings.Contains(in.Name, "/") {
 			return d.toolError(fmt.Errorf(
 				"invalid name %q: repositories are always created in the account behind the token; "+
@@ -187,6 +190,9 @@ func withUpdateRepoVocabulary(props map[string]*jsonschema.Schema) {
 // updateRepoHandler wraps PATCH /v1/repos/{account}/{repo}.
 func updateRepoHandler(d Deps) mcp.ToolHandlerFor[updateRepoArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in updateRepoArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
 			return d.toolError(err), nil, nil
@@ -243,6 +249,9 @@ type deletedRepo struct {
 // confirmation gate that must pass before any request is made.
 func deleteRepoHandler(d Deps) mcp.ToolHandlerFor[deleteRepoArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in deleteRepoArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
 			return d.toolError(err), nil, nil
