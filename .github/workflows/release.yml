@@ -22,6 +22,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.4.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
