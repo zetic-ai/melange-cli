@@ -37,10 +37,11 @@ gen:
 	$(DOWN_CONVERT) --input openapi/public-v1.json --output openapi/public-v1.3.0.json
 	go run ./tools/openapi30 --input openapi/public-v1.3.0.json --output openapi/public-v1.3.0.json
 	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config .oapi-codegen.yml openapi/public-v1.3.0.json
+	go run ./tools/mcpschemas --input openapi/public-v1.3.0.json --output internal/mcp/schemas
 
 gen-check:
 	$(MAKE) gen
-	git diff --exit-code -- openapi internal/api/gen
+	git diff --exit-code -- openapi internal/api/gen internal/mcp/schemas
 
 docs:
 	go run ./tools/gendocs docs/reference

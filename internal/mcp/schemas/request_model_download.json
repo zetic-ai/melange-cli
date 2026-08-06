@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "description": "One downloadable file of an authorized target.\n\n`url` is a time-limited signed GET URL (valid until `expires_at` of the\nenclosing authorization). `size` is per-file and only known for\nsingle-file targets (the stored `download_size` is the aggregate);\n`checksum` is null when the pipeline recorded none for the file.",
+        "properties": {
+          "checksum": {
+            "title": "Checksum",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "DownloadArtifact",
+        "type": "object"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "authorization_id": {
+      "title": "Authorization Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "authorization_id",
+    "expires_at",
+    "artifacts"
+  ],
+  "title": "DownloadAuthorizationResponse",
+  "type": "object"
+}

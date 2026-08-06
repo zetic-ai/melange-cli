@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "converting",
+        "optimizing",
+        "ready",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "key",
+    "version",
+    "state"
+  ],
+  "title": "ImportModelResponse",
+  "type": "object"
+}
