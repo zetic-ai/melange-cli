@@ -7,7 +7,7 @@
   },
   "response": {
     "body": {
-      "derivation_version": 2,
+      "derivation_version": 3,
       "model": {
         "key": "<uuid>",
         "version": 1
@@ -25,9 +25,9 @@
           "metric": "tps",
           "quant_type": "q4_k_m",
           "run": 0,
-          "target": "llama_cpp",
           "unit": "tokens_per_s",
-          "value": 42.5
+          "value": 42.5,
+          "variant": "v1"
         },
         {
           "ap_type": "cpu",
@@ -41,9 +41,9 @@
           "metric": "ttft_ms",
           "quant_type": "q4_k_m",
           "run": 0,
-          "target": "llama_cpp",
           "unit": "ms",
-          "value": 250.0
+          "value": 250.0,
+          "variant": "v1"
         },
         {
           "ap_type": "cpu",
@@ -57,9 +57,9 @@
           "metric": "prompt_tokens",
           "quant_type": "q4_k_m",
           "run": 0,
-          "target": "llama_cpp",
           "unit": "count",
-          "value": 64.0
+          "value": 64.0,
+          "variant": "v1"
         },
         {
           "ap_type": "cpu",
@@ -73,9 +73,9 @@
           "metric": "generated_tokens",
           "quant_type": "q4_k_m",
           "run": 0,
-          "target": "llama_cpp",
           "unit": "count",
-          "value": 128.0
+          "value": 128.0,
+          "variant": "v1"
         },
         {
           "ap_type": null,
@@ -84,9 +84,9 @@
           "metric": "accuracy_score",
           "quant_type": "q4_k_m",
           "run": 0,
-          "target": "llama_cpp",
           "unit": "score",
-          "value": 0.69
+          "value": 0.69,
+          "variant": "v1"
         },
         {
           "ap_type": null,
@@ -95,9 +95,9 @@
           "metric": "model_size_bytes",
           "quant_type": "q4_k_m",
           "run": 0,
-          "target": "llama_cpp",
           "unit": "bytes",
-          "value": 2000000000.0
+          "value": 2000000000.0,
+          "variant": "v1"
         }
       ],
       "summary": {
@@ -105,8 +105,7 @@
           {
             "dataset": "mmlu",
             "quant_type": "q4_k_m",
-            "score": 0.69,
-            "target": "llama_cpp"
+            "score": 0.69
           }
         ],
         "quants": {

@@ -1,0 +1,139 @@
+# Nightly / on-demand live verification: the real-backend MCP e2e
+# (script/mcp-e2e.sh via `make e2e`) and the agent eval harness
+# (tools/mcpeval via `make eval`).
+#
+# NEVER part of the blocking PR gate (that is ci.yml): this workflow has no
+# push/pull_request trigger, costs real backend traffic and (for evals) real
+# Anthropic tokens, and its failures page a human instead of blocking merges.
+#
+# Secrets (all optional — unconfigured pieces skip with a notice, they do
+# not fail the run):
+#   MELANGE_E2E_HOST      Base URL of a live backend to test against
+#                         (existing-backend mode; bring-up mode needs the
+#                         private backend checkout + Docker, which hosted
+#                         runners don't have).
+#   MELANGE_E2E_PAT       Write-scope PAT (ztp_...) on that backend. Used by
+#                         the e2e legs and as the eval harness's write PAT.
+#   MELANGE_E2E_PAT_READ  Read-only PAT for the eval scope-refusal task.
+#                         Optional: without it that one task is skipped.
+#   ANTHROPIC_API_KEY     Gates the eval job — evals spend real tokens
+#                         (~$0.25/run at the default sonnet+haiku models).
+#
+# Repository variables:
+#   MCP_E2E_SKIP_IMPORT   Default "1": a plain remote backend has no Airflow
+#                         dispatch behind it, so the import legs SKIP. Set to
+#                         "0" for a backend with a working conversion pipeline.
+name: Nightly live e2e + evals
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly at 03:43 UTC (off the top of the hour to dodge the load spike).
+    - cron: "43 3 * * *"
+
+permissions:
+  contents: read
+
+# One live run at a time: both jobs talk to the same backend account, and
+# script/mcp-e2e.sh documents that concurrent runs collide.
+concurrency:
+  group: nightly-live
+  cancel-in-progress: false
+
+jobs:
+  live-e2e:
+    name: live e2e (both transports)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Secrets are read through env so nothing is ever echoed; the gate step
+      # (not a job-level `if`) is what lets an unconfigured repo skip cleanly.
+      - name: Check backend configuration
+        id: backend
+        env:
+          E2E_HOST: ${{ secrets.MELANGE_E2E_HOST }}
+          E2E_PAT: ${{ secrets.MELANGE_E2E_PAT }}
+        run: |
+          if [ -z "$E2E_HOST" ] || [ -z "$E2E_PAT" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=live e2e skipped::MELANGE_E2E_HOST / MELANGE_E2E_PAT secrets are not configured; the live e2e legs were skipped, not failed."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run the live e2e suite
+        if: steps.backend.outputs.configured == 'true'
+        env:
+          MELANGE_HOST: ${{ secrets.MELANGE_E2E_HOST }}
+          MELANGE_E2E_PAT: ${{ secrets.MELANGE_E2E_PAT }}
+          MCP_E2E_SKIP_IMPORT: ${{ vars.MCP_E2E_SKIP_IMPORT || '1' }}
+        run: make e2e
+
+  agent-evals:
+    name: agent evals (scored, token-spending)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Serialized after the e2e job (same backend account); still runs when
+    # e2e failed or skipped — a broken leg must not hide the eval signal.
+    needs: live-e2e
+    if: ${{ !cancelled() }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check eval configuration
+        id: evalgate
+        env:
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          E2E_HOST: ${{ secrets.MELANGE_E2E_HOST }}
+          E2E_PAT: ${{ secrets.MELANGE_E2E_PAT }}
+        run: |
+          if [ -z "$ANTHROPIC_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=evals skipped::ANTHROPIC_API_KEY is not configured; the token-spending eval suite was skipped, not failed."
+          elif [ -z "$E2E_HOST" ] || [ -z "$E2E_PAT" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=evals skipped::MELANGE_E2E_HOST / MELANGE_E2E_PAT secrets are not configured; evals need a live backend."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.evalgate.outputs.configured == 'true'
+        with:
+          node-version: "26"
+
+      - name: Install the claude CLI
+        if: steps.evalgate.outputs.configured == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run the eval suite
+        if: steps.evalgate.outputs.configured == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MELANGE_HOST: ${{ secrets.MELANGE_E2E_HOST }}
+          MCPEVAL_PAT_WRITE: ${{ secrets.MELANGE_E2E_PAT }}
+          MCPEVAL_PAT_READ: ${{ secrets.MELANGE_E2E_PAT_READ }}
+        run: make eval
+
+      # The scorecard is the product of the run — upload it even when a task
+      # (or the whole suite) failed. Artifacts are PAT-scrubbed at write time
+      # by the runner (tools/mcpeval).
+      - name: Upload the scorecard
+        if: ${{ always() && steps.evalgate.outputs.configured == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mcpeval-scorecard
+          path: mcpeval-out/
+          if-no-files-found: warn

@@ -33,16 +33,16 @@ var FixtureTool = map[string]string{
 	"list_library_providers":        "search_library",
 	"get_library_model":             "get_library_model",
 	"create_download_authorization": "request_model_download",
+	"create_model_upload":           "upload_model",
+	"get_model_upload":              "upload_model",
+	"complete_model_upload":         "upload_model",
 }
 
 // FixtureSkipped documents each fixture that flows through no MCP tool, with
 // the reason it is excluded.
 var FixtureSkipped = map[string]string{
-	"create_model_upload":          "model upload tools arrive with the upload PR",
-	"create_model_upload_conflict": "409 error exchange; also an upload fixture",
-	"get_model_upload":             "model upload tools arrive with the upload PR",
-	"complete_model_upload":        "model upload tools arrive with the upload PR",
-	"cancel_model_upload":          "model upload tools arrive with the upload PR",
+	"create_model_upload_conflict": "409 error exchange: upload_model surfaces the conflict as IsError resume guidance, not structuredContent",
+	"cancel_model_upload":          "upload_model never cancels a session; cancellation stays CLI-only (melange model upload --cancel)",
 	"error_401":                    "error envelope: failures surface as IsError text, not structuredContent",
 	"error_422":                    "error envelope: failures surface as IsError text, not structuredContent",
 	"error_422_enum":               "error envelope: failures surface as IsError text, not structuredContent",

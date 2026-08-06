@@ -12,12 +12,12 @@ import (
 
 // renderPackage prints the package report: a mode × metric table on a TTY, or
 // the flat one-record-per-line TSV otherwise.
-func renderPackage(ios *iostreams.IOStreams, body []byte, isTTY bool) error {
+func renderPackage(ios *iostreams.IOStreams, body []byte, human bool) error {
 	var resp gen.PackageReportResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return fmt.Errorf("decoding package report: %w", err)
 	}
-	if !isTTY {
+	if !human {
 		return packageTSV(ios, resp.Records)
 	}
 	return packageTable(ios, &resp.Summary)

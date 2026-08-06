@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	colorable "github.com/mattn/go-colorable"
 	isatty "github.com/mattn/go-isatty"
@@ -27,10 +28,66 @@ type IOStreams struct {
 	stdinTTY  *bool
 	stdoutTTY *bool
 	stderrTTY *bool
-	noColor   bool // set by --no-color flag
-	termWidth *int // override for tests
+	noColor   bool  // set by --no-color flag
+	termWidth *int  // override for tests
+	human     *bool // set by --format; overrides stdout TTY-ness for layout
+	unicode   *bool // override for tests
 
 	passwordReader func(fd int) ([]byte, error)
+}
+
+// Format selects how human-facing commands lay out their output.
+type Format int
+
+const (
+	// FormatAuto lays out tables on a terminal and tab-separated values
+	// elsewhere. This is the default and the documented behavior.
+	FormatAuto Format = iota
+	// FormatTable forces the terminal layout, e.g. when piping to a pager.
+	FormatTable
+	// FormatTSV forces the tab-separated machine layout on a terminal.
+	FormatTSV
+)
+
+// ParseFormat maps a --format value to a Format.
+func ParseFormat(s string) (Format, error) {
+	switch s {
+	case "auto":
+		return FormatAuto, nil
+	case "table":
+		return FormatTable, nil
+	case "tsv":
+		return FormatTSV, nil
+	}
+	return FormatAuto, fmt.Errorf("invalid --format %q: expected auto, table, or tsv", s)
+}
+
+// SetFormat applies an explicit --format choice. FormatAuto restores detection.
+func (s *IOStreams) SetFormat(f Format) {
+	switch f {
+	case FormatTable:
+		v := true
+		s.human = &v
+	case FormatTSV:
+		v := false
+		s.human = &v
+	case FormatAuto:
+		s.human = nil
+	}
+}
+
+// HumanOutput reports whether output should be laid out for a person: aligned
+// columns, relative timestamps, human byte sizes. It follows stdout TTY-ness
+// unless --format said otherwise.
+//
+// Layout code must consult this rather than IsStdoutTTY so that one flag moves
+// the whole presentation together — a forced table whose cells still held raw
+// byte counts and RFC3339 timestamps would be a table in name only.
+func (s *IOStreams) HumanOutput() bool {
+	if s.human != nil {
+		return *s.human
+	}
+	return s.IsStdoutTTY()
 }
 
 // IsStdinTTY reports whether In is a terminal.
@@ -108,6 +165,35 @@ func (s *IOStreams) ColorEnabled() bool {
 
 // SetTerminalWidth overrides the detected terminal width (used by tests).
 func (s *IOStreams) SetTerminalWidth(w int) { s.termWidth = &w }
+
+// SetUnicode overrides the detected terminal encoding (used by tests).
+func (s *IOStreams) SetUnicode(v bool) { s.unicode = &v }
+
+// RuleChar returns the character to draw horizontal rules with: the box-drawing
+// U+2500 when the terminal encoding can render it, otherwise ASCII "-".
+//
+// A rule spans the full table width, so a wrong guess is repeated on every
+// column. The locale environment is the only portable signal for the encoding,
+// and when it says nothing this falls back to ASCII rather than betting.
+func (s *IOStreams) RuleChar() string {
+	if s.unicodeEnabled() {
+		return "─"
+	}
+	return "-"
+}
+
+func (s *IOStreams) unicodeEnabled() bool {
+	if s.unicode != nil {
+		return *s.unicode
+	}
+	for _, key := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := os.Getenv(key); v != "" {
+			up := strings.ToUpper(v)
+			return strings.Contains(up, "UTF-8") || strings.Contains(up, "UTF8")
+		}
+	}
+	return false
+}
 
 // SetPasswordReader overrides hidden terminal input. It is primarily a test
 // seam for commands that must not echo secrets.
@@ -255,12 +341,15 @@ func System() *IOStreams {
 }
 
 // Test returns an IOStreams backed by in-memory buffers, plus the three buffers
-// so callers can inspect output. TTY flags default to false.
+// so callers can inspect output. TTY flags default to false, and the terminal
+// encoding is pinned to UTF-8 so rule glyphs in output goldens never depend on
+// the host's locale.
 func Test() (streams *IOStreams, in, out, errOut *bytes.Buffer) {
 	inBuf := &bytes.Buffer{}
 	outBuf := &bytes.Buffer{}
 	errBuf := &bytes.Buffer{}
 	f := false
+	unicode := true
 	streams = &IOStreams{
 		In:        inBuf,
 		Out:       outBuf,
@@ -268,6 +357,7 @@ func Test() (streams *IOStreams, in, out, errOut *bytes.Buffer) {
 		stdinTTY:  &f,
 		stdoutTTY: &f,
 		stderrTTY: &f,
+		unicode:   &unicode,
 	}
 	return streams, inBuf, outBuf, errBuf
 }

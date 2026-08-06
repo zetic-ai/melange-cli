@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zetic-ai/melange-cli/internal/fixturetest"
-	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
 
 // outputSchemaExceptions lists tools that deliberately ship WITHOUT an output
@@ -78,7 +77,9 @@ func TestEveryEmbeddedSchemaParsesAndResolves(t *testing.T) {
 }
 
 func TestEveryRegisteredToolHasAnOutputSchemaOrDocumentedException(t *testing.T) {
-	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	// The EnableLocalTools catalog is the superset, so the local-only
+	// upload_model is held to the same schema discipline.
+	cs := connectWith(t, "test", Options{EnableLocalTools: true})
 	tools, err := cs.ListTools(t.Context(), nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, tools.Tools)
@@ -103,6 +104,48 @@ func TestEveryRegisteredToolHasAnOutputSchemaOrDocumentedException(t *testing.T)
 		name := entry.Name()[:len(entry.Name())-len(".json")]
 		assert.True(t, registered[name],
 			"embedded schema %s matches no registered tool (stale file? run make gen)", entry.Name())
+	}
+}
+
+// TestEveryAdvertisedSchemaIsAnObjectSchema pins the MCP interop requirement
+// that Tool.inputSchema and Tool.outputSchema are OBJECT schemas: the spec's
+// schema.ts literally types both as `{ type: "object"; ... }`, and Claude
+// Code enforces it — one tool advertising a schema without a top-level
+// "type":"object" (e.g. a bare {"anyOf":[...]} union, as the generator once
+// emitted for get_model, search_library, get_model_report, and
+// get_deployment_info) fails the client's tools/list validation and drops the
+// ENTIRE catalog, so a real agent sees zero melange tools.
+//
+// It is a property over everything tools/list advertises, not a fixed tool
+// list, so a future composite tool cannot reintroduce the defect unnoticed.
+func TestEveryAdvertisedSchemaIsAnObjectSchema(t *testing.T) {
+	// EnableLocalTools lists the superset catalog, upload_model included.
+	cs := connectWith(t, "test", Options{EnableLocalTools: true})
+	tools, err := cs.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, tools.Tools)
+
+	// assertObjectSchema checks the schema as it crosses the wire: the JSON
+	// round-trip sees exactly the document a client validates, whatever Go
+	// value the SDK holds it in.
+	assertObjectSchema := func(t *testing.T, field string, schema any) {
+		t.Helper()
+		data, err := json.Marshal(schema)
+		require.NoError(t, err, "%s must marshal", field)
+		var doc map[string]any
+		require.NoError(t, json.Unmarshal(data, &doc), "%s must be a JSON object", field)
+		assert.Equal(t, "object", doc["type"],
+			"%s must declare a top-level \"type\":\"object\" — MCP requires an object schema, and Claude Code drops the whole catalog otherwise", field)
+	}
+
+	for _, tool := range tools.Tools {
+		t.Run(tool.Name, func(t *testing.T) {
+			require.NotNil(t, tool.InputSchema, "every tool must advertise an input schema")
+			assertObjectSchema(t, "inputSchema", tool.InputSchema)
+			if tool.OutputSchema != nil {
+				assertObjectSchema(t, "outputSchema", tool.OutputSchema)
+			}
+		})
 	}
 }
 
@@ -190,10 +233,37 @@ func TestContractFixturesConformToToolOutputSchemas(t *testing.T) {
 		},
 		"get_library_model":             passthrough,
 		"create_download_authorization": passthrough,
+		// The upload-complete response reaches a caller inside upload_model's
+		// envelope, with its model reference repeated alongside.
+		"complete_model_upload": func(t *testing.T, body json.RawMessage) any {
+			t.Helper()
+			session, ok := unmarshalAny(t, body).(map[string]any)
+			require.True(t, ok)
+			require.NotNil(t, session["model"], "the fixture completion carries a model reference")
+			return map[string]any{"session": session, "model": session["model"]}
+		},
 	}
 	for stem := range wraps {
 		_, mapped := FixtureTool[stem]
 		assert.True(t, mapped, "wrap entry %s matches no FixtureTool fixture", stem)
+	}
+
+	// consumedInternally lists mapped fixtures whose response bodies the tool
+	// consumes without ever emitting them as structuredContent, so there is no
+	// output shape to hold against the tool's schema. Both carry signed upload
+	// URLs — short-lived credentials that must never reach a transcript — so
+	// their absence from tool output is deliberate, not an oversight; the
+	// fixture round-trips in fixtures_test.go still exercise both exchanges
+	// through upload_model.
+	consumedInternally := map[string]string{
+		"create_model_upload": "session-create response (signed upload URLs) drives the transfer, never the output",
+		"get_model_upload":    "session detail (reissued upload URLs on resume) drives state rebuild, never the output",
+	}
+	for stem := range consumedInternally {
+		_, mapped := FixtureTool[stem]
+		assert.True(t, mapped, "consumedInternally entry %s matches no FixtureTool fixture", stem)
+		_, wrapped := wraps[stem]
+		assert.False(t, wrapped, "fixture %s is both wrapped and consumed internally", stem)
 	}
 
 	entries, err := os.ReadDir(fixturetest.Dir(t))
@@ -215,6 +285,9 @@ func TestContractFixturesConformToToolOutputSchemas(t *testing.T) {
 		}
 		_, alsoSkipped := FixtureSkipped[stem]
 		assert.False(t, alsoSkipped, "fixture %s is both mapped and skipped", name)
+		if _, internal := consumedInternally[stem]; internal {
+			continue
+		}
 		wrapFn, ok := wraps[stem]
 		require.True(t, ok, "fixture %s is mapped to %s but has no wrap entry here", name, tool)
 		t.Run(name, func(t *testing.T) {
@@ -247,6 +320,25 @@ func TestSynthesizedAndCompositePayloadsConformToSchemas(t *testing.T) {
 			"quotas": unmarshalAny(t, fixtureBody(t, "get_usage_quotas.json")),
 			"plan":   unmarshalAny(t, fixtureBody(t, "get_billing_plan.json")),
 		})
+	})
+
+	t.Run("upload envelope with a wait status", func(t *testing.T) {
+		// A wait_seconds upload emits all three keys; no single fixture
+		// exercises the composite.
+		session, ok := unmarshalAny(t, fixtureBody(t, "complete_model_upload.json")).(map[string]any)
+		require.True(t, ok)
+		validateAgainst(t, "upload_model", map[string]any{
+			"session": session,
+			"model":   session["model"],
+			"status":  unmarshalAny(t, fixtureBody(t, "get_model_status.json")),
+		})
+	})
+
+	t.Run("upload envelope before a model exists", func(t *testing.T) {
+		// A completion still VERIFYING has no model reference yet: the
+		// envelope is the session alone.
+		session := mutated(t, fixtureBody(t, "complete_model_upload.json"), "model", nil)
+		validateAgainst(t, "upload_model", map[string]any{"session": session})
 	})
 
 	t.Run("redacted download authorization", func(t *testing.T) {
@@ -294,6 +386,18 @@ func TestOutputSchemasRejectForeignShapes(t *testing.T) {
 			name:     "conversion status with a stage outside the enum",
 			tool:     "get_conversion_status",
 			instance: mutated(t, fixtureBody(t, "get_model_status.json"), "stage", "packaging"),
+		},
+		{
+			name:     "upload envelope without its required session half",
+			tool:     "upload_model",
+			instance: map[string]any{"model": map[string]any{"key": "m_1", "version": 1}},
+		},
+		{
+			name: "upload envelope session with a state outside the enum",
+			tool: "upload_model",
+			instance: map[string]any{
+				"session": mutated(t, fixtureBody(t, "complete_model_upload.json"), "state", "PAUSED"),
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

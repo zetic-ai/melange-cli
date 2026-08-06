@@ -7,7 +7,7 @@
   },
   "response": {
     "body": {
-      "derivation_version": 2,
+      "derivation_version": 3,
       "model": {
         "key": "<uuid>",
         "version": 1
@@ -24,9 +24,9 @@
           "metric": "latency_ms",
           "precision": "fp32",
           "run": 0,
-          "target": "tflite_fp32",
           "unit": "ms",
-          "value": 12.34
+          "value": 12.34,
+          "variant": "v1"
         },
         {
           "ap_type": "cpu",
@@ -39,9 +39,9 @@
           "metric": "tensor_copy_latency_ms",
           "precision": "fp32",
           "run": 0,
-          "target": "tflite_fp32",
           "unit": "ms",
-          "value": 1.0
+          "value": 1.0,
+          "variant": "v1"
         },
         {
           "ap_type": "cpu",
@@ -54,9 +54,9 @@
           "metric": "snr_db",
           "precision": "fp32",
           "run": 0,
-          "target": "tflite_fp32",
           "unit": "db",
-          "value": 35.5
+          "value": 35.5,
+          "variant": "v1"
         }
       ],
       "summary": {

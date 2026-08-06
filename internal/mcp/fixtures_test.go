@@ -2,8 +2,11 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zetic-ai/melange-cli/internal/fixturetest"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
+	"github.com/zetic-ai/melange-cli/internal/upload"
 )
 
 // This file drives every fixture in FixtureTool through its mapped tool over a
@@ -34,7 +38,20 @@ type fixtureRoundTrip struct {
 	// want builds the expected structured content; nil means the concretized
 	// fixture response body passes through unwrapped.
 	want func(t *testing.T, fx fixturetest.Fixture) any
-	// requests is the expected number of captured API requests; 0 means 1.
+	// requestBody overrides the fixture's documented request body for the
+	// outgoing-body comparison; nil compares against the fixture body itself.
+	// The upload manifest needs it: client_file_id and the content digests
+	// are derived from the real local files, while everything else stays
+	// fixture-verbatim.
+	requestBody func(t *testing.T, fx fixturetest.Fixture) json.RawMessage
+	// responseBody overrides what the fixture's own stub serves; nil serves
+	// the concretized fixture body verbatim. create_model_upload needs it:
+	// the response echoes the CLIENT-chosen client_file_ids, so a faithful
+	// server must echo the ids the tool actually generated, not the ones the
+	// backend's fixture client happened to pick.
+	responseBody func(t *testing.T, fx fixturetest.Fixture) string
+	// requests is the expected number of captured requests (API plus signed
+	// storage); 0 means 1.
 	requests int
 }
 
@@ -43,12 +60,18 @@ type fixtureRoundTrip struct {
 // method and placeholder-wildcarded path, so byte-exact passthrough stays
 // observable end to end.
 func stubFixture(reg *httpmock.Registry, fx fixturetest.Fixture) {
+	stubFixtureBody(reg, fx, string(fixturetest.Concretize(fx.Response.Body)))
+}
+
+// stubFixtureBody is stubFixture with the served body substituted (a case's
+// responseBody hook).
+func stubFixtureBody(reg *httpmock.Registry, fx fixturetest.Fixture, body string) {
 	reg.Register(
 		func(req *http.Request) bool {
 			return strings.EqualFold(req.Method, fx.Request.Method) &&
 				fixturetest.PathMatches(fx.Request.Path, req.URL.Path)
 		},
-		jsonBody(fx.Response.Status, string(fixturetest.Concretize(fx.Response.Body))),
+		jsonBody(fx.Response.Status, body),
 	)
 }
 
@@ -241,6 +264,190 @@ var fixtureRoundTrips = map[string]fixtureRoundTrip{
 			return args
 		},
 	},
+	// The three promoted upload fixtures drive upload_model through the stage
+	// each documents (create / resume-rebuild / completion replay). All three
+	// runs converge on the complete_model_upload response inside the tool's
+	// envelope; cancel_model_upload and create_model_upload_conflict stay in
+	// FixtureSkipped with their reasons.
+	"create_model_upload": {
+		// A fresh upload: the fixture anchors the session-create exchange,
+		// including the outgoing wire manifest built from real local files.
+		args: func(t *testing.T, fx fixturetest.Fixture) map[string]any {
+			model, inputs := uploadFixtureLocalFiles(t)
+			return map[string]any{"repo": repoArg(t, fx), "model_file": model, "inputs": inputs}
+		},
+		stub: func(t *testing.T, reg *httpmock.Registry) {
+			registerUploadTransferStubs(reg)
+			stubFixture(reg, fixturetest.Load(t, "complete_model_upload"))
+		},
+		want:        uploadEnvelopeWant,
+		requestBody: uploadManifestRequestBody,
+		// The response echoes client_file_id values the CLIENT chose; a
+		// faithful server echoes the tool's ("f<position>"), so the fixture's
+		// recorded ids are remapped by manifest order. Everything else is
+		// served byte-verbatim.
+		responseBody: func(t *testing.T, fx fixturetest.Fixture) string {
+			body := string(fixturetest.Concretize(fx.Response.Body))
+			for i, id := range uploadFixtureClientIDs(t, fx) {
+				body = strings.ReplaceAll(body,
+					fmt.Sprintf("%q", id), fmt.Sprintf(`"f%d"`, i))
+			}
+			return body
+		},
+		// create + 3 × (resumable start + full-file PUT) + complete.
+		requests: 8,
+	},
+	"get_model_upload": {
+		// A resume with no local state file: the fixture anchors the session
+		// detail fetch that seeds the rebuild — local files are re-matched by
+		// canonical path, fresh URLs are reissued for the pending files, and
+		// the transfer and completion run.
+		args: func(t *testing.T, fx fixturetest.Fixture) map[string]any {
+			model, inputs := uploadFixtureLocalFiles(t)
+			return map[string]any{
+				"repo":              repoArg(t, fx),
+				"resume_session_id": uploadSessionID(t, fx),
+				"model_file":        model,
+				"inputs":            inputs,
+			}
+		},
+		stub: func(t *testing.T, reg *httpmock.Registry) {
+			detail := fixturetest.Load(t, "get_model_upload")
+			reg.Register(
+				httpmock.REST("POST", fixturetest.ConcretizeString(detail.Request.Path)+"/files"),
+				jsonBody(200, uploadReissueBody(t, detail)))
+			registerUploadTransferStubs(reg)
+			stubFixture(reg, fixturetest.Load(t, "complete_model_upload"))
+		},
+		want: uploadEnvelopeWant,
+		// detail + reissue + 3 × (resumable start + full-file PUT) + complete.
+		requests: 9,
+	},
+	"complete_model_upload": {
+		// A resume of a session the server already owns every byte of (the
+		// detail reports VERIFYING): completion is replayed with no local
+		// files, and the fixture anchors that complete exchange.
+		args: func(t *testing.T, fx fixturetest.Fixture) map[string]any {
+			return map[string]any{"repo": repoArg(t, fx), "resume_session_id": uploadSessionID(t, fx)}
+		},
+		stub: func(t *testing.T, reg *httpmock.Registry) {
+			detail := fixturetest.Load(t, "get_model_upload")
+			body := strings.Replace(string(fixturetest.Concretize(detail.Response.Body)),
+				`"UPLOADING"`, `"VERIFYING"`, 1)
+			reg.Register(
+				httpmock.REST("GET", fixturetest.ConcretizeString(detail.Request.Path)),
+				jsonBody(200, body))
+		},
+		want: uploadEnvelopeWant,
+		// detail + complete.
+		requests: 2,
+	},
+}
+
+// uploadFixtureLocalFiles writes the three local files the upload fixtures
+// document — model.onnx (10 bytes) plus two 4-byte inputs — with fixed
+// contents, so the args and requestBody hooks derive identical digests from
+// separate temp copies.
+func uploadFixtureLocalFiles(t *testing.T) (model string, inputs []string) {
+	t.Helper()
+	dir := t.TempDir()
+	model = filepath.Join(dir, "model.onnx")
+	require.NoError(t, os.WriteFile(model, []byte("MMMMMMMMMM"), 0o600))
+	in0 := filepath.Join(dir, "input0.bin")
+	require.NoError(t, os.WriteFile(in0, []byte("AAAA"), 0o600))
+	in1 := filepath.Join(dir, "input1.bin")
+	require.NoError(t, os.WriteFile(in1, []byte("BBBB"), 0o600))
+	return model, []string{in0, in1}
+}
+
+// uploadFixtureClientIDs reads the client_file_id sequence the fixture's
+// request manifest documents, in manifest order.
+func uploadFixtureClientIDs(t *testing.T, fx fixturetest.Fixture) []string {
+	t.Helper()
+	var body struct {
+		Files []struct {
+			ClientFileID string `json:"client_file_id"`
+		} `json:"files"`
+	}
+	require.NoError(t, json.Unmarshal(fixturetest.Concretize(fx.Request.Body), &body))
+	require.NotEmpty(t, body.Files)
+	ids := make([]string, len(body.Files))
+	for i, f := range body.Files {
+		ids[i] = f.ClientFileID
+	}
+	return ids
+}
+
+// uploadSessionID reads the fixture path's upload session id, concretizing
+// its "<uuid>" placeholder.
+func uploadSessionID(t *testing.T, fx fixturetest.Fixture) string {
+	t.Helper()
+	id := fixturetest.SegmentAfter(fx.Request.Path, "uploads")
+	require.NotEmpty(t, id, "fixture path %s carries no upload session id", fx.Request.Path)
+	return fixturetest.ConcretizeString(id)
+}
+
+// uploadManifestRequestBody builds the wire manifest upload_model must send
+// for uploadFixtureLocalFiles: filenames, sizes, roles, input indexes, and
+// manifest_version stay fixture-verbatim, while the locally derived fields —
+// client_file_id ("f<position>" by manifest order) and the content digests —
+// come from the files themselves (sha256 is not in the fixture at all: the
+// backend recorded the minimal manifest, the CLI always sends the digest).
+func uploadManifestRequestBody(t *testing.T, fx fixturetest.Fixture) json.RawMessage {
+	t.Helper()
+	model, inputs := uploadFixtureLocalFiles(t)
+	paths := append([]string{model}, inputs...)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(fixturetest.Concretize(fx.Request.Body), &body))
+	files, ok := body["files"].([]any)
+	require.True(t, ok, "the fixture request documents a files manifest")
+	require.Len(t, files, len(paths))
+	for i, entry := range files {
+		file, ok := entry.(map[string]any)
+		require.True(t, ok)
+		digest, err := upload.DigestFile(paths[i])
+		require.NoError(t, err)
+		require.EqualValues(t, digest.Size, file["size"],
+			"local file %d must be exactly the size the fixture documents", i)
+		file["client_file_id"] = fmt.Sprintf("f%d", i)
+		file["crc32c"] = digest.CRC32C
+		file["sha256"] = digest.SHA256
+	}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	return raw
+}
+
+// uploadReissueBody answers a reissue request: every file the session detail
+// fixture lists gets the same concretized "<signed-url>" sample the create
+// fixture issues, so the transfer stubs serve both promoted paths.
+func uploadReissueBody(t *testing.T, detail fixturetest.Fixture) string {
+	t.Helper()
+	var body struct {
+		Files []struct {
+			ClientFileID string `json:"client_file_id"`
+		} `json:"files"`
+	}
+	require.NoError(t, json.Unmarshal(fixturetest.Concretize(detail.Response.Body), &body))
+	require.NotEmpty(t, body.Files)
+	entries := make([]string, len(body.Files))
+	for i, f := range body.Files {
+		entries[i] = fmt.Sprintf(`{"client_file_id":%q,"upload_url":%q}`,
+			f.ClientFileID, uploadSignedURLSample)
+	}
+	return `{"files":[` + strings.Join(entries, ",") + `]}`
+}
+
+// uploadEnvelopeWant is the structured content every promoted upload fixture
+// converges on: the complete_model_upload response as the envelope's session
+// half, with its model reference repeated alongside.
+func uploadEnvelopeWant(t *testing.T, _ fixturetest.Fixture) any {
+	t.Helper()
+	completion, ok := concretizedBody(t, fixturetest.Load(t, "complete_model_upload")).(map[string]any)
+	require.True(t, ok)
+	require.NotNil(t, completion["model"], "the fixture completion carries a model reference")
+	return map[string]any{"session": completion, "model": completion["model"]}
 }
 
 // reportArgs derives get_model_report arguments; report_type is the trailing
@@ -270,20 +477,21 @@ func findFixtureRequest(t *testing.T, fx fixturetest.Fixture, reqs []*http.Reque
 }
 
 // assertRequestMatchesFixture checks the captured request against the
-// fixture's documented request: query exactly, and — when the fixture carries
+// fixture's documented request: query exactly, and — when wantBody carries
 // one — the body structurally after concretization (the direction-b assertion
 // internal/contract makes for the generated client, here made through the
-// tool handler).
-func assertRequestMatchesFixture(t *testing.T, fx fixturetest.Fixture, req *http.Request) {
+// tool handler). wantBody is normally the fixture's own request body; a
+// case's requestBody hook may substitute the locally derived variant.
+func assertRequestMatchesFixture(t *testing.T, fx fixturetest.Fixture, wantBody json.RawMessage, req *http.Request) {
 	t.Helper()
 	wantURL, err := url.Parse(fx.Request.Path)
 	require.NoError(t, err)
 	assert.Equal(t, wantURL.Query().Encode(), req.URL.Query().Encode(),
 		"outgoing query must match the fixture request")
-	if len(fx.Request.Body) == 0 || string(fx.Request.Body) == "null" {
+	if len(wantBody) == 0 || string(wantBody) == "null" {
 		return
 	}
-	want, err := fixturetest.Canonicalize(fixturetest.Concretize(fx.Request.Body))
+	want, err := fixturetest.Canonicalize(fixturetest.Concretize(wantBody))
 	require.NoError(t, err)
 	got, err := fixturetest.Canonicalize([]byte(requestBody(t, req)))
 	require.NoError(t, err)
@@ -300,12 +508,20 @@ func TestFixtureToolRoundTrips(t *testing.T) {
 		t.Run(stem, func(t *testing.T) {
 			fx := fixturetest.Load(t, stem)
 			reg := &httpmock.Registry{}
-			stubFixture(reg, fx)
+			if tc.responseBody != nil {
+				stubFixtureBody(reg, fx, tc.responseBody(t, fx))
+			} else {
+				stubFixture(reg, fx)
+			}
 			if tc.stub != nil {
 				tc.stub(t, reg)
 			}
 
-			cs, _ := connect(t, registryProvider(t, reg))
+			// The local (superset) catalog, with the registry doubling as the
+			// bare signed-URL transport and upload state isolated per test, so
+			// the upload fixtures can drive upload_model; no other tool
+			// touches either extension.
+			cs, _ := connectLocal(t, reg)
 			var args map[string]any
 			if tc.args != nil {
 				args = tc.args(t, fx)
@@ -332,8 +548,12 @@ func TestFixtureToolRoundTrips(t *testing.T) {
 				wantRequests = 1
 			}
 			require.Len(t, reg.Requests, wantRequests,
-				"%s must make exactly the documented API requests", tool)
-			assertRequestMatchesFixture(t, fx, findFixtureRequest(t, fx, reg.Requests))
+				"%s must make exactly the documented requests", tool)
+			wantBody := fx.Request.Body
+			if tc.requestBody != nil {
+				wantBody = tc.requestBody(t, fx)
+			}
+			assertRequestMatchesFixture(t, fx, wantBody, findFixtureRequest(t, fx, reg.Requests))
 			reg.Verify(t)
 		})
 	}
@@ -350,9 +570,11 @@ func TestFixtureRoundTripTableMatchesFixtureTool(t *testing.T) {
 }
 
 // TestFixtureToolNamesOnlyRegisteredTools keeps the exported mapping honest: a
-// renamed or dropped tool must not leave FixtureTool pointing at nothing.
+// renamed or dropped tool must not leave FixtureTool pointing at nothing. The
+// local variant is the superset catalog, so the mapping may (and does) name
+// the local-only upload_model.
 func TestFixtureToolNamesOnlyRegisteredTools(t *testing.T) {
-	cs, _ := connect(t, registryProvider(t, &httpmock.Registry{}))
+	cs := connectWith(t, "test", Options{EnableLocalTools: true})
 	registered := map[string]bool{}
 	for _, tool := range listAllTools(t, cs) {
 		registered[tool.Name] = true

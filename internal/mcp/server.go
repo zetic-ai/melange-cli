@@ -12,12 +12,15 @@ import (
 const serverName = "melange"
 
 // New builds the MCP server with the full tool catalog registered.
-// opts.EnableLocalTools gates stdio-only tools; none exist yet, so it has no
-// effect on the current catalog.
+// opts.EnableLocalTools additionally registers the tools that only make sense
+// when the server runs on the caller's machine — today upload_model, which
+// reads local files; the HTTP transport keeps it hidden.
 func New(deps Deps, opts Options) *mcp.Server {
 	s := mcp.NewServer(
 		&mcp.Implementation{Name: serverName, Version: deps.Version},
-		&mcp.ServerOptions{Logger: deps.logger()},
+		// quietSDKLogger drops the SDK's three content-free per-connection
+		// INFO lines for both transports; see lognoise.go.
+		&mcp.ServerOptions{Logger: quietSDKLogger(deps.logger()), SchemaCache: opts.SchemaCache},
 	)
 	registerAccount(s, deps)
 	registerRepo(s, deps)
@@ -26,6 +29,9 @@ func New(deps Deps, opts Options) *mcp.Server {
 	registerReport(s, deps)
 	registerLibrary(s, deps)
 	registerDownload(s, deps)
+	if opts.EnableLocalTools {
+		registerUpload(s, deps)
+	}
 	return s
 }
 

@@ -66,25 +66,25 @@ func getDeploymentInfoHandler(d Deps) mcp.ToolHandlerFor[deploymentInfoArgs, any
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in deploymentInfoArgs) (*mcp.CallToolResult, any, error) {
 		if in.ModelKey == "" {
 			if in.Repo != "" || in.Language != "" || in.InferenceMode != "" {
-				return toolError(errors.New(
+				return d.toolError(errors.New(
 					"model_key is required to render a deployment guide; pass repo and " +
 						"model_key, or call get_deployment_info with no arguments to list " +
 						"the supported languages and inference modes")), nil, nil
 			}
 			g, err := d.Clients.Client(ctx)
 			if err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
-			return deploymentOptions(ctx, g)
+			return deploymentOptions(ctx, d, g)
 		}
 
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		params := &gen.GetDeploymentGuideParams{}
 		if in.Language != "" {
@@ -97,23 +97,23 @@ func getDeploymentInfoHandler(d Deps) mcp.ToolHandlerFor[deploymentInfoArgs, any
 		}
 		resp, err := g.GetDeploymentGuideWithResponse(ctx, account, name, in.ModelKey, params)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
 // deploymentOptions reads the platform-wide selector catalog.
-func deploymentOptions(ctx context.Context, g *gen.ClientWithResponses) (*mcp.CallToolResult, any, error) {
+func deploymentOptions(ctx context.Context, d Deps, g *gen.ClientWithResponses) (*mcp.CallToolResult, any, error) {
 	resp, err := g.GetDeploymentOptionsWithResponse(ctx)
 	if err != nil {
-		return toolError(err), nil, nil
+		return d.toolError(err), nil, nil
 	}
 	if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-		return toolError(err), nil, nil
+		return d.toolError(err), nil, nil
 	}
-	return rawResult(resp.Body), nil, nil
+	return rawResult(resp.Body)
 }

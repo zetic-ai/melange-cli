@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
-	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
 // apPrecisionOrder is the stable column order: ap_type (cpu, gpu, npu) crossed
@@ -30,18 +28,18 @@ func (c column) header() string { return c.apType + "/" + c.precision }
 
 // renderGeneral prints the general report: the dashboard table on a TTY, or the
 // flat one-record-per-line TSV otherwise.
-func renderGeneral(ios *iostreams.IOStreams, body []byte, m mode, isTTY bool) error {
+func renderGeneral(ios *iostreams.IOStreams, body []byte, m mode, human bool) error {
 	var resp gen.GeneralReportResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return fmt.Errorf("decoding general report: %w", err)
 	}
-	if !isTTY {
+	if !human {
 		return generalTSV(ios, resp.Records)
 	}
 	return generalTable(ios, &resp, m)
 }
 
-// generalTSV emits one record per line: device fields, ap_type, target,
+// generalTSV emits one record per line: device fields, ap_type, variant,
 // precision, run, metric, value, unit.
 func generalTSV(ios *iostreams.IOStreams, records []gen.GeneralReportRecord) error {
 	tp := tableprinter.New(ios) // non-TTY: raw tab-separated, no header.
@@ -51,7 +49,7 @@ func generalTSV(ios *iostreams.IOStreams, records []gen.GeneralReportRecord) err
 		tp.AddField(deref(r.Device.Soc))
 		tp.AddField(deref(r.Device.Os))
 		tp.AddField(deref(r.ApType))
-		tp.AddField(deref(r.Target))
+		tp.AddField(deref(r.Variant))
 		tp.AddField(string(r.Precision))
 		tp.AddField(strconv.Itoa(r.Run))
 		tp.AddField(string(r.Metric))
@@ -167,8 +165,8 @@ func displayDevice(dev string) string {
 // generalSummary prints the per-precision summary block from the response
 // summary: latency min/median/max, SNR range, memory range.
 func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error {
-	var b strings.Builder
-	fmt.Fprintln(&b, "\nSummary (latency ms, per precision):")
+	type summaryRow struct{ precision, latency, snr, memory string }
+	var rows []summaryRow
 	for _, prec := range precisionOrder {
 		lat := latencyStats(s.LatencyMs, prec)
 		snr := snrRange(s.SnrDb, prec)
@@ -176,10 +174,23 @@ func generalSummary(ios *iostreams.IOStreams, s *gen.GeneralReportSummary) error
 		if lat == "" && snr == "" && mem == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "  %-5s latency %s  snr %s  mem %s\n", prec, orDash(lat), orDash(snr), orDash(mem))
+		rows = append(rows, summaryRow{prec, orDash(lat), orDash(snr), orDash(mem)})
 	}
-	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
-	return err
+	if len(rows) == 0 {
+		return nil
+	}
+
+	tp := tableprinter.New(ios)
+	tp.Heading("Summary (latency ms, per precision):")
+	tp.HeaderRow("precision", "latency min/med/max", "snr", "memory")
+	for _, r := range rows {
+		tp.AddField(r.precision)
+		tp.AddField(r.latency)
+		tp.AddField(r.snr)
+		tp.AddField(r.memory)
+		tp.EndRow()
+	}
+	return tp.Render()
 }
 
 func latencyStats(s gen.GeneralLatencySummary, prec string) string {

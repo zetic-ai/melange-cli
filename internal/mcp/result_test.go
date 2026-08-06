@@ -6,15 +6,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mustRawResult unwraps rawResult for the passthrough tests, which all feed
+// non-empty bodies.
+func mustRawResult(t *testing.T, body []byte) *mcp.CallToolResult {
+	t.Helper()
+	res, out, err := rawResult(body)
+	require.NoError(t, err)
+	require.Nil(t, out, "passthrough tools never produce a typed Out value")
+	require.NotNil(t, res)
+	return res
+}
 
 func TestRawResultPassthrough(t *testing.T) {
 	// Non-alphabetical key order: byte equality proves no re-marshal.
 	body := []byte(`{"user":{"email":"dev@zetic.ai"},"account":{"name":"zetic"}}`)
 
-	res := rawResult(body)
+	res := mustRawResult(t, body)
 
 	assert.False(t, res.IsError)
 	raw, ok := res.StructuredContent.(json.RawMessage)
@@ -23,10 +35,26 @@ func TestRawResultPassthrough(t *testing.T) {
 	assert.Equal(t, string(body), textOf(t, res), "text mirror matches the body")
 }
 
+// TestRawResultEmptyBodyIsAProgrammingFault pins the defensive guard: a
+// success path that reaches rawResult with no bytes must surface as an
+// explicit Go error — the protocol/programming-fault class — never as a
+// fabricated empty success payload. The class became reachable with the
+// upload-session operations.
+func TestRawResultEmptyBodyIsAProgrammingFault(t *testing.T) {
+	for name, body := range map[string][]byte{"nil": nil, "empty": {}} {
+		t.Run(name, func(t *testing.T) {
+			res, out, err := rawResult(body)
+			require.ErrorIs(t, err, errEmptyBody)
+			assert.Nil(t, res, "no result may accompany the fault")
+			assert.Nil(t, out)
+		})
+	}
+}
+
 func TestRawResultTrimsTrailingWhitespaceInMirrorOnly(t *testing.T) {
 	body := []byte("{\"count\":0}\n \t\r\n")
 
-	res := rawResult(body)
+	res := mustRawResult(t, body)
 
 	assert.Equal(t, `{"count":0}`, textOf(t, res),
 		"mirror trims trailing JSON whitespace like Exporter.Write")
@@ -39,7 +67,7 @@ func TestRawResultAtCapIsNotTruncated(t *testing.T) {
 	body := []byte(`"` + strings.Repeat("x", maxTextMirrorBytes-2) + `"`)
 	require.Len(t, body, maxTextMirrorBytes)
 
-	res := rawResult(body)
+	res := mustRawResult(t, body)
 
 	assert.Equal(t, string(body), textOf(t, res))
 	assert.NotContains(t, textOf(t, res), "truncated")
@@ -49,7 +77,7 @@ func TestRawResultOverCapTruncatesMirror(t *testing.T) {
 	body := []byte(`"` + strings.Repeat("x", 19998) + `"`)
 	require.Len(t, body, 20000)
 
-	res := rawResult(body)
+	res := mustRawResult(t, body)
 
 	text := textOf(t, res)
 	notice := "[response truncated: 20000 bytes; full data in structuredContent. Narrow the query or paginate.]"
@@ -65,7 +93,7 @@ func TestRawResultCapAppliesAfterTrailingWhitespaceTrim(t *testing.T) {
 	body := []byte(payload + "\n")
 	require.Len(t, body, maxTextMirrorBytes+1)
 
-	res := rawResult(body)
+	res := mustRawResult(t, body)
 
 	assert.Equal(t, payload, textOf(t, res),
 		"a payload only over the cap due to trailing whitespace is not truncated")
@@ -73,6 +101,6 @@ func TestRawResultCapAppliesAfterTrailingWhitespaceTrim(t *testing.T) {
 
 func TestRawResultTruncationNoticeCountsFullBodyBytes(t *testing.T) {
 	body := []byte(`"` + strings.Repeat("y", 30000) + `"`)
-	res := rawResult(body)
+	res := mustRawResult(t, body)
 	assert.Contains(t, textOf(t, res), fmt.Sprintf("[response truncated: %d bytes;", len(body)))
 }

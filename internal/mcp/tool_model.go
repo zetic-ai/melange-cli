@@ -120,22 +120,25 @@ type setDefaultModelArgs struct {
 // setDefaultModelHandler wraps PUT .../models/{key}/default.
 func setDefaultModelHandler(d Deps) mcp.ToolHandlerFor[setDefaultModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in setDefaultModelArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.SetDefaultModelWithResponse(ctx, account, name, in.ModelKey)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -150,24 +153,27 @@ type importModelArgs struct {
 // after a transient failure without starting a second one.
 func importModelHandler(d Deps) mcp.ToolHandlerFor[importModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in importModelArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.ImportModelWithResponse(ctx, account, name,
-			&gen.ImportModelParams{IdempotencyKey: newIdempotencyKeyParam()},
+			&gen.ImportModelParams{IdempotencyKey: api.NewIdempotencyKeyParam()},
 			gen.ImportModelJSONRequestBody{HfRepo: in.HfRepo})
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -183,22 +189,22 @@ func listModelsHandler(d Deps) mcp.ToolHandlerFor[listModelsArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in listModelsArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		limit := pageLimit(in.Limit)
 		resp, err := g.ListModelsWithResponse(ctx, account, name,
 			&gen.ListModelsParams{Limit: &limit, Offset: &in.Offset})
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -222,29 +228,29 @@ func getModelHandler(d Deps) mcp.ToolHandlerFor[getModelArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in getModelArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.GetModelWithResponse(ctx, account, name, in.ModelKey)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if !in.IncludeTargets {
-			return rawResult(resp.Body), nil, nil
+			return rawResult(resp.Body)
 		}
 
 		targets, err := g.ListModelTargetsWithResponse(ctx, account, name, in.ModelKey)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(targets.StatusCode(), targets.HTTPResponse, targets.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		envelope, err := marshalEnvelope(modelWithTargets{Model: resp.Body, Targets: targets.Body})
 		if err != nil {
@@ -252,7 +258,7 @@ func getModelHandler(d Deps) mcp.ToolHandlerFor[getModelArgs, any] {
 			// programming fault, not something the caller can act on.
 			return nil, nil, fmt.Errorf("building get_model envelope: %w", err)
 		}
-		return rawResult(envelope), nil, nil
+		return rawResult(envelope)
 	}
 }
 
@@ -279,66 +285,83 @@ func getConversionStatusHandler(d Deps) mcp.ToolHandlerFor[conversionStatusArgs,
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in conversionStatusArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
-		}
-
-		// fetch reports the raw status body and whether the API considers the
-		// state terminal — the same signal `melange model status --wait` uses.
-		fetch := func(ctx context.Context) (body []byte, terminal bool, err error) {
-			resp, err := g.GetModelStatusWithResponse(ctx, account, name, in.ModelKey)
-			if err != nil {
-				return nil, false, err
-			}
-			if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-				return nil, false, aerr
-			}
-			if resp.JSON200 == nil {
-				return nil, false, fmt.Errorf(
-					"unexpected response fetching model status (HTTP %d)", resp.StatusCode())
-			}
-			return resp.Body, resp.JSON200.Terminal, nil
+			return d.toolError(err), nil, nil
 		}
 
 		if in.WaitSeconds <= 0 {
-			body, _, err := fetch(ctx)
+			body, _, err := fetchModelStatus(ctx, g, account, name, in.ModelKey)
 			if err != nil {
-				return toolError(err), nil, nil
+				return d.toolError(err), nil, nil
 			}
-			return rawResult(body), nil, nil
+			return rawResult(body)
 		}
 
-		var latest []byte
-		err = wait.Poll(ctx, wait.Options{
-			Initial: pollInitial,
-			Factor:  pollFactor,
-			Cap:     pollCap,
-			Timeout: time.Duration(in.WaitSeconds) * time.Second,
-			Jitter:  pollJitter,
-			Sleep:   pollSleep,
-			Now:     pollNow,
-		}, func(ctx context.Context) (bool, error) {
-			body, terminal, err := fetch(ctx)
-			if err != nil {
-				return false, err
-			}
-			latest = body
-			return terminal, nil
-		})
+		latest, err := pollModelStatus(ctx, g, account, name, in.ModelKey,
+			time.Duration(in.WaitSeconds)*time.Second)
 		switch {
 		case errors.Is(err, wait.ErrTimeout):
 			if latest == nil {
 				// The budget expired before any status came back.
-				return toolError(fmt.Errorf(
+				return d.toolError(fmt.Errorf(
 					"no conversion status returned within %ds; call get_conversion_status again",
 					in.WaitSeconds)), nil, nil
 			}
 		case err != nil:
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(latest), nil, nil
+		return rawResult(latest)
 	}
+}
+
+// fetchModelStatus reads one model's raw conversion status body plus whether
+// the API considers the state terminal — the same signal `melange model
+// status --wait` uses.
+func fetchModelStatus(ctx context.Context, g *gen.ClientWithResponses,
+	account, name, key string,
+) (body []byte, terminal bool, err error) {
+	resp, err := g.GetModelStatusWithResponse(ctx, account, name, key)
+	if err != nil {
+		return nil, false, err
+	}
+	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
+		return nil, false, aerr
+	}
+	if resp.JSON200 == nil {
+		return nil, false, fmt.Errorf(
+			"unexpected response fetching model status (HTTP %d)", resp.StatusCode())
+	}
+	return resp.Body, resp.JSON200.Terminal, nil
+}
+
+// pollModelStatus is the shared conversion-wait core behind
+// get_conversion_status and upload_model's wait_seconds: it polls
+// fetchModelStatus on the package backoff schedule until a terminal state or
+// the budget runs out, returning the latest raw status body observed. An
+// exhausted budget returns that latest body alongside wait.ErrTimeout (latest
+// is nil when no status ever came back); any fetch failure aborts the loop.
+func pollModelStatus(ctx context.Context, g *gen.ClientWithResponses,
+	account, name, key string, budget time.Duration,
+) ([]byte, error) {
+	var latest []byte
+	err := wait.Poll(ctx, wait.Options{
+		Initial: pollInitial,
+		Factor:  pollFactor,
+		Cap:     pollCap,
+		Timeout: budget,
+		Jitter:  pollJitter,
+		Sleep:   pollSleep,
+		Now:     pollNow,
+	}, func(ctx context.Context) (bool, error) {
+		body, terminal, err := fetchModelStatus(ctx, g, account, name, key)
+		if err != nil {
+			return false, err
+		}
+		latest = body
+		return terminal, nil
+	})
+	return latest, err
 }

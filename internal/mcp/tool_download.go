@@ -3,10 +3,8 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/zetic-ai/melange-cli/internal/api"
@@ -59,12 +57,15 @@ type requestModelDownloadArgs struct {
 // gets charged.
 func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownloadArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in requestModelDownloadArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if !in.Confirm {
-			return toolError(fmt.Errorf(
+			return d.toolError(fmt.Errorf(
 				"request_model_download refused: confirm is not true, so nothing was authorized "+
 					"and nothing was charged. Downloading target %s counts against the account's "+
 					"bandwidth quota: obtain explicit consent from the user first, then call "+
@@ -74,22 +75,22 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		// A quota 429 here is not transient, so it must not be retried; the
 		// fresh Idempotency-Key still lets the transport replay one logical
 		// authorization after a 5xx without charging twice.
 		resp, err := g.CreateDownloadAuthorizationWithResponse(api.WithNoRetryOn429(ctx),
 			account, name, in.ModelKey, in.TargetID,
-			&gen.CreateDownloadAuthorizationParams{IdempotencyKey: newIdempotencyKeyParam()})
+			&gen.CreateDownloadAuthorizationParams{IdempotencyKey: api.NewIdempotencyKeyParam()})
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if in.IncludeURLs {
-			return rawResult(resp.Body), nil, nil
+			return rawResult(resp.Body)
 		}
 		redacted, err := redactAuthorization(resp.Body)
 		if err != nil {
@@ -99,7 +100,7 @@ func requestModelDownloadHandler(d Deps) mcp.ToolHandlerFor[requestModelDownload
 			// back to the raw body, which carries the credentials.
 			return nil, nil, fmt.Errorf("redacting download authorization: %w", err)
 		}
-		return rawResult(redacted), nil, nil
+		return rawResult(redacted)
 	}
 }
 
@@ -132,30 +133,4 @@ func redactAuthorization(raw []byte) ([]byte, error) {
 		}
 	}
 	return marshalEnvelope(body)
-}
-
-// newIdempotencyKeyParam returns a fresh random UUIDv4 as the pointer type the
-// generated params structs take. It is used by import_model and
-// request_model_download: the key is generated once per logical tool call, so
-// the API retry transport replays the same key on a 5xx retry instead of
-// starting a second import or charging a second authorization.
-//
-// It duplicates internal/cmd/model's helper because that package pulls in
-// cobra, which internal/mcp must not import.
-func newIdempotencyKeyParam() *gen.IdempotencyKey {
-	key := gen.IdempotencyKey(newIdempotencyKey())
-	return &key
-}
-
-// newIdempotencyKey returns a random UUIDv4.
-func newIdempotencyKey() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand never fails on supported platforms; fall back to a
-		// timestamp key rather than abandoning the call over it.
-		return fmt.Sprintf("melange-%d", time.Now().UnixNano())
-	}
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }

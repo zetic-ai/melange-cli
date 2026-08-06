@@ -27,7 +27,7 @@
         },
         "records": {
           "items": {
-            "description": "`run` is the opaque 0-based source-row ordinal within the record's\n(device, target, ap_type) group (derivation rule D9): records sharing\n(device, target, ap_type, run) form one run's metric set.",
+            "description": "`variant` is an OPAQUE token distinguishing the artifacts measured on\none device — clients must not parse it. `run` is the opaque 0-based\nsource-row ordinal within the record's (device, variant, ap_type) group\n(derivation rule D9): records sharing (device, variant, ap_type, run)\nform one run's metric set, so `variant` is required to pair a latency\nwith the snr and memory measured in the same run.",
             "properties": {
               "ap_type": {
                 "enum": [
@@ -109,13 +109,6 @@
                 "title": "Run",
                 "type": "integer"
               },
-              "target": {
-                "title": "Target",
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
               "unit": {
                 "enum": [
                   "ms",
@@ -128,12 +121,19 @@
               "value": {
                 "title": "Value",
                 "type": "number"
+              },
+              "variant": {
+                "title": "Variant",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "device",
               "ap_type",
-              "target",
+              "variant",
               "precision",
               "run",
               "metric",
@@ -665,7 +665,7 @@
         },
         "records": {
           "items": {
-            "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `run` is the opaque\n0-based source-row ordinal within the record's (device, target,\nap_type, quant_type) group (derivation rule D9).",
+            "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `variant` is an OPAQUE\ntoken distinguishing the artifacts measured on one device. `run` is the\nopaque 0-based source-row ordinal within the record's (device, variant,\nap_type, quant_type) group (derivation rule D9).",
             "properties": {
               "ap_type": {
                 "enum": [
@@ -762,13 +762,6 @@
                 "title": "Run",
                 "type": "integer"
               },
-              "target": {
-                "title": "Target",
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
               "unit": {
                 "enum": [
                   "tokens_per_s",
@@ -784,12 +777,19 @@
               "value": {
                 "title": "Value",
                 "type": "number"
+              },
+              "variant": {
+                "title": "Variant",
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "device",
               "ap_type",
-              "target",
+              "variant",
               "quant_type",
               "dataset",
               "run",
@@ -825,17 +825,9 @@
                   "score": {
                     "title": "Score",
                     "type": "number"
-                  },
-                  "target": {
-                    "title": "Target",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
-                  "target",
                   "quant_type",
                   "dataset",
                   "score"
@@ -1326,5 +1318,6 @@
       "type": "object"
     }
   ],
-  "description": "One of the three report shapes, selected by report_type: general, llm, or package."
+  "description": "One of the three report shapes, selected by report_type: general, llm, or package.",
+  "type": "object"
 }

@@ -61,20 +61,20 @@ func getModelReportHandler(d Deps) mcp.ToolHandlerFor[modelReportArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in modelReportArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		status, httpResp, body, err := requestReport(ctx, g, in.ReportType, account, name, in.ModelKey)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(status, httpResp, body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(body), nil, nil
+		return rawResult(body)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
+	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
@@ -76,7 +77,7 @@ error, 4 not authenticated.`,
 			if exporter != nil {
 				return exporter.Write(ios, json.RawMessage(resp.Body))
 			}
-			if ios.IsStdoutTTY() {
+			if ios.HumanOutput() {
 				return printRepoTTY(ios, resp.JSON200)
 			}
 			return printRepoTSV(ios, resp.JSON200)
@@ -91,26 +92,16 @@ error, 4 not authenticated.`,
 // printRepoTTY renders the human block for terminals.
 func printRepoTTY(ios *iostreams.IOStreams, r *gen.RepoResponse) error {
 	now := time.Now()
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\n", r.FullName)
-
-	line := func(label, value string) {
-		if value != "" {
-			fmt.Fprintf(&b, "%-13s%s\n", label+":", value)
-		}
-	}
-	line("Visibility", visibility(r.IsPrivate))
-	line("Type", r.ModelType)
-	line("Use case", deref(r.UseCase))
-	line("Tags", strings.Join(r.Tags, ", "))
-	line("Created", text.RelativeTime(r.CreatedAt, now))
-	line("Updated", text.RelativeTime(r.UpdatedAt, now))
-
-	if desc := deref(r.Description); desc != "" {
-		fmt.Fprintf(&b, "\n%s\n", desc)
-	}
-	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
-	return err
+	p := tableprinter.NewFields(ios)
+	p.Title(r.FullName)
+	p.Add("Visibility", visibility(r.IsPrivate))
+	p.Add("Type", r.ModelType)
+	p.Add("Use case", deref(r.UseCase))
+	p.Add("Tags", strings.Join(r.Tags, ", "))
+	p.Add("Created", text.RelativeTime(r.CreatedAt, now))
+	p.Add("Updated", text.RelativeTime(r.UpdatedAt, now))
+	p.Paragraph(deref(r.Description))
+	return p.Render()
 }
 
 // printRepoTSV renders the machine contract: one "key<TAB>value" line per

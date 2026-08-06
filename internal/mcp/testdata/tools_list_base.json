@@ -1,0 +1,3706 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Create a repository in the account behind the token — pass NAME alone, never ACCOUNT/NAME. model_type fixes what the repository will accept and cannot be changed later: only an llm repository accepts import_model.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "Short description of the repository.",
+          "type": "string"
+        },
+        "model_type": {
+          "description": "What the repository accepts, fixed at creation; omit for general. Only llm repositories accept import_model.",
+          "enum": [
+            "general",
+            "llm"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Repository name WITHOUT an account prefix; it is created in the account behind the token.",
+          "type": "string"
+        },
+        "private": {
+          "description": "Create the repository private; omit for public.",
+          "type": "boolean"
+        },
+        "tags": {
+          "description": "Tags describing the repository.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "use_case": {
+          "description": "Primary use case of the models this repository will hold.",
+          "enum": [
+            "vision",
+            "nlp",
+            "llm",
+            "speech",
+            "other"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "create_repo",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "Public shape of a repository. Thin on purpose: internal fields\n(readme, embedding, metadata, ids, ...) must never leak here.",
+      "properties": {
+        "account": {
+          "title": "Account",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "full_name": {
+          "title": "Full Name",
+          "type": "string"
+        },
+        "is_private": {
+          "title": "Is Private",
+          "type": "boolean"
+        },
+        "model_type": {
+          "title": "Model Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "use_case": {
+          "title": "Use Case",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account",
+        "name",
+        "full_name",
+        "is_private",
+        "model_type",
+        "tags",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "RepoResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Permanently delete a repository and every model in it; this cannot be undone and is restricted to the repository owner. Ask the user for explicit consent first, then repeat the exact ACCOUNT/NAME in 'confirm' — without it nothing is deleted.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "description": "Repeat the repo argument exactly to confirm the deletion. Only send it after the user has explicitly consented to deleting this repository.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository to delete, in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "name": "delete_repo",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Synthesized by delete_repo: the API acknowledges the deletion with 204 and no body.",
+      "properties": {
+        "deleted": {
+          "const": true,
+          "type": "boolean"
+        },
+        "repo": {
+          "description": "The deleted repository, as ACCOUNT/NAME.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "deleted",
+        "repo"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Report the account's standing as the composite object {\"usage\": …, \"quotas\": …, \"plan\": …}: current billing-period counters, those counters against the plan limits, and the effective plan tier. 'include' narrows it to the sections you need — the returned object then carries only those keys. Check quotas before an upload or conversion: each counter's 'remaining' is what enforcement actually permits right now.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include": {
+          "description": "Sections to fetch: usage, quotas, plan. Omit for all three.",
+          "items": {
+            "enum": [
+              "usage",
+              "quotas",
+              "plan"
+            ],
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_account_info",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "get_account_info envelope. Each section is present exactly when requested via include; an omitted include returns all three.",
+      "properties": {
+        "plan": {
+          "description": "The account's effective billing plan identity.",
+          "properties": {
+            "is_trial": {
+              "title": "Is Trial",
+              "type": "boolean"
+            },
+            "plan": {
+              "enum": [
+                "free",
+                "lite",
+                "pro",
+                "pro_plus",
+                "enterprise"
+              ],
+              "title": "Plan",
+              "type": "string"
+            },
+            "trial_ends_at": {
+              "format": "date-time",
+              "title": "Trial Ends At",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "plan",
+            "is_trial"
+          ],
+          "title": "BillingPlanResponse",
+          "type": "object"
+        },
+        "quotas": {
+          "properties": {
+            "active_devices": {
+              "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+              "properties": {
+                "limit": {
+                  "title": "Limit",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "remaining": {
+                  "title": "Remaining",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "used": {
+                  "title": "Used",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "used"
+              ],
+              "title": "QuotaItem",
+              "type": "object"
+            },
+            "bandwidth": {
+              "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+              "properties": {
+                "limit": {
+                  "title": "Limit",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "remaining": {
+                  "title": "Remaining",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "used": {
+                  "title": "Used",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "used"
+              ],
+              "title": "QuotaItem",
+              "type": "object"
+            },
+            "model_uploads": {
+              "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+              "properties": {
+                "limit": {
+                  "title": "Limit",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "remaining": {
+                  "title": "Remaining",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "used": {
+                  "title": "Used",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "used"
+              ],
+              "title": "QuotaItem",
+              "type": "object"
+            },
+            "prompts": {
+              "description": "`used` this month vs the plan `limit`, plus enforcement-accurate\n`remaining`.\n\n`limit: null` = unlimited (no plan cap, or the account bypasses quota\nlimits); `remaining: null` = unlimited. `remaining` is what the\nenforcement path would allow right now (spike headroom included, floored\nat 0), so `remaining > 0` — not `limit - used` — is the truthful \"can I\ndo this\" check.",
+              "properties": {
+                "limit": {
+                  "title": "Limit",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "remaining": {
+                  "title": "Remaining",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "used": {
+                  "title": "Used",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "used"
+              ],
+              "title": "QuotaItem",
+              "type": "object"
+            }
+          },
+          "required": [
+            "bandwidth",
+            "model_uploads",
+            "active_devices",
+            "prompts"
+          ],
+          "title": "UsageQuotasResponse",
+          "type": "object"
+        },
+        "usage": {
+          "description": "Current-month usage totals for the PAT's account.\n\n`bandwidth` is bytes; the other counters are counts. The window is the\ncurrent billing month (an account-level usage reset inside the month\nmoves the window start to the reset time).",
+          "properties": {
+            "active_devices": {
+              "title": "Active Devices",
+              "type": "integer"
+            },
+            "bandwidth": {
+              "title": "Bandwidth",
+              "type": "integer"
+            },
+            "model_uploads": {
+              "title": "Model Uploads",
+              "type": "integer"
+            },
+            "prompts": {
+              "title": "Prompts",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "bandwidth",
+            "model_uploads",
+            "active_devices",
+            "prompts"
+          ],
+          "title": "UsageResponse",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read a model's conversion status: state (converting, optimizing, ready, or failed), pipeline stage, download readiness, and a failure code when processing failed. Returns immediately by default; wait_seconds polls with backoff and still returns the latest status when that budget runs out, so prefer short waits and call again rather than blocking on one long request.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "model_key": {
+          "description": "Opaque model key from list_models.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        },
+        "wait_seconds": {
+          "description": "Seconds to poll for a terminal state, 0-120. 0 reads the status once and returns.",
+          "maximum": 120,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "repo",
+        "model_key"
+      ],
+      "type": "object"
+    },
+    "name": "get_conversion_status",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "Public conversion status of a model (the CLI `--wait` poll target).\n\n`state` is a STABLE public enum (lowercase snake) mapped from the\ninternal model status; `failure_code` is always a sanitized stable code,\nnever raw pipeline exception text.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "download_ready": {
+          "title": "Download Ready",
+          "type": "boolean"
+        },
+        "failure_code": {
+          "title": "Failure Code",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progress": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Progress",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "retry_after": {
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Retry After",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stage": {
+          "enum": [
+            "convert",
+            "benchmark",
+            null
+          ],
+          "title": "Stage",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "converting",
+            "optimizing",
+            "ready",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "terminal": {
+          "title": "Terminal",
+          "type": "boolean"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "terminal",
+        "download_ready",
+        "created_at",
+        "updated_at",
+        "failure_code",
+        "stage",
+        "progress",
+        "retry_after"
+      ],
+      "title": "ModelStatusResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Answer deployment questions in one of two modes. Called with no arguments it returns the catalog: every supported SDK language, every inference mode, and the defaults. Called with repo and model_key it returns that model version's deployment guide — SDK, install steps, and inference code — optionally narrowed by language and inference_mode. Guides carry the literal YOUR_PERSONAL_KEY placeholder; no real credential is ever emitted, so tell the user to substitute their own key.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "inference_mode": {
+          "description": "Inference mode for the guide; omit for the platform default.",
+          "enum": [
+            "auto",
+            "speed",
+            "accuracy"
+          ],
+          "type": "string"
+        },
+        "language": {
+          "description": "SDK language for the guide; omit for the platform default.",
+          "enum": [
+            "android-kotlin",
+            "android-java",
+            "ios-swift",
+            "flutter"
+          ],
+          "type": "string"
+        },
+        "model_key": {
+          "description": "Opaque model key from list_models. Omit to list the supported deployment options instead of a guide.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny). Required with model_key.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_deployment_info",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "properties": {
+            "default_inference_mode": {
+              "enum": [
+                "auto",
+                "speed",
+                "accuracy"
+              ],
+              "title": "Default Inference Mode",
+              "type": "string"
+            },
+            "default_language": {
+              "enum": [
+                "android-kotlin",
+                "android-java",
+                "ios-swift",
+                "flutter"
+              ],
+              "title": "Default Language",
+              "type": "string"
+            },
+            "guide_version": {
+              "title": "Guide Version",
+              "type": "integer"
+            },
+            "inference_modes": {
+              "items": {
+                "properties": {
+                  "description": {
+                    "title": "Description",
+                    "type": "string"
+                  },
+                  "id": {
+                    "enum": [
+                      "auto",
+                      "speed",
+                      "accuracy"
+                    ],
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "label": {
+                    "title": "Label",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "description"
+                ],
+                "title": "DeploymentInferenceModeOption",
+                "type": "object"
+              },
+              "title": "Inference Modes",
+              "type": "array"
+            },
+            "languages": {
+              "items": {
+                "properties": {
+                  "code_language": {
+                    "title": "Code Language",
+                    "type": "string"
+                  },
+                  "id": {
+                    "enum": [
+                      "android-kotlin",
+                      "android-java",
+                      "ios-swift",
+                      "flutter"
+                    ],
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "label": {
+                    "title": "Label",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "code_language"
+                ],
+                "title": "DeploymentLanguageOption",
+                "type": "object"
+              },
+              "title": "Languages",
+              "type": "array"
+            }
+          },
+          "required": [
+            "guide_version",
+            "default_language",
+            "default_inference_mode",
+            "languages",
+            "inference_modes"
+          ],
+          "title": "DeploymentOptionsResponse",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "credential_placeholder": {
+              "title": "Credential Placeholder",
+              "type": "string"
+            },
+            "guide_version": {
+              "title": "Guide Version",
+              "type": "integer"
+            },
+            "inference_mode": {
+              "enum": [
+                "auto",
+                "speed",
+                "accuracy"
+              ],
+              "title": "Inference Mode",
+              "type": "string"
+            },
+            "language": {
+              "enum": [
+                "android-kotlin",
+                "android-java",
+                "ios-swift",
+                "flutter"
+              ],
+              "title": "Language",
+              "type": "string"
+            },
+            "model": {
+              "properties": {
+                "download_ready": {
+                  "title": "Download Ready",
+                  "type": "boolean"
+                },
+                "key": {
+                  "title": "Key",
+                  "type": "string"
+                },
+                "repository": {
+                  "title": "Repository",
+                  "type": "string"
+                },
+                "state": {
+                  "enum": [
+                    "converting",
+                    "optimizing",
+                    "ready",
+                    "failed"
+                  ],
+                  "title": "State",
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "general",
+                    "llm"
+                  ],
+                  "title": "Type",
+                  "type": "string"
+                },
+                "version": {
+                  "title": "Version",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "repository",
+                "key",
+                "version",
+                "type",
+                "state",
+                "download_ready"
+              ],
+              "title": "DeploymentGuideModel",
+              "type": "object"
+            },
+            "sdk": {
+              "properties": {
+                "name": {
+                  "title": "Name",
+                  "type": "string"
+                },
+                "version": {
+                  "title": "Version",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "version"
+              ],
+              "title": "DeploymentGuideSDK",
+              "type": "object"
+            },
+            "steps": {
+              "items": {
+                "properties": {
+                  "code": {
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "code_language": {
+                    "title": "Code Language",
+                    "type": "string"
+                  },
+                  "title": {
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "code_language",
+                  "code"
+                ],
+                "title": "DeploymentGuideStep",
+                "type": "object"
+              },
+              "title": "Steps",
+              "type": "array"
+            }
+          },
+          "required": [
+            "guide_version",
+            "language",
+            "inference_mode",
+            "model",
+            "sdk",
+            "credential_placeholder",
+            "steps"
+          ],
+          "title": "DeploymentGuideResponse",
+          "type": "object"
+        }
+      ],
+      "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key).",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Show one public library model: full name, provider, use-case task, model type, tags, description, and the complete readme. Take the ACCOUNT/NAME coordinate from search_library, then list its converted model keys with list_models.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "library_model": {
+          "description": "Library model in ACCOUNT/NAME form — the full_name from search_library (example: zetic/whisper-tiny).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "library_model"
+      ],
+      "type": "object"
+    },
+    "name": "get_library_model",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "The list item plus the repo's readme (public content).",
+      "properties": {
+        "account": {
+          "title": "Account",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "full_name": {
+          "title": "Full Name",
+          "type": "string"
+        },
+        "model_type": {
+          "title": "Model Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "description": "The provider (company) that published a library model.",
+              "properties": {
+                "logo_url": {
+                  "title": "Logo Url",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "title": "Name",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "title": "LibraryProviderRef",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "readme": {
+          "title": "Readme",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "use_case": {
+          "title": "Use Case",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account",
+        "name",
+        "full_name",
+        "tags",
+        "model_type",
+        "created_at"
+      ],
+      "title": "LibraryModelDetailResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Show one model: version, type, state, default flag, source, terminal and download-ready flags, failure code, and timestamps. With include_targets the result is instead the composite object {\"model\": <model>, \"targets\": <target list>}, which adds the converted target artifacts and their opaque target_ids in a single call.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_targets": {
+          "description": "Also fetch the model's converted targets and return them alongside the model.",
+          "type": "boolean"
+        },
+        "model_key": {
+          "description": "Opaque model key from list_models.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "model_key"
+      ],
+      "type": "object"
+    },
+    "name": "get_model",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "description": "ModelSummary plus the status endpoint's terminal/download fields and\nthe (lowercase) source type — still NO job args, URIs or HF fields.",
+          "properties": {
+            "created_at": {
+              "format": "date-time",
+              "title": "Created At",
+              "type": "string"
+            },
+            "download_ready": {
+              "title": "Download Ready",
+              "type": "boolean"
+            },
+            "failure_code": {
+              "title": "Failure Code",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "is_default": {
+              "title": "Is Default",
+              "type": "boolean"
+            },
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "source_type": {
+              "title": "Source Type",
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "converting",
+                "optimizing",
+                "ready",
+                "failed"
+              ],
+              "title": "State",
+              "type": "string"
+            },
+            "terminal": {
+              "title": "Terminal",
+              "type": "boolean"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "date-time",
+              "title": "Updated At",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "version",
+            "type",
+            "state",
+            "is_default",
+            "created_at",
+            "updated_at",
+            "terminal",
+            "download_ready",
+            "source_type"
+          ],
+          "title": "ModelDetailResponse",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "get_model envelope returned when include_targets is true.",
+          "properties": {
+            "model": {
+              "description": "ModelSummary plus the status endpoint's terminal/download fields and\nthe (lowercase) source type — still NO job args, URIs or HF fields.",
+              "properties": {
+                "created_at": {
+                  "format": "date-time",
+                  "title": "Created At",
+                  "type": "string"
+                },
+                "download_ready": {
+                  "title": "Download Ready",
+                  "type": "boolean"
+                },
+                "failure_code": {
+                  "title": "Failure Code",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_default": {
+                  "title": "Is Default",
+                  "type": "boolean"
+                },
+                "key": {
+                  "title": "Key",
+                  "type": "string"
+                },
+                "source_type": {
+                  "title": "Source Type",
+                  "type": "string"
+                },
+                "state": {
+                  "enum": [
+                    "converting",
+                    "optimizing",
+                    "ready",
+                    "failed"
+                  ],
+                  "title": "State",
+                  "type": "string"
+                },
+                "terminal": {
+                  "title": "Terminal",
+                  "type": "boolean"
+                },
+                "type": {
+                  "title": "Type",
+                  "type": "string"
+                },
+                "updated_at": {
+                  "format": "date-time",
+                  "title": "Updated At",
+                  "type": "string"
+                },
+                "version": {
+                  "title": "Version",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "key",
+                "version",
+                "type",
+                "state",
+                "is_default",
+                "created_at",
+                "updated_at",
+                "terminal",
+                "download_ready",
+                "source_type"
+              ],
+              "title": "ModelDetailResponse",
+              "type": "object"
+            },
+            "targets": {
+              "properties": {
+                "count": {
+                  "title": "Count",
+                  "type": "integer"
+                },
+                "results": {
+                  "items": {
+                    "description": "One converted target artifact of a model.\n\n`target_id` is OPAQUE and stable — clients must not parse it; pass it\nback to the download endpoints to select this artifact.\n\nThe runtime engine that produced the artifact is deliberately NOT\npublished. Choose between targets on the properties that describe the\nartifact to its consumer: `precision` for general targets, `quant_type`\nfor LLM targets, and `compatibility` for the device it was built for —\nincluding `compatibility.ap_types`, the accelerator classes (cpu/gpu/npu)\nit can run on.\n\n`compatibility` is null when the row carries no device compatibility\ninformation: LLM targets and the all-null sentinel. For those rows no\naccelerator information is published at all, and two artifacts alike in\n`precision` and `quant_type` are distinguishable only by `target_id` and\n`download_size`.",
+                    "properties": {
+                      "compatibility": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "ap_types": {
+                                "items": {
+                                  "enum": [
+                                    "cpu",
+                                    "gpu",
+                                    "npu"
+                                  ],
+                                  "type": "string"
+                                },
+                                "title": "Ap Types",
+                                "type": "array"
+                              },
+                              "os": {
+                                "title": "Os",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "soc_manufacturer": {
+                                "title": "Soc Manufacturer",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "soc_model": {
+                                "title": "Soc Model",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "ap_types"
+                            ],
+                            "title": "ModelTargetCompatibility",
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                      },
+                      "download_size": {
+                        "title": "Download Size",
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "enum": [
+                          "general",
+                          "llm"
+                        ],
+                        "title": "Kind",
+                        "type": "string"
+                      },
+                      "precision": {
+                        "enum": [
+                          "fp32",
+                          "fp16",
+                          "int8",
+                          null
+                        ],
+                        "title": "Precision",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "quant_type": {
+                        "title": "Quant Type",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "target_id": {
+                        "title": "Target Id",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "target_id",
+                      "kind",
+                      "download_size",
+                      "created_at"
+                    ],
+                    "title": "ModelTargetItem",
+                    "type": "object"
+                  },
+                  "title": "Results",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "results",
+                "count"
+              ],
+              "title": "ListModelTargetsResponse",
+              "type": "object"
+            }
+          },
+          "required": [
+            "model",
+            "targets"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope.",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one of a model's on-device benchmark reports. report_type selects the shape: 'general' is per-device latency, SNR, and memory measurements; 'llm' is tokens per second per quantization plus accuracy per dataset; 'package' is a mode-by-metric summary. A model only carries the report types its model type produces, so a not-found error means that shape does not exist for it — try another report_type. Public library models can be benchmarked this way without importing them.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "model_key": {
+          "description": "Opaque model key from list_models.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        },
+        "report_type": {
+          "description": "Which report to read: general, llm, or package.",
+          "enum": [
+            "general",
+            "llm",
+            "package"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "model_key",
+        "report_type"
+      ],
+      "type": "object"
+    },
+    "name": "get_model_report",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "properties": {
+            "derivation_version": {
+              "title": "Derivation Version",
+              "type": "integer"
+            },
+            "model": {
+              "properties": {
+                "key": {
+                  "title": "Key",
+                  "type": "string"
+                },
+                "version": {
+                  "title": "Version",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "key",
+                "version"
+              ],
+              "title": "ReportModelRef",
+              "type": "object"
+            },
+            "records": {
+              "items": {
+                "description": "`variant` is an OPAQUE token distinguishing the artifacts measured on\none device — clients must not parse it. `run` is the opaque 0-based\nsource-row ordinal within the record's (device, variant, ap_type) group\n(derivation rule D9): records sharing (device, variant, ap_type, run)\nform one run's metric set, so `variant` is required to pair a latency\nwith the snr and memory measured in the same run.",
+                "properties": {
+                  "ap_type": {
+                    "enum": [
+                      "cpu",
+                      "gpu",
+                      "npu",
+                      null
+                    ],
+                    "title": "Ap Type",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "device": {
+                    "description": "Locked ADR-4 device identity; persisted blanks are published as null.",
+                    "properties": {
+                      "marketing_name": {
+                        "title": "Marketing Name",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "name": {
+                        "title": "Name",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "os": {
+                        "title": "Os",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "soc": {
+                        "title": "Soc",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "marketing_name",
+                      "soc",
+                      "os"
+                    ],
+                    "title": "ReportDevice",
+                    "type": "object"
+                  },
+                  "metric": {
+                    "enum": [
+                      "latency_ms",
+                      "tensor_copy_latency_ms",
+                      "snr_db",
+                      "memory_load_peak_mb",
+                      "memory_load_min_mb",
+                      "memory_inference_peak_mb",
+                      "memory_inference_min_mb"
+                    ],
+                    "title": "Metric",
+                    "type": "string"
+                  },
+                  "precision": {
+                    "enum": [
+                      "fp32",
+                      "fp16",
+                      "int8"
+                    ],
+                    "title": "Precision",
+                    "type": "string"
+                  },
+                  "run": {
+                    "title": "Run",
+                    "type": "integer"
+                  },
+                  "unit": {
+                    "enum": [
+                      "ms",
+                      "db",
+                      "mb"
+                    ],
+                    "title": "Unit",
+                    "type": "string"
+                  },
+                  "value": {
+                    "title": "Value",
+                    "type": "number"
+                  },
+                  "variant": {
+                    "title": "Variant",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "device",
+                  "ap_type",
+                  "variant",
+                  "precision",
+                  "run",
+                  "metric",
+                  "value",
+                  "unit"
+                ],
+                "title": "GeneralReportRecord",
+                "type": "object"
+              },
+              "title": "Records",
+              "type": "array"
+            },
+            "summary": {
+              "properties": {
+                "latency_ms": {
+                  "properties": {
+                    "all": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fp16": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fp32": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "int8": {
+                      "anyOf": [
+                        {
+                          "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                          "properties": {
+                            "avg": {
+                              "title": "Avg",
+                              "type": "number"
+                            },
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "median": {
+                              "title": "Median",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "median",
+                            "avg"
+                          ],
+                          "title": "ReportStats",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "fp32",
+                    "fp16",
+                    "int8",
+                    "all"
+                  ],
+                  "title": "GeneralLatencySummary",
+                  "type": "object"
+                },
+                "memory_mb": {
+                  "properties": {
+                    "all": {
+                      "anyOf": [
+                        {
+                          "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                          "properties": {
+                            "inference_max": {
+                              "title": "Inference Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "inference_min": {
+                              "title": "Inference Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_max": {
+                              "title": "Load Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_min": {
+                              "title": "Load Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "load_min",
+                            "load_max",
+                            "inference_min",
+                            "inference_max"
+                          ],
+                          "title": "ReportMemoryBounds",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fp16": {
+                      "anyOf": [
+                        {
+                          "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                          "properties": {
+                            "inference_max": {
+                              "title": "Inference Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "inference_min": {
+                              "title": "Inference Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_max": {
+                              "title": "Load Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_min": {
+                              "title": "Load Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "load_min",
+                            "load_max",
+                            "inference_min",
+                            "inference_max"
+                          ],
+                          "title": "ReportMemoryBounds",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fp32": {
+                      "anyOf": [
+                        {
+                          "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                          "properties": {
+                            "inference_max": {
+                              "title": "Inference Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "inference_min": {
+                              "title": "Inference Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_max": {
+                              "title": "Load Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_min": {
+                              "title": "Load Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "load_min",
+                            "load_max",
+                            "inference_min",
+                            "inference_max"
+                          ],
+                          "title": "ReportMemoryBounds",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "int8": {
+                      "anyOf": [
+                        {
+                          "description": "Bounds over the pooled peak+min memory values per family — exactly\nhow the dashboard's memory headline pools them.",
+                          "properties": {
+                            "inference_max": {
+                              "title": "Inference Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "inference_min": {
+                              "title": "Inference Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_max": {
+                              "title": "Load Max",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "load_min": {
+                              "title": "Load Min",
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "load_min",
+                            "load_max",
+                            "inference_min",
+                            "inference_max"
+                          ],
+                          "title": "ReportMemoryBounds",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "fp32",
+                    "fp16",
+                    "int8",
+                    "all"
+                  ],
+                  "title": "GeneralMemorySummary",
+                  "type": "object"
+                },
+                "snr_db": {
+                  "properties": {
+                    "all": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "title": "ReportMinMax",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fp16": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "title": "ReportMinMax",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fp32": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "title": "ReportMinMax",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "int8": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "max": {
+                              "title": "Max",
+                              "type": "number"
+                            },
+                            "min": {
+                              "title": "Min",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "title": "ReportMinMax",
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "fp32",
+                    "fp16",
+                    "int8",
+                    "all"
+                  ],
+                  "title": "GeneralSnrSummary",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "latency_ms",
+                "snr_db",
+                "memory_mb"
+              ],
+              "title": "GeneralReportSummary",
+              "type": "object"
+            }
+          },
+          "required": [
+            "derivation_version",
+            "model",
+            "records",
+            "summary"
+          ],
+          "title": "GeneralReportResponse",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "derivation_version": {
+              "title": "Derivation Version",
+              "type": "integer"
+            },
+            "model": {
+              "properties": {
+                "key": {
+                  "title": "Key",
+                  "type": "string"
+                },
+                "version": {
+                  "title": "Version",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "key",
+                "version"
+              ],
+              "title": "ReportModelRef",
+              "type": "object"
+            },
+            "records": {
+              "items": {
+                "description": "`device`/`ap_type` are null on server-side accuracy records;\n`dataset` is only set on accuracy_score records. `variant` is an OPAQUE\ntoken distinguishing the artifacts measured on one device. `run` is the\nopaque 0-based source-row ordinal within the record's (device, variant,\nap_type, quant_type) group (derivation rule D9).",
+                "properties": {
+                  "ap_type": {
+                    "enum": [
+                      "cpu",
+                      "gpu",
+                      "npu",
+                      null
+                    ],
+                    "title": "Ap Type",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "dataset": {
+                    "title": "Dataset",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "device": {
+                    "anyOf": [
+                      {
+                        "description": "Locked ADR-4 device identity; persisted blanks are published as null.",
+                        "properties": {
+                          "marketing_name": {
+                            "title": "Marketing Name",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "title": "Name",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "os": {
+                            "title": "Os",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "soc": {
+                            "title": "Soc",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "marketing_name",
+                          "soc",
+                          "os"
+                        ],
+                        "title": "ReportDevice",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "metric": {
+                    "enum": [
+                      "tps",
+                      "ttft_ms",
+                      "prompt_tokens",
+                      "generated_tokens",
+                      "memory_load_peak_mb",
+                      "memory_load_min_mb",
+                      "memory_inference_peak_mb",
+                      "memory_inference_min_mb",
+                      "accuracy_score",
+                      "model_size_bytes"
+                    ],
+                    "title": "Metric",
+                    "type": "string"
+                  },
+                  "quant_type": {
+                    "title": "Quant Type",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "run": {
+                    "title": "Run",
+                    "type": "integer"
+                  },
+                  "unit": {
+                    "enum": [
+                      "tokens_per_s",
+                      "ms",
+                      "count",
+                      "mb",
+                      "score",
+                      "bytes"
+                    ],
+                    "title": "Unit",
+                    "type": "string"
+                  },
+                  "value": {
+                    "title": "Value",
+                    "type": "number"
+                  },
+                  "variant": {
+                    "title": "Variant",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "device",
+                  "ap_type",
+                  "variant",
+                  "quant_type",
+                  "dataset",
+                  "run",
+                  "metric",
+                  "value",
+                  "unit"
+                ],
+                "title": "LlmReportRecord",
+                "type": "object"
+              },
+              "title": "Records",
+              "type": "array"
+            },
+            "summary": {
+              "properties": {
+                "accuracy": {
+                  "items": {
+                    "properties": {
+                      "dataset": {
+                        "title": "Dataset",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "quant_type": {
+                        "title": "Quant Type",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "score": {
+                        "title": "Score",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "quant_type",
+                      "dataset",
+                      "score"
+                    ],
+                    "title": "LlmAccuracyEntry",
+                    "type": "object"
+                  },
+                  "title": "Accuracy",
+                  "type": "array"
+                },
+                "quants": {
+                  "additionalProperties": {
+                    "properties": {
+                      "best_accuracy": {
+                        "title": "Best Accuracy",
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "best_memory_mb": {
+                        "title": "Best Memory Mb",
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "best_tps": {
+                        "title": "Best Tps",
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "best_ttft_ms": {
+                        "title": "Best Ttft Ms",
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "best_tps",
+                      "best_ttft_ms",
+                      "best_memory_mb",
+                      "best_accuracy"
+                    ],
+                    "title": "LlmQuantAggregates",
+                    "type": "object"
+                  },
+                  "title": "Quants",
+                  "type": "object"
+                }
+              },
+              "required": [
+                "quants",
+                "accuracy"
+              ],
+              "title": "LlmReportSummary",
+              "type": "object"
+            }
+          },
+          "required": [
+            "derivation_version",
+            "model",
+            "records",
+            "summary"
+          ],
+          "title": "LlmReportResponse",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "derivation_version": {
+              "title": "Derivation Version",
+              "type": "integer"
+            },
+            "model": {
+              "properties": {
+                "key": {
+                  "title": "Key",
+                  "type": "string"
+                },
+                "version": {
+                  "title": "Version",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "key",
+                "version"
+              ],
+              "title": "ReportModelRef",
+              "type": "object"
+            },
+            "records": {
+              "items": {
+                "properties": {
+                  "device": {
+                    "description": "Locked ADR-4 device identity; persisted blanks are published as null.",
+                    "properties": {
+                      "marketing_name": {
+                        "title": "Marketing Name",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "name": {
+                        "title": "Name",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "os": {
+                        "title": "Os",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "soc": {
+                        "title": "Soc",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "marketing_name",
+                      "soc",
+                      "os"
+                    ],
+                    "title": "ReportDevice",
+                    "type": "object"
+                  },
+                  "metric": {
+                    "enum": [
+                      "latency_ms",
+                      "tensor_copy_latency_ms",
+                      "snr_db",
+                      "memory_load_peak_mb",
+                      "memory_load_min_mb",
+                      "memory_inference_peak_mb",
+                      "memory_inference_min_mb",
+                      "tps",
+                      "ttft_ms",
+                      "prompt_tokens",
+                      "generated_tokens"
+                    ],
+                    "title": "Metric",
+                    "type": "string"
+                  },
+                  "run_configuration": {
+                    "description": "`configuration` is the SANITIZED producer payload (derivation rule\nP1): only pinned safe scalar config keys and per-module maps survive;\nunknown keys, nested junk and path/secret-looking strings are\ndropped. null when the producer sent none or nothing safe remains.",
+                    "properties": {
+                      "configuration": {
+                        "title": "Configuration",
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "id": {
+                        "title": "Id",
+                        "type": "integer"
+                      },
+                      "package": {
+                        "title": "Package",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "package",
+                      "id",
+                      "configuration"
+                    ],
+                    "title": "PackageRunConfiguration",
+                    "type": "object"
+                  },
+                  "unit": {
+                    "enum": [
+                      "ms",
+                      "db",
+                      "mb",
+                      "tokens_per_s",
+                      "count"
+                    ],
+                    "title": "Unit",
+                    "type": "string"
+                  },
+                  "value": {
+                    "title": "Value",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "device",
+                  "run_configuration",
+                  "metric",
+                  "value",
+                  "unit"
+                ],
+                "title": "PackageReportRecord",
+                "type": "object"
+              },
+              "title": "Records",
+              "type": "array"
+            },
+            "summary": {
+              "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
+              "properties": {
+                "auto": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "memory_inference_peak_mb": {
+                          "anyOf": [
+                            {
+                              "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                              "properties": {
+                                "avg": {
+                                  "title": "Avg",
+                                  "type": "number"
+                                },
+                                "max": {
+                                  "title": "Max",
+                                  "type": "number"
+                                },
+                                "median": {
+                                  "title": "Median",
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "title": "Min",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "median",
+                                "avg"
+                              ],
+                              "title": "ReportStats",
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "tps": {
+                          "anyOf": [
+                            {
+                              "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                              "properties": {
+                                "avg": {
+                                  "title": "Avg",
+                                  "type": "number"
+                                },
+                                "max": {
+                                  "title": "Max",
+                                  "type": "number"
+                                },
+                                "median": {
+                                  "title": "Median",
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "title": "Min",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "median",
+                                "avg"
+                              ],
+                              "title": "ReportStats",
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "ttft_ms": {
+                          "anyOf": [
+                            {
+                              "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                              "properties": {
+                                "avg": {
+                                  "title": "Avg",
+                                  "type": "number"
+                                },
+                                "max": {
+                                  "title": "Max",
+                                  "type": "number"
+                                },
+                                "median": {
+                                  "title": "Median",
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "title": "Min",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "median",
+                                "avg"
+                              ],
+                              "title": "ReportStats",
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "tps",
+                        "ttft_ms",
+                        "memory_inference_peak_mb"
+                      ],
+                      "title": "PackageModeAggregates",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "speed": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "memory_inference_peak_mb": {
+                          "anyOf": [
+                            {
+                              "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                              "properties": {
+                                "avg": {
+                                  "title": "Avg",
+                                  "type": "number"
+                                },
+                                "max": {
+                                  "title": "Max",
+                                  "type": "number"
+                                },
+                                "median": {
+                                  "title": "Median",
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "title": "Min",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "median",
+                                "avg"
+                              ],
+                              "title": "ReportStats",
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "tps": {
+                          "anyOf": [
+                            {
+                              "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                              "properties": {
+                                "avg": {
+                                  "title": "Avg",
+                                  "type": "number"
+                                },
+                                "max": {
+                                  "title": "Max",
+                                  "type": "number"
+                                },
+                                "median": {
+                                  "title": "Median",
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "title": "Min",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "median",
+                                "avg"
+                              ],
+                              "title": "ReportStats",
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "ttft_ms": {
+                          "anyOf": [
+                            {
+                              "description": "min/max/median/avg over a metric's record values; `median` is the\nupper median (the dashboard's rule).",
+                              "properties": {
+                                "avg": {
+                                  "title": "Avg",
+                                  "type": "number"
+                                },
+                                "max": {
+                                  "title": "Max",
+                                  "type": "number"
+                                },
+                                "median": {
+                                  "title": "Median",
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "title": "Min",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "median",
+                                "avg"
+                              ],
+                              "title": "ReportStats",
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "tps",
+                        "ttft_ms",
+                        "memory_inference_peak_mb"
+                      ],
+                      "title": "PackageModeAggregates",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "auto",
+                "speed"
+              ],
+              "title": "PackageReportSummary",
+              "type": "object"
+            }
+          },
+          "required": [
+            "derivation_version",
+            "model",
+            "records",
+            "summary"
+          ],
+          "title": "PackageReportResponse",
+          "type": "object"
+        }
+      ],
+      "description": "One of the three report shapes, selected by report_type: general, llm, or package.",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Show one repository: visibility, model type, use case, tags, description, and timestamps. The model type decides what may be uploaded or imported into it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "name": "get_repo",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "Public shape of a repository. Thin on purpose: internal fields\n(readme, embedding, metadata, ids, ...) must never leak here.",
+      "properties": {
+        "account": {
+          "title": "Account",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "full_name": {
+          "title": "Full Name",
+          "type": "string"
+        },
+        "is_private": {
+          "title": "Is Private",
+          "type": "boolean"
+        },
+        "model_type": {
+          "title": "Model Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "use_case": {
+          "title": "Use Case",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account",
+        "name",
+        "full_name",
+        "is_private",
+        "model_type",
+        "tags",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "RepoResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "description": "Import a model from a public HuggingFace repository into an llm-type repository (other repositories are rejected). Returns immediately with the new model key while conversion continues in the background — follow with get_conversion_status rather than assuming the model is ready. Each call starts a new import; the revision is always the HuggingFace repository's current default-branch head.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "hf_repo": {
+          "description": "Public HuggingFace repository to import, as OWNER/NAME (example: meta-llama/Llama-3.2-1B); hf:// and URL prefixes are accepted.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Target repository in ACCOUNT/NAME form; its model type must be llm.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "hf_repo"
+      ],
+      "type": "object"
+    },
+    "name": "import_model",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "converting",
+            "optimizing",
+            "ready",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "version",
+        "state"
+      ],
+      "title": "ImportModelResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List a repository's models, newest first, with each model's key, version, type, state, and whether it is the repository default. Model keys are opaque — always take one from this listing instead of constructing it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "description": "Page size, 1-100; omit for 30.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "description": "Number of results to skip before this page.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "name": "list_models",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "results": {
+          "items": {
+            "description": "Public shape of a model. `key` is the model's globally-unique tag.",
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "is_default": {
+                "title": "Is Default",
+                "type": "boolean"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "converting",
+                  "optimizing",
+                  "ready",
+                  "failed"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "type": {
+                "title": "Type",
+                "type": "string"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              },
+              "version": {
+                "title": "Version",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "key",
+              "version",
+              "type",
+              "state",
+              "is_default",
+              "created_at",
+              "updated_at"
+            ],
+            "title": "ModelSummary",
+            "type": "object"
+          },
+          "title": "Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "results",
+        "count"
+      ],
+      "title": "PagedModelSummary",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the repositories this token can see, newest first. Start here to discover the ACCOUNT/NAME identifier the model tools take; 'search' filters server-side, and 'offset' walks further pages.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "description": "Page size, 1-100; omit for 30.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "description": "Number of results to skip before this page.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "search": {
+          "description": "Filter repositories by name, description, or tags.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_repos",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "results": {
+          "items": {
+            "description": "Public shape of a repository. Thin on purpose: internal fields\n(readme, embedding, metadata, ids, ...) must never leak here.",
+            "properties": {
+              "account": {
+                "title": "Account",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "description": {
+                "title": "Description",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "full_name": {
+                "title": "Full Name",
+                "type": "string"
+              },
+              "is_private": {
+                "title": "Is Private",
+                "type": "boolean"
+              },
+              "model_type": {
+                "title": "Model Type",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "tags": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Tags",
+                "type": "array"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              },
+              "use_case": {
+                "title": "Use Case",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "account",
+              "name",
+              "full_name",
+              "is_private",
+              "model_type",
+              "tags",
+              "created_at",
+              "updated_at"
+            ],
+            "title": "RepoResponse",
+            "type": "object"
+          },
+          "title": "Results",
+          "type": "array"
+        }
+      },
+      "required": [
+        "results",
+        "count"
+      ],
+      "title": "PagedRepoResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Authorize downloading one converted target's artifacts. This is BILLABLE: the target's size counts against the account's bandwidth quota, also for public models owned by others — ask the user for explicit consent, then pass confirm: true. The result lists the artifacts with every signed url replaced by \"<redacted>\"; include_urls: true returns the real short-lived URLs into the transcript instead. Every confirmed call is charged separately, so if a call fails ambiguously (timeout or connection error) check with the user before retrying. When the user is on the machine that should hold the files, tell them to run 'melange model download' instead: it verifies checksums and writes the files for them. Take model_key from list_models and target_id from get_model with include_targets.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "description": "Set to true to confirm this billable download. Only send it after the user has explicitly consented to spending bandwidth quota.",
+          "type": "boolean"
+        },
+        "include_urls": {
+          "description": "Return the real signed artifact URLs instead of \"<redacted>\". They are short-lived download credentials and will appear in the transcript.",
+          "type": "boolean"
+        },
+        "model_key": {
+          "description": "Opaque model key from list_models.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        },
+        "target_id": {
+          "description": "Opaque target id from get_model with include_targets.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "model_key",
+        "target_id"
+      ],
+      "type": "object"
+    },
+    "name": "request_model_download",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifacts": {
+          "items": {
+            "description": "One downloadable file of an authorized target.\n\n`url` is a time-limited signed GET URL (valid until `expires_at` of the\nenclosing authorization). `size` is per-file and only known for\nsingle-file targets (the stored `download_size` is the aggregate);\n`checksum` is null when the pipeline recorded none for the file.",
+            "properties": {
+              "checksum": {
+                "title": "Checksum",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "size": {
+                "title": "Size",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "url": {
+                "title": "Url",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "url"
+            ],
+            "title": "DownloadArtifact",
+            "type": "object"
+          },
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "authorization_id": {
+          "title": "Authorization Id",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "authorization_id",
+        "expires_at",
+        "artifacts"
+      ],
+      "title": "DownloadAuthorizationResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Search the public model library: models already converted and benchmarked for on-device use. 'search' matches name or full_name ignoring case and separators, 'task' filters by use case, and 'provider' takes an exact provider name. With include_providers the result is instead the composite object {\"models\": <page>, \"providers\": <provider list>}, which is how to learn the exact provider names the filter expects. Each entry's full_name is a repository coordinate usable directly with get_model_report and get_deployment_info — never import a library model just to read its public benchmarks.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_providers": {
+          "description": "Also fetch the provider list and return it alongside the models.",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "Page size, 1-100; omit for 30.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "description": "Number of results to skip before this page.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "provider": {
+          "description": "Exact provider (company) name; use include_providers to discover the valid names.",
+          "type": "string"
+        },
+        "search": {
+          "description": "Case- and separator-insensitive substring match on name or full_name.",
+          "type": "string"
+        },
+        "task": {
+          "description": "Use-case filter; a model matching ANY listed task is included.",
+          "items": {
+            "enum": [
+              "vision",
+              "llm",
+              "nlp",
+              "speech",
+              "other"
+            ],
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "search_library",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "properties": {
+            "count": {
+              "title": "Count",
+              "type": "integer"
+            },
+            "results": {
+              "items": {
+                "description": "One public library model (a public repo, browsed cross-account).",
+                "properties": {
+                  "account": {
+                    "title": "Account",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "description": {
+                    "title": "Description",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "full_name": {
+                    "title": "Full Name",
+                    "type": "string"
+                  },
+                  "model_type": {
+                    "title": "Model Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "anyOf": [
+                      {
+                        "description": "The provider (company) that published a library model.",
+                        "properties": {
+                          "logo_url": {
+                            "title": "Logo Url",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "title": "Name",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "title": "LibraryProviderRef",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tags": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Tags",
+                    "type": "array"
+                  },
+                  "use_case": {
+                    "title": "Use Case",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "account",
+                  "name",
+                  "full_name",
+                  "tags",
+                  "model_type",
+                  "created_at"
+                ],
+                "title": "LibraryModelItem",
+                "type": "object"
+              },
+              "title": "Results",
+              "type": "array"
+            }
+          },
+          "required": [
+            "results",
+            "count"
+          ],
+          "title": "PagedLibraryModelItem",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "search_library envelope returned when include_providers is true.",
+          "properties": {
+            "models": {
+              "properties": {
+                "count": {
+                  "title": "Count",
+                  "type": "integer"
+                },
+                "results": {
+                  "items": {
+                    "description": "One public library model (a public repo, browsed cross-account).",
+                    "properties": {
+                      "account": {
+                        "title": "Account",
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                      },
+                      "description": {
+                        "title": "Description",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "full_name": {
+                        "title": "Full Name",
+                        "type": "string"
+                      },
+                      "model_type": {
+                        "title": "Model Type",
+                        "type": "string"
+                      },
+                      "name": {
+                        "title": "Name",
+                        "type": "string"
+                      },
+                      "provider": {
+                        "anyOf": [
+                          {
+                            "description": "The provider (company) that published a library model.",
+                            "properties": {
+                              "logo_url": {
+                                "title": "Logo Url",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "name": {
+                                "title": "Name",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "title": "LibraryProviderRef",
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "tags": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "title": "Tags",
+                        "type": "array"
+                      },
+                      "use_case": {
+                        "title": "Use Case",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "account",
+                      "name",
+                      "full_name",
+                      "tags",
+                      "model_type",
+                      "created_at"
+                    ],
+                    "title": "LibraryModelItem",
+                    "type": "object"
+                  },
+                  "title": "Results",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "results",
+                "count"
+              ],
+              "title": "PagedLibraryModelItem",
+              "type": "object"
+            },
+            "providers": {
+              "properties": {
+                "count": {
+                  "title": "Count",
+                  "type": "integer"
+                },
+                "results": {
+                  "items": {
+                    "properties": {
+                      "logo_url": {
+                        "title": "Logo Url",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "model_count": {
+                        "title": "Model Count",
+                        "type": "integer"
+                      },
+                      "name": {
+                        "title": "Name",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "model_count"
+                    ],
+                    "title": "LibraryProviderItem",
+                    "type": "object"
+                  },
+                  "title": "Results",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "results",
+                "count"
+              ],
+              "title": "ListLibraryProvidersResponse",
+              "type": "object"
+            }
+          },
+          "required": [
+            "models",
+            "providers"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope.",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Make one model the repository's default. Exactly one model per repository is the default, so this also clears the previous one; repeating the call returns the same result. Take model_key from list_models.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "model_key": {
+          "description": "Opaque model key from list_models.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "model_key"
+      ],
+      "type": "object"
+    },
+    "name": "set_default_model",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "Public shape of a model. `key` is the model's globally-unique tag.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "is_default": {
+          "title": "Is Default",
+          "type": "boolean"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "converting",
+            "optimizing",
+            "ready",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "version",
+        "type",
+        "state",
+        "is_default",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "ModelSummary",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Update a repository's metadata. Only the arguments you pass change: tags replace the entire existing tag set, an empty description clears it, and changing visibility is restricted to the repository owner.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "Replacement description; an empty string clears it. Omit to leave it unchanged.",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "private": {
+          "description": "New visibility: true makes the repository private, false public. Owner only. Omit to leave it unchanged.",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "repo": {
+          "description": "Repository in ACCOUNT/NAME form (example: zetic/whisper-tiny).",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Replacement tag set — it replaces every existing tag, so list every tag the repository should end up with. Omit to leave them unchanged.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "use_case": {
+          "description": "Replacement use case. Omit to leave it unchanged.",
+          "enum": [
+            "vision",
+            "nlp",
+            "llm",
+            "speech",
+            "other"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "name": "update_repo",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "Public shape of a repository. Thin on purpose: internal fields\n(readme, embedding, metadata, ids, ...) must never leak here.",
+      "properties": {
+        "account": {
+          "title": "Account",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "full_name": {
+          "title": "Full Name",
+          "type": "string"
+        },
+        "is_private": {
+          "title": "Is Private",
+          "type": "boolean"
+        },
+        "model_type": {
+          "title": "Model Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "use_case": {
+          "title": "Use Case",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account",
+        "name",
+        "full_name",
+        "is_private",
+        "model_type",
+        "tags",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "RepoResponse",
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Verify credentials and report the identity behind them: user, account, and token name/scopes. Call this first to confirm authentication before using the other melange tools.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "whoami",
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "account": {
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "type"
+          ],
+          "title": "MeAccount",
+          "type": "object"
+        },
+        "token": {
+          "properties": {
+            "expires_at": {
+              "format": "date-time",
+              "title": "Expires At",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_used_at": {
+              "format": "date-time",
+              "title": "Last Used At",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "scopes": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Scopes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "name",
+            "scopes"
+          ],
+          "title": "MeToken",
+          "type": "object"
+        },
+        "user": {
+          "properties": {
+            "email": {
+              "title": "Email",
+              "type": "string"
+            },
+            "nickname": {
+              "title": "Nickname",
+              "type": "string"
+            }
+          },
+          "required": [
+            "email",
+            "nickname"
+          ],
+          "title": "MeUser",
+          "type": "object"
+        }
+      },
+      "required": [
+        "user",
+        "account",
+        "token"
+      ],
+      "title": "MeResponse",
+      "type": "object"
+    }
+  }
+]

@@ -9,14 +9,27 @@ composite and `model download` redacts signed artifact URLs (credentials).
 Full docs: docs/reference/melange.md; live topics: `melange help environment`,
 `melange help exit-codes`, `melange help formatting`.
 
-Global flags: --no-color (disable color), --no-input (disable prompts).
+Global flags: --no-color (disable color), --no-input (disable prompts),
+--format auto|table|tsv (human output layout; default auto = table on a
+terminal, tab-separated otherwise. Agents should leave it at auto and read
+--json; --format table is for humans piping into a pager).
 Structured-output flags on data commands: --json, --jq EXPR (implies --json;
 re-marshals with sorted keys), --template TMPL (Go template; tablerow/timeago/
-json functions). Non-TTY human output is headerless tab-separated values;
+json functions). Non-TTY human output is headerless tab-separated values
+(no rule, no row count);
 backslash, tab, carriage return, and newline inside cells are escaped as
 \\, \t, \r, and \n.
 List envelope: {"results": [...], "count": N}; --paginate (alias --all)
 merges all pages into one envelope.
+
+Identifiers (not interchangeable):
+  ACCOUNT/REPO  a Melange repository address       <- melange repo list
+  MODEL_KEY     one converted model version        <- melange model list -R ACCOUNT/REPO
+  TARGET_ID     one downloadable artifact, opaque  <- melange model targets MODEL_KEY -R ACCOUNT/REPO
+                (tm_/ltm_ prefixed; never parse it)
+ACCOUNT/NAME addresses a public library model (melange library view), which is
+not a MODEL_KEY. Never substitute a repository or display name for MODEL_KEY or
+TARGET_ID.
 
 ## Agent presentation contract
 
@@ -55,6 +68,17 @@ templates these rules refer to.
   Never divide values measured on different accelerators. "Deployability" is a
   web-UI widget, not an API field — say it is unavailable. Device counts reflect
   the account's entitlement, not the model.
+- MCP vs CLI: when the melange MCP server is connected, prefer its tools over
+  shelling out for anything in its catalog (see "melange mcp" below) — same API,
+  typed arguments, and explicit confirm gates. Shell out to the CLI when the
+  operation has no tool (auth login/status/token/logout, model download to disk,
+  bucketed .pt2 or --input-manifest uploads, upload-session housekeeping via
+  --sessions/--cancel, raw /v1 access via melange api, --paginate merging), or
+  when the server is connected over HTTP and the work needs the user's local
+  files — upload_model is stdio-only and request_model_download never writes
+  files. The non-blocking rule above carries over: import/upload via tools
+  returns before conversion finishes; poll get_conversion_status with short
+  wait_seconds instead of one long blocking call.
 
 ## Exit codes
 
@@ -193,6 +217,9 @@ melange model view MODEL_KEY -R ACCOUNT/REPO [--json|--jq|--template]
 
 melange model targets MODEL_KEY -R ACCOUNT/REPO [--json|--jq]
   List a model's converted targets. TTY table; non-TTY TSV; --json passthrough.
+  Columns/fields: target_id, kind, precision, quant_type, compatibility, size.
+  The runtime engine is NOT published (no `target` field as of v0.3.0): select a
+  target on precision, quant_type and compatibility.ap_types (cpu/gpu/npu).
   Example: melange model targets "$model_key" -R acme/whisper --json
 
 melange model set-default MODEL_KEY -R ACCOUNT/REPO [--json]
@@ -255,7 +282,10 @@ melange report view MODEL_KEY -R ACCOUNT/REPO [--type general|llm|package]
   a per-precision summary block follows. LLM: rows=devices, columns=quant_types,
   cells=tps, plus a per-dataset accuracy section. Package: a mode x metric table.
   Non-TTY: one raw record per line (flat measurement fields) — scripts get the
-  measurements, not the derived table. --json follows the raw response-byte
+  measurements, not the derived table. Records carry `variant`, an OPAQUE
+  per-response token that replaced the engine name in v0.3.0 — never parse it,
+  and never present it as an engine. It exists so records can be grouped back
+  into runs: one run = same (device, variant, ap_type[, quant_type], run). --json follows the raw response-byte
   contract described above.
   Example: melange report view "$model_key" -R acme/whisper --json \
     --jq '[.records[]|select(.ap_type=="npu" and .metric=="latency_ms")]|min_by(.value)'
@@ -334,14 +364,120 @@ stdout (also on non-2xx, with a one-line summary on stderr).
 
 melange api <path> [-X METHOD] [-f key=value] [-F key=value] [-H 'Name: v']
     [--input FILE|-] [-q JQ] [-t TEMPLATE] [-i|--include] [--silent]
-  Paths are host-relative ("/v1/me"; query strings allowed); absolute URLs are
-  rejected. Default method GET; fields or --input switch it to POST. With
+  Paths are host-relative and must resolve under /v1 ("/v1/me"; query strings
+  allowed); absolute URLs and paths outside /v1 are rejected (exit 2), as are
+  ones that leave /v1 only after dot segments or percent-escapes resolve.
+  Default method GET; fields or --input switch it to POST. With
   explicit -X GET, fields become query parameters. -f = string field; -F =
   typed (true/false/null/int; @path file contents; @- stdin); key[sub]=v
   nests one level; key[]=v appends arrays. Fields imply a JSON body.
   GET/HEAD and Idempotency-Key requests are retried automatically; pagination
   and polling are the caller's responsibility.
   Example: melange api /v1/me --jq .account.name
+
+## melange mcp
+
+Serve the Melange MCP server so agent clients call Melange tools directly
+instead of shelling out.
+
+melange mcp [--transport stdio|http]
+  stdio (default): MCP on stdin/stdout — protocol frames only on stdout,
+  diagnostics on stderr. Credentials resolve lazily on the first tool call
+  (MELANGE_API_KEY or melange auth login), so the server starts even when
+  logged out and reports auth errors per tool call instead of exiting.
+  Register with Claude Code: claude mcp add melange -- melange mcp
+
+melange mcp --transport http [--listen ADDR] [--validate-tokens]
+    [--allowed-origins ORIGIN,...] [--resource URL]
+  Streamable HTTP for remote agent clients (--listen default 127.0.0.1:8080;
+  use 0.0.0.0:PORT in a container). Stateless (no session ids); GET /healthz
+  is an unauthenticated liveness probe; browser Origins are rejected unless
+  listed in --allowed-origins. Every request must carry its own credential as
+  "Authorization: Bearer <token>" (ztp_ PAT or zoa_ OAuth access token): the
+  server itself has no credentials and NEVER reads the local keyring or
+  MELANGE_API_KEY. --validate-tokens verifies each bearer against the API
+  before serving it (positive results are cached per instance for up to 60s,
+  so a just-revoked token can still work briefly). --resource URL (also read
+  from MELANGE_MCP_RESOURCE) declares the server's canonical URL as an OAuth
+  protected resource: implies token validation, rejects OAuth tokens bound to
+  a different resource, and publishes RFC 9728 discovery metadata at
+  /.well-known/oauth-protected-resource. http-only flags with stdio are usage
+  errors (exit 2). Exit codes: 0 clean disconnect (stdio) or completed drain
+  after SIGINT/SIGTERM (http), 1 serve failure, 2 usage error, 130
+  interrupted (stdio, or an http drain cut short by a second stop signal).
+
+Tool catalog — 18 tools on stdio, 17 over HTTP. upload_model is stdio-only:
+its file paths are read by the SERVER process, which over HTTP cannot see the
+caller's machine. Grouped by workflow:
+
+- Start here: whoami (verify credentials and report user/account/token
+  scopes — call it first). get_account_info ({"usage","quotas","plan"}
+  composite, narrowed by include) — check each quota counter's 'remaining'
+  before an upload or conversion; it is what enforcement actually permits.
+- Discover what exists: list_repos (search, limit 1-100 default 30, offset)
+  -> get_repo. list_models (model keys are opaque — always take them from
+  this listing, never construct them) -> get_model (include_targets: true
+  returns the {"model","targets"} composite with opaque target_ids).
+- Public library, read-only: search_library (search/task/provider filters;
+  include_providers: true returns the {"models","providers"} composite — how
+  to learn exact provider names) -> get_library_model (full readme). Each
+  result's full_name works directly with list_models, get_model_report, and
+  get_deployment_info — never import a library model just to read its public
+  benchmarks.
+- Put a model on the platform: create_repo (pass NAME alone, never
+  ACCOUNT/NAME; model_type is fixed at creation and only llm repositories
+  accept import_model). import_model (public HuggingFace repo into an
+  llm-type repository; returns immediately with the new model key while
+  conversion continues in the background). upload_model (stdio only; local
+  model file plus optional inputs/external data — pass absolute paths,
+  since relative paths resolve against the SERVER process's working
+  directory, not the user's shell; not billable; on an interrupted or
+  failed upload the error names a session id — call again with
+  resume_session_id, already-acknowledged bytes are never re-sent;
+  bucketed .pt2 and manifest uploads stay CLI-only: melange model upload).
+- Monitor conversion — never block: get_conversion_status returns
+  immediately by default; wait_seconds (0-120) polls with backoff and still
+  returns the latest status when the budget runs out. Prefer short waits and
+  repeated calls over one long request. import_model and upload_model return
+  before conversion finishes, so always follow them with
+  get_conversion_status on the returned model key. States and reporting
+  rules are the CLI's (see Agent presentation contract above).
+- Report and deploy: get_model_report (report_type general|llm|package; a
+  not-found error means that shape does not exist for the model — try
+  another report_type). get_deployment_info (no arguments -> the
+  language/inference-mode catalog; repo + model_key -> the guide; guides
+  carry the literal YOUR_PERSONAL_KEY placeholder, never a real credential).
+- Maintain: update_repo (only passed arguments change; tags replace the
+  entire set). set_default_model (exactly one default per repository;
+  idempotent).
+
+Confirm-gated tools — ask the user for explicit consent BEFORE sending the
+confirm argument; without confirm nothing is deleted or charged:
+- delete_repo: confirm must repeat the repo argument exactly (the same
+  ACCOUNT/NAME string). Permanently deletes the repository and every model
+  in it; owner-only; cannot be undone.
+- request_model_download: BILLABLE — the target's size counts against the
+  account's bandwidth quota, also for public models owned by others.
+  confirm must be true. Signed URLs come back as "<redacted>" unless
+  include_urls: true (short-lived download credentials, exposed in the
+  transcript). Every confirmed call is charged separately: after an
+  ambiguous failure (timeout, connection error), check with the user before
+  retrying. When the user is on the machine that should hold the files, run
+  melange model download instead — it verifies checksums and writes files.
+
+Write scope over HTTP: with token validation on (--validate-tokens or
+--resource), the mutating tools — create_repo, update_repo, delete_repo,
+set_default_model, import_model, request_model_download, upload_model —
+require the "write" scope. A read-only token is refused before any API
+request is made: 'insufficient scope: this operation needs the "write"
+scope, but the token was granted only "read"'. The remediation is in the
+message: re-authorize granting the write scope (or reconnect with a
+credential that includes it), then call the tool again. OAuth bearers get
+the refusal as an RFC 6750 403 (WWW-Authenticate: Bearer
+error="insufficient_scope", scope="write") so step-up-capable clients can
+re-authorize automatically; PAT bearers get the same text as an in-band tool
+error. Without validation the API is the sole authority and its errors
+surface per tool call.
 
 ## melange version / completion
 

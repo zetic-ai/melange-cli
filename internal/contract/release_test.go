@@ -45,8 +45,12 @@ func TestReleaseChecksumsAreKeylesslySignedAndInstallerVerifiesThem(t *testing.T
 	require.NotEqual(t, -1, checksumAt)
 	assert.Less(t, verifyAt, checksumAt,
 		"the checksum manifest's identity must be authenticated before trusting its digest")
-	assert.Contains(t, installer,
-		`https://github.com/zetic-ai/melange-cli/.github/workflows/release.yml@refs/tags/${version}`)
+	// The installer templates the repo via $REPO ("zetic-ai/melange-cli") so the
+	// certificate identity appears as https://github.com/${REPO}/...
+	// Check the invariant suffix and the REPO binding instead of a single
+	// hardcoded string.
+	assert.Contains(t, installer, `.github/workflows/release.yml@refs/tags/${version}`)
+	assert.Contains(t, installer, `REPO="zetic-ai/melange-cli"`)
 	assert.Contains(t, installer, "https://token.actions.githubusercontent.com")
 }
 
@@ -92,7 +96,7 @@ func TestInstallerRejectsInvalidVersionsBeforeNetworkAccess(t *testing.T) {
 			output, err := cmd.CombinedOutput()
 			require.Error(t, err)
 			assert.Contains(t, string(output),
-				"MELANGE_VERSION must be a v-prefixed semantic version")
+				"must be a v-prefixed semantic version")
 			assert.NoFileExists(t, curlMarker,
 				"an invalid version must be rejected before curl can use it")
 		})
@@ -128,7 +132,7 @@ func TestInstallerAcceptsStrictVSemVer(t *testing.T) {
 			output, err := cmd.CombinedOutput()
 			require.Error(t, err, "the fake curl intentionally fails the download")
 			assert.NotContains(t, string(output),
-				"MELANGE_VERSION must be a v-prefixed semantic version")
+				"must be a v-prefixed semantic version")
 			assert.FileExists(t, curlMarker,
 				"a valid version must reach the release download")
 		})

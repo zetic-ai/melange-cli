@@ -65,11 +65,13 @@ const (
 	forbidden   = `{"type":"error","error":{"type":"permission_error","message":"token lacks access"},"request_id":"req_2"}`
 )
 
-// grec builds one general record.
-func grec(device, ap, target, prec string, run int, metric string, value float32, unit string) string {
+// grec builds one general record. `variant` is the opaque per-response token
+// that replaced the engine name; it is what keeps two artifacts in one
+// (device, ap_type, precision) cell from folding into a single run.
+func grec(device, ap, variant, prec string, run int, metric string, value float32, unit string) string {
 	return fmt.Sprintf(
-		`{"device":{"marketing_name":%q,"name":%q},"ap_type":%q,"target":%q,"precision":%q,"run":%d,"metric":%q,"value":%g,"unit":%q}`,
-		device, device, ap, target, prec, run, metric, value, unit)
+		`{"device":{"marketing_name":%q,"name":%q},"ap_type":%q,"variant":%q,"precision":%q,"run":%d,"metric":%q,"value":%g,"unit":%q}`,
+		device, device, ap, variant, prec, run, metric, value, unit)
 }
 
 // The core fixture: device "Pixel" cell (npu,fp32) has two runs where the
@@ -155,8 +157,9 @@ func TestReportGeneralHeaderAndSummary(t *testing.T) {
 	// cpu/fp16 sorts before npu/fp32 in the stable column order.
 	assert.Less(t, strings.Index(out, "CPU/FP16"), strings.Index(out, "NPU/FP32"))
 	assert.Contains(t, out, "Summary (latency ms, per precision):")
-	assert.Contains(t, out, "fp32  latency 5.0/8.0/8.0", "per-precision latency min/median/max")
-	assert.Contains(t, out, "snr 15.0–30.0 dB")
+	fp32Line := lineWith(t, out, "fp32")
+	assert.Contains(t, fp32Line, "5.0/8.0/8.0", "per-precision latency min/median/max")
+	assert.Contains(t, fp32Line, "15.0–30.0 dB", "the snr range belongs on its precision's row")
 }
 
 func TestReportGeneralDevicesSortedAlphabetically(t *testing.T) {
@@ -312,11 +315,11 @@ func TestReportRequiresRepoExits2(t *testing.T) {
 
 func llmFixture() string {
 	recs := []string{
-		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","target":"NPU","quant_type":"Q4_0","dataset":null,"run":0,"metric":"tps","value":42.5,"unit":"tokens_per_s"}`,
-		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","target":"NPU","quant_type":"Q8_0","dataset":null,"run":0,"metric":"tps","value":30.0,"unit":"tokens_per_s"}`,
+		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","variant":"v1","quant_type":"Q4_0","dataset":null,"run":0,"metric":"tps","value":42.5,"unit":"tokens_per_s"}`,
+		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","variant":"v1","quant_type":"Q8_0","dataset":null,"run":0,"metric":"tps","value":30.0,"unit":"tokens_per_s"}`,
 	}
 	summary := `{"quants":{"Q4_0":{"best_tps":42.5,"best_ttft_ms":10,"best_memory_mb":100,"best_accuracy":0.9},"Q8_0":{"best_tps":30,"best_ttft_ms":12,"best_memory_mb":120,"best_accuracy":0.95}},` +
-		`"accuracy":[{"target":"NPU","quant_type":"Q4_0","dataset":"mmlu","score":0.9},{"target":"NPU","quant_type":"Q8_0","dataset":"mmlu","score":0.95}]}`
+		`"accuracy":[{"quant_type":"Q4_0","dataset":"mmlu","score":0.9},{"quant_type":"Q8_0","dataset":"mmlu","score":0.95}]}`
 	return fmt.Sprintf(`{"derivation_version":1,"model":{"key":"m_x","version":1},"records":[%s],"summary":%s}`,
 		strings.Join(recs, ","), summary)
 }

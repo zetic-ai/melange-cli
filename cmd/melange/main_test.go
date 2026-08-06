@@ -1,8 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"net/http"
+	"os"
+	"regexp"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,6 +75,119 @@ func TestRunMCPBadTransport(t *testing.T) {
 func TestRunMCPHelp(t *testing.T) {
 	code := Run([]string{"mcp", "--help"})
 	assert.Equal(t, 0, code, "melange mcp --help should exit 0")
+}
+
+// TestRunMCPHTTPOnlyFlagsWithStdio pins through the real Run() path that a
+// flag which only configures the HTTP server is a usage error on stdio. The
+// alternative — accepting and ignoring it — would leave an operator believing
+// a port is open or that tokens are being validated when neither is true.
+func TestRunMCPHTTPOnlyFlagsWithStdio(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"listen", []string{"mcp", "--listen", "127.0.0.1:9"}},
+		{"validate-tokens", []string{"mcp", "--validate-tokens"}},
+		{"allowed-origins", []string{"mcp", "--allowed-origins", "https://app.zetic.ai"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, 2, Run(tt.args), "http-only flags on stdio must exit 2 (usage error)")
+		})
+	}
+}
+
+// TestRunMCPHTTPTransportStopSignalsExitZero is the exit-code contract for the
+// HTTP transport driven through the real entry point, including the real
+// signal handlers: a running server that receives a stop signal drains and
+// exits 0.
+//
+// This is the one place the divergence from stdio (where these signals exit
+// 130) is provable end to end, and it matters operationally: every process
+// supervisor that will run this command reads a nonzero status on an orderly
+// stop as a crash.
+//
+// Both signals are covered because they are wired in different places and a
+// supervisor only ever sends one of them. SIGINT comes from the process-wide
+// handler in Run(); SIGTERM is installed by the mcp command's own HTTP path,
+// and it is the signal that actually matters in production — systemd, ECS and
+// Kubernetes all stop a container by sending SIGTERM, waiting, then SIGKILL.
+// If that wiring is dropped, SIGTERM's default action terminates this test
+// binary outright, so the regression cannot pass silently.
+func TestRunMCPHTTPTransportStopSignalsExitZero(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a process cannot deliver stop signals to itself on Windows")
+	}
+	for _, tt := range []struct {
+		name string
+		sig  os.Signal
+	}{
+		{"SIGINT", os.Interrupt},
+		{"SIGTERM", syscall.SIGTERM},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assertHTTPServerDrainsOnSignal(t, tt.sig)
+		})
+	}
+}
+
+// assertHTTPServerDrainsOnSignal starts a real `melange mcp --transport http`
+// through Run(), proves it is serving, delivers sig to this process, and
+// requires an exit code of 0.
+func assertHTTPServerDrainsOnSignal(t *testing.T, sig os.Signal) {
+	t.Helper()
+
+	// The server logs the address it bound to stderr, so the listen address
+	// can stay :0 and the test never races another process for a fixed port.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	realStderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = realStderr }()
+
+	code := make(chan int, 1)
+	go func() { code <- Run([]string{"mcp", "--transport", "http", "--listen", "127.0.0.1:0"}) }()
+
+	addr := make(chan string, 1)
+	go func() {
+		scanner := bufio.NewScanner(r)
+		for scanner.Scan() {
+			if m := regexp.MustCompile(`addr=(\S+)`).FindStringSubmatch(scanner.Text()); m != nil {
+				addr <- m[1]
+				return
+			}
+		}
+	}()
+
+	var listenAddr string
+	select {
+	case listenAddr = <-addr:
+	case got := <-code:
+		t.Fatalf("the server exited (code %d) before it logged a listen address", got)
+	case <-time.After(30 * time.Second):
+		t.Fatal("the server never logged a listen address")
+	}
+
+	// Prove it is really serving before signaling: this also guarantees the
+	// signal handler is installed, so the signal below can never fall through
+	// to the default action and kill the test binary.
+	resp, err := http.Get("http://" + listenAddr + "/healthz")
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	self, err := os.FindProcess(os.Getpid())
+	require.NoError(t, err)
+	require.NoError(t, self.Signal(sig))
+
+	select {
+	case got := <-code:
+		assert.Equal(t, 0, got, "%v during an HTTP serve is an orderly stop: exit 0, not 130", sig)
+	case <-time.After(30 * time.Second):
+		t.Fatalf("the server did not exit after %v", sig)
+	}
+	_ = w.Close()
+	_ = r.Close()
 }
 
 func TestRunCompletionBash(t *testing.T) {

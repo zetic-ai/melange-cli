@@ -115,14 +115,17 @@ func withCreateRepoVocabulary(props map[string]*jsonschema.Schema) {
 // createRepoHandler wraps POST /v1/repos.
 func createRepoHandler(d Deps) mcp.ToolHandlerFor[createRepoArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in createRepoArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		if strings.Contains(in.Name, "/") {
-			return toolError(fmt.Errorf(
+			return d.toolError(fmt.Errorf(
 				"invalid name %q: repositories are always created in the account behind the token; "+
 					"pass NAME without an ACCOUNT/ prefix", in.Name)), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 
 		// The general default lives here rather than in the schema: the SDK
@@ -152,12 +155,12 @@ func createRepoHandler(d Deps) mcp.ToolHandlerFor[createRepoArgs, any] {
 
 		resp, err := g.CreateRepoWithResponse(ctx, body)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -187,9 +190,12 @@ func withUpdateRepoVocabulary(props map[string]*jsonschema.Schema) {
 // updateRepoHandler wraps PATCH /v1/repos/{account}/{repo}.
 func updateRepoHandler(d Deps) mcp.ToolHandlerFor[updateRepoArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in updateRepoArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 
 		body := gen.UpdateRepoJSONRequestBody{Description: in.Description, IsPrivate: in.Private}
@@ -202,25 +208,25 @@ func updateRepoHandler(d Deps) mcp.ToolHandlerFor[updateRepoArgs, any] {
 			body.Tags = &in.Tags
 		}
 		if body == (gen.UpdateRepoJSONRequestBody{}) {
-			return toolError(fmt.Errorf(
+			return d.toolError(fmt.Errorf(
 				"nothing to update for %s: pass at least one of description, private, use_case, or tags",
 				in.Repo)), nil, nil
 		}
 
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		// The PATCH carries exactly the provided fields, so replaying it cannot
 		// apply the change twice — the same marking `melange repo edit` uses.
 		resp, err := g.UpdateRepoWithResponse(api.WithReplaySafe(ctx), account, name, body)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -243,16 +249,19 @@ type deletedRepo struct {
 // confirmation gate that must pass before any request is made.
 func deleteRepoHandler(d Deps) mcp.ToolHandlerFor[deleteRepoArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in deleteRepoArgs) (*mcp.CallToolResult, any, error) {
+		if refusal := d.requireScope(ctx, scopeWrite); refusal != nil {
+			return refusal, nil, nil
+		}
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if in.Confirm != in.Repo {
 			detail := "the confirm argument is missing"
 			if in.Confirm != "" {
 				detail = fmt.Sprintf("confirm %q does not match repo %q", in.Confirm, in.Repo)
 			}
-			return toolError(fmt.Errorf(
+			return d.toolError(fmt.Errorf(
 				"delete_repo refused: %s. Nothing was deleted. Deleting %s destroys every model "+
 					"in it and cannot be undone: obtain explicit consent from the user first, then "+
 					"call delete_repo again with confirm: %q — the exact ACCOUNT/NAME",
@@ -261,14 +270,14 @@ func deleteRepoHandler(d Deps) mcp.ToolHandlerFor[deleteRepoArgs, any] {
 
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.DeleteRepoWithResponse(ctx, account, name)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		result, err := marshalEnvelope(deletedRepo{Deleted: true, Repo: in.Repo})
 		if err != nil {
@@ -276,7 +285,7 @@ func deleteRepoHandler(d Deps) mcp.ToolHandlerFor[deleteRepoArgs, any] {
 			// not something the caller can act on.
 			return nil, nil, fmt.Errorf("building delete_repo result: %w", err)
 		}
-		return rawResult(result), nil, nil
+		return rawResult(result)
 	}
 }
 
@@ -292,7 +301,7 @@ func listReposHandler(d Deps) mcp.ToolHandlerFor[listReposArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in listReposArgs) (*mcp.CallToolResult, any, error) {
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		limit := pageLimit(in.Limit)
 		params := &gen.ListReposParams{Limit: &limit, Offset: &in.Offset}
@@ -301,12 +310,12 @@ func listReposHandler(d Deps) mcp.ToolHandlerFor[listReposArgs, any] {
 		}
 		resp, err := g.ListReposWithResponse(ctx, params)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }
 
@@ -320,19 +329,19 @@ func getRepoHandler(d Deps) mcp.ToolHandlerFor[getRepoArgs, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in getRepoArgs) (*mcp.CallToolResult, any, error) {
 		account, name, err := splitRepo(in.Repo)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		g, err := d.Clients.Client(ctx)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		resp, err := g.GetRepoWithResponse(ctx, account, name)
 		if err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
-			return toolError(err), nil, nil
+			return d.toolError(err), nil, nil
 		}
-		return rawResult(resp.Body), nil, nil
+		return rawResult(resp.Body)
 	}
 }

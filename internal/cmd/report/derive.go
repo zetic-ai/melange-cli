@@ -39,12 +39,17 @@ type run struct {
 }
 
 // runKey identifies one run within the pool the table cell is derived over.
-// The table re-derives per (device, ap_type, precision), so target and run
+// The table re-derives per (device, ap_type, precision), so variant and run
 // ordinal together identify a run inside that cell's subset (D9's run ordinal
-// is scoped to (device, target, ap_type)).
+// is scoped to (device, variant, ap_type)).
+//
+// The variant is required, not decorative: two artifacts can land in the same
+// (device, ap_type, precision) cell, and each restarts its run ordinal at 0.
+// Keying on the ordinal alone would fold them together and pair one
+// artifact's latency with the other's snr.
 type runKey struct {
-	target string
-	run    int
+	variant string
+	run     int
 }
 
 // deviceKey groups records by the dashboard's device identity: marketing_name,
@@ -59,12 +64,12 @@ func deviceKey(d gen.ReportDevice) string {
 	return ""
 }
 
-// buildRuns folds a set of records into runs keyed by (target, run), attaching
-// each run's latency/snr/memory values.
+// buildRuns folds a set of records into runs keyed by (variant, run),
+// attaching each run's latency/snr/memory values.
 func buildRuns(records []gen.GeneralReportRecord) map[runKey]*run {
 	runs := map[runKey]*run{}
 	for _, rec := range records {
-		k := runKey{target: deref(rec.Target), run: rec.Run}
+		k := runKey{variant: deref(rec.Variant), run: rec.Run}
 		r := runs[k]
 		if r == nil {
 			r = &run{}
@@ -94,8 +99,8 @@ func selectRun(runs map[runKey]*run, m mode) *run {
 		}
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].target != keys[j].target {
-			return keys[i].target < keys[j].target
+		if keys[i].variant != keys[j].variant {
+			return keys[i].variant < keys[j].variant
 		}
 		return keys[i].run < keys[j].run
 	})
