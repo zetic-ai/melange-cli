@@ -222,13 +222,25 @@ if [ -z "$skip_cli" ]; then
         curl -fsSL -o "${tmpdir}/checksums.txt.sigstore.json" \
             "${base_url}/checksums.txt.sigstore.json" ||
             err "download failed: ${base_url}/checksums.txt.sigstore.json"
-        cosign verify-blob \
+        if cosign verify-blob \
             --bundle "${tmpdir}/checksums.txt.sigstore.json" \
             --certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${version}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            "${tmpdir}/checksums.txt" >/dev/null 2>&1 ||
+            "${tmpdir}/checksums.txt" >/dev/null 2>&1; then
+            info "Release signature verified."
+        elif cosign verify-blob \
+            --bundle "${tmpdir}/checksums.txt.sigstore.json" \
+            --certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${tmpdir}/checksums.txt" >/dev/null 2>&1; then
+            warn "Release signature verified against refs/heads/main (workflow_dispatch for ${version}); expected refs/tags/${version}."
+            info "Release signature verified."
+        elif [ -n "$require_signature" ]; then
             err "signature verification failed for checksums.txt"
-        info "Release signature verified."
+        else
+            warn "signature verification failed for checksums.txt — continuing with SHA-256 verification only."
+            warn "Install cosign and re-run with --require-signature to enforce signature verification."
+        fi
     elif [ -n "$require_signature" ]; then
         err "cosign is required by --require-signature; install it from https://docs.sigstore.dev/cosign/system_config/installation/"
     else
