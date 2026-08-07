@@ -6,10 +6,9 @@ Authenticate melange with the Melange platform
 
 Manage authentication for the Melange API.
 
-Credentials are personal access tokens (prefix ztp_) created at
-Settings → Personal Access Tokens. Tokens are resolved in this order:
-MELANGE_API_KEY > MELANGE_API_KEY_FILE > explicitly selected config storage >
-OS keyring > legacy config fallback.
+By default opens a browser for OAuth (recommended); use --with-token for personal access tokens (CI/headless).
+Credentials are resolved in this order:
+MELANGE_API_KEY > MELANGE_API_KEY_FILE > OAuth (keyring/config, auto-refreshed) > PAT keyring > PAT config fallback.
 
 ```
 melange auth <command> [flags]
@@ -18,7 +17,7 @@ melange auth <command> [flags]
 ### Examples
 
 ```
-  # Log in interactively (paste a token)
+  # Browser login (recommended)
   melange auth login
 
   # Log in from a file, for scripts and agents
@@ -45,7 +44,7 @@ melange auth <command> [flags]
 ### SEE ALSO
 
 * [melange](melange.md)	 - melange — on-device AI model deployment & benchmarking
-* [melange auth login](melange_auth_login.md)	 - Log in to the Melange platform with a personal access token
+* [melange auth login](melange_auth_login.md)	 - Log in to the Melange platform
 * [melange auth logout](melange_auth_logout.md)	 - Remove stored credentials for the current host
 * [melange auth status](melange_auth_status.md)	 - Show authentication status for the current host
 * [melange auth token](melange_auth_token.md)	 - Print the resolved authentication token

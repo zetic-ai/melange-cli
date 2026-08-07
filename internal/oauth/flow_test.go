@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,25 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
+
+// safeBuffer is a thread-safe bytes.Buffer for concurrent fmt.Fprintf in flow
+// vs Eventually String() reads under -race.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *safeBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *safeBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 func TestDoLoginAttemptSuccess(t *testing.T) {
 	reg := &httpmock.Registry{}
@@ -46,7 +66,7 @@ func TestDoLoginAttemptSuccess(t *testing.T) {
 	disc.AuthorizationEndpoint = "https://api.zetic.ai/oauth/authorize"
 
 	// We need to capture state from the printed auth URL. Run doLoginAttempt in goroutine
-	var out bytes.Buffer
+	var out safeBuffer
 	// Use noBrowser true to avoid browser open
 	credsCh := make(chan struct {
 		creds *config.OAuthCredentials
@@ -141,7 +161,7 @@ func TestDoLoginAttemptInvalidTargetRetry(t *testing.T) {
 	redirectURI := "http://127.0.0.1:" + strings.Split(ln.Addr().String(), ":")[1] + "/callback"
 	disc := fallbackDiscovery("https://api.zetic.ai")
 
-	var out bytes.Buffer
+	var out safeBuffer
 	credsCh := make(chan struct {
 		creds *config.OAuthCredentials
 		err   error
@@ -221,7 +241,7 @@ func TestLoginFlowWithTransportIntegration(t *testing.T) {
 		"token_type":    "Bearer",
 	}))
 
-	var out bytes.Buffer
+	var out safeBuffer
 	credsCh := make(chan struct {
 		creds *config.OAuthCredentials
 		err   error

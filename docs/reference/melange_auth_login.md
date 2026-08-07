@@ -1,10 +1,12 @@
 ## melange auth login
 
-Log in to the Melange platform with a personal access token
+Log in to the Melange platform
 
 ### Synopsis
 
-Authenticate with a Melange personal access token (prefix ztp_).
+Authenticate with the Melange platform.
+
+By default opens a browser for OAuth (recommended); use --with-token for personal access tokens (CI/headless).
 
 The token is verified against the API, then stored in the OS keyring.
 If the keyring is unavailable, pass --insecure-storage to store it in the
@@ -23,8 +25,11 @@ melange auth login [flags]
 ### Examples
 
 ```
-  # Interactive login (paste the token at the prompt)
+  # Browser login (recommended)
   melange auth login
+
+  # Headless / SSH without browser
+  melange auth login --no-browser
 
   # Scripted login for agents and CI
   melange auth login --with-token < token.txt
@@ -40,8 +45,9 @@ melange auth login [flags]
       --insecure-storage   Store the token in the config file when the OS keyring is unavailable
       --jq expression      Filter JSON output using a jq expression (implies --json)
       --json               Output the full result as JSON
+      --no-browser         Print the authorize URL and wait for callback without opening a browser (SSH/headless)
       --template string    Format JSON output using a Go template (implies --json)
-      --with-token         Read the token from standard input
+      --with-token         Read a personal access token (ztp_) from standard input (CI/headless)
 ```
 
 ### Options inherited from parent commands
