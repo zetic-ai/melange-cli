@@ -73,6 +73,11 @@ func LoginFlowWithOptionsWithTransport(ctx context.Context, issuerHost string, o
 			if out != nil {
 				fmt.Fprintln(out, "! Resource https://api.zetic.ai not allowlisted — continuing without resource binding")
 			}
+			// doLoginAttempt's server.Close() does not free the custom net.Listener
+			// (Serve(ln)+Close() leaves bind: address already in use). Must close ln
+			// explicitly before re-binding same port, otherwise ln2 always fails with
+			// ErrLoopbackListen and OAuth primary login is broken for prod allowlist hit.
+			_ = ln.Close()
 			ln2, err2 := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 			if err2 != nil {
 				return nil, fmt.Errorf("%w: %w", ErrLoopbackListen, err2)
