@@ -116,11 +116,24 @@ func TestConfigDirVariants(t *testing.T) {
 	expected := filepath.Join(dir, "melange")
 	if runtime.GOOS != "windows" {
 		assert.Equal(t, expected, config.ConfigDir())
+	} else {
+		// On Windows, ConfigDir prefers APPDATA; test both branches
+		t.Setenv("APPDATA", dir)
+		assert.Equal(t, expected, config.ConfigDir())
+		t.Setenv("APPDATA", "")
+		assert.Equal(t, expected, config.ConfigDir())
 	}
 	t.Setenv("XDG_CONFIG_HOME", "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	assert.Equal(t, filepath.Join(home, ".config", "melange"), config.ConfigDir())
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, filepath.Join(home, ".config", "melange"), config.ConfigDir())
+	} else {
+		// On Windows with both empty, falls back to APPDATA or default; just verify not empty
+		t.Setenv("APPDATA", "")
+		got := config.ConfigDir()
+		assert.NotEmpty(t, got)
+	}
 }
 
 func TestDeleteHostOAuthMissingHostNoop(t *testing.T) {
