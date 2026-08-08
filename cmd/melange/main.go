@@ -121,8 +121,6 @@ func executable() string {
 	return exe
 }
 
-var oauthRefreshMu sync.Map
-
 func resolveAnyTokenMain(ctx context.Context, cfg *config.Config, issuerHost, hostKey string, transport http.RoundTripper) (config.Resolved, *config.OAuthCredentials, error) {
 	res, creds, err := cfg.ResolveAnyTokenWith(hostKey, keyring.Lookup, keyring.LookupOAuth)
 	if err != nil {
@@ -144,7 +142,7 @@ func resolveAnyTokenMain(ctx context.Context, cfg *config.Config, issuerHost, ho
 		return res, creds, nil
 	}
 	if creds != nil {
-		muIface, _ := oauthRefreshMu.LoadOrStore(hostKey, &sync.Mutex{})
+		muIface, _ := oauth.RefreshMu.LoadOrStore(hostKey, &sync.Mutex{})
 		mu := muIface.(*sync.Mutex)
 		mu.Lock()
 		defer mu.Unlock()

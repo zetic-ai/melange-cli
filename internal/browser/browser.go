@@ -7,11 +7,14 @@ import (
 	"runtime"
 )
 
+// ErrNoDisplay is returned when no graphical display is available.
+var ErrNoDisplay = errors.New("no display")
+
 // Open opens url in the default browser. On Linux it pre-checks DISPLAY.
 func Open(url string) error {
 	if runtime.GOOS == "linux" {
 		if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
-			return errors.New("no display")
+			return ErrNoDisplay
 		}
 	}
 	var cmd *exec.Cmd

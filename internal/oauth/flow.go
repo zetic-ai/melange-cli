@@ -16,6 +16,12 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/config"
 )
 
+// Sentinel errors for typed handling in callers.
+var (
+	ErrLoopbackListen = errors.New("loopback listen")
+	ErrOAuthTimeout   = errors.New("oauth timeout")
+)
+
 func LoginFlow(ctx context.Context, issuerHost string, out io.Writer) (*config.OAuthCredentials, error) {
 	transportMu.RLock()
 	tr := Transport
@@ -38,8 +44,9 @@ func LoginFlowWithOptions(ctx context.Context, issuerHost string, out io.Writer,
 func LoginFlowWithOptionsWithTransport(ctx context.Context, issuerHost string, out io.Writer, noBrowser bool, transport http.RoundTripper) (*config.OAuthCredentials, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, fmt.Errorf("loopback listen: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrLoopbackListen, err)
 	}
+	defer ln.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
 
@@ -54,7 +61,6 @@ func LoginFlowWithOptionsWithTransport(ctx context.Context, issuerHost string, o
 
 	clientID, err := RegisterClientWithTransport(ctx, disc.RegistrationEndpoint, redirectURI, transport)
 	if err != nil {
-		ln.Close()
 		return nil, err
 	}
 
@@ -69,9 +75,8 @@ func LoginFlowWithOptionsWithTransport(ctx context.Context, issuerHost string, o
 			}
 			ln2, err2 := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 			if err2 != nil {
-				return nil, fmt.Errorf("loopback retry listen: %w", err2)
+				return nil, fmt.Errorf("%w: %w", ErrLoopbackListen, err2)
 			}
-			defer ln2.Close()
 			return doLoginAttemptWithTransport(ctx, disc, issuerHost, clientID, redirectURI, ln2, out, false, noBrowser, transport)
 		}
 		return nil, err
@@ -133,7 +138,7 @@ func doLoginAttemptWithTransport(ctx context.Context, disc *Discovery, issuerHos
 
 	select {
 	case <-ctx90.Done():
-		return nil, fmt.Errorf("oauth timeout waiting for callback (port %d) — if using SSH, forward: ssh -L %d:127.0.0.1:%d user@host", portFromListener(ln), portFromListener(ln), portFromListener(ln))
+		return nil, fmt.Errorf("%w waiting for callback (port %d) — if using SSH, forward: ssh -L %d:127.0.0.1:%d user@host", ErrOAuthTimeout, portFromListener(ln), portFromListener(ln), portFromListener(ln))
 	case res := <-resultCh:
 		if res.Err != nil {
 			return nil, res.Err

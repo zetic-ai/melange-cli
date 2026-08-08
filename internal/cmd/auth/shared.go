@@ -38,8 +38,6 @@ func resolveHost(f *cmdutil.Factory) (*hostContext, error) {
 	}, nil
 }
 
-var oauthRefreshMu sync.Map
-
 func (h *hostContext) resolveAnyToken(ctx context.Context) (config.Resolved, *config.OAuthCredentials, error) {
 	res, creds, err := h.cfg.ResolveAnyTokenWith(h.hostKey, keyring.Lookup, keyring.LookupOAuth)
 	if err != nil {
@@ -63,7 +61,7 @@ func (h *hostContext) resolveAnyToken(ctx context.Context) (config.Resolved, *co
 		return res, creds, nil
 	}
 	if creds != nil {
-		muIface, _ := oauthRefreshMu.LoadOrStore(h.hostKey, &sync.Mutex{})
+		muIface, _ := oauth.RefreshMu.LoadOrStore(h.hostKey, &sync.Mutex{})
 		mu := muIface.(*sync.Mutex)
 		mu.Lock()
 		defer mu.Unlock()

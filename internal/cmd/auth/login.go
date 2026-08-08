@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api"
+	"github.com/zetic-ai/melange-cli/internal/browser"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/keyring"
@@ -81,15 +82,16 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 				if errors.As(oauthErr, &oe) {
 					return cmdutil.AuthError{Err: fmt.Errorf("oauth: %w", oauthErr)}
 				}
+				isNoDisplay := errors.Is(oauthErr, browser.ErrNoDisplay)
+				isLoopback := errors.Is(oauthErr, oauth.ErrLoopbackListen)
+				isTimeout := errors.Is(oauthErr, oauth.ErrOAuthTimeout)
 				fmt.Fprintf(f.IOStreams.ErrOut, "! Browser login unavailable (%s), falling back to personal access token.\n", text.SanitizeTerminalInline(oauthErr.Error()))
-				if strings.Contains(oauthErr.Error(), "port") && strings.Contains(oauthErr.Error(), "ssh -L") {
+				if isLoopback {
 					fmt.Fprintln(f.IOStreams.ErrOut, oauthErr.Error())
-				} else if !noBrowser {
-					if strings.Contains(oauthErr.Error(), "timeout") {
-						fmt.Fprintln(f.IOStreams.ErrOut, oauthErr.Error())
-					}
+				} else if isTimeout && !noBrowser {
+					fmt.Fprintln(f.IOStreams.ErrOut, oauthErr.Error())
 				}
-				if noBrowser || strings.Contains(oauthErr.Error(), "timeout") || strings.Contains(oauthErr.Error(), "port") {
+				if noBrowser || isTimeout || isLoopback || isNoDisplay {
 					fmt.Fprintf(f.IOStreams.ErrOut, "If using SSH, forward the callback port: ssh -L {port}:127.0.0.1:{port} user@host\n")
 				}
 				return runPATPromptLogin(cmd, f, host, insecureStorage, exporter)
