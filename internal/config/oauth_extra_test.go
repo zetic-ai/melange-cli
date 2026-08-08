@@ -14,8 +14,10 @@ import (
 )
 
 func TestSetHostOAuthRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 	gokeyring.MockInit()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg, err := config.Load()
 	require.NoError(t, err)
 	creds := config.OAuthCredentials{
@@ -34,13 +36,13 @@ func TestSetHostOAuthRoundTrip(t *testing.T) {
 	assert.Equal(t, creds.RefreshToken, loaded.Hosts["api.zetic.ai"].OAuth.RefreshToken)
 	assert.Equal(t, creds.ClientID, loaded.Hosts["api.zetic.ai"].OAuth.ClientID)
 	assert.WithinDuration(t, creds.Expiry, loaded.Hosts["api.zetic.ai"].OAuth.Expiry, time.Second)
-	configPath := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "melange", "config.yml")
+	configPath := filepath.Join(config.ConfigDir(), "config.yml")
 	data, err := os.ReadFile(configPath)
 	require.NoError(t, err)
 	assert.NotContains(t, string(data), "0001-01-01")
 	emptyCfg := &config.Config{}
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yml")
+	dir2 := t.TempDir()
+	path := filepath.Join(dir2, "config.yml")
 	require.NoError(t, config.SaveTo(emptyCfg, path))
 	emptyData, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -48,7 +50,9 @@ func TestSetHostOAuthRoundTrip(t *testing.T) {
 }
 
 func TestDeleteHostOAuthWhenConfigStorage(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 	gokeyring.MockInit()
 	cfg, err := config.Load()
 	require.NoError(t, err)
@@ -67,7 +71,9 @@ func TestDeleteHostOAuthWhenConfigStorage(t *testing.T) {
 }
 
 func TestDeleteHostOAuthKeepsPAT(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 	gokeyring.MockInit()
 	cfg, err := config.Load()
 	require.NoError(t, err)
@@ -96,8 +102,10 @@ func TestDeleteHostOAuthKeepsPAT(t *testing.T) {
 }
 
 func TestResolveAnyTokenWithOAuthFreshAndStale(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 	gokeyring.MockInit()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	creds := config.OAuthCredentials{
 		AccessToken:  "zoa_fresh",
 		RefreshToken: "zor_fresh",
