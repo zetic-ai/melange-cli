@@ -15,6 +15,7 @@ import (
 func registerLibrary(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "search_library",
+		Title: "Search library",
 		Description: "Search the public model library: models already converted and " +
 			"benchmarked for on-device use. 'search' matches name or full_name ignoring " +
 			"case and separators, 'task' filters by use case, and 'provider' takes an " +
@@ -36,6 +37,7 @@ func registerLibrary(s *mcp.Server, d Deps) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "get_library_model",
+		Title: "Get library model",
 		Description: "Show one public library model: full name, provider, use-case task, " +
 			"model type, tags, description, and the complete readme. Take the ACCOUNT/NAME " +
 			"coordinate from search_library, then list its converted model keys with " +

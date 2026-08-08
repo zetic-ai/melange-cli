@@ -14,6 +14,7 @@ import (
 func registerDeploy(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "get_deployment_info",
+		Title: "Get deployment info",
 		Description: "Answer deployment questions in one of two modes. Called with no " +
 			"arguments it returns the catalog: every supported SDK language, every " +
 			"inference mode, and the defaults. Called with repo and model_key it returns " +

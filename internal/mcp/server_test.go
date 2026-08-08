@@ -149,6 +149,16 @@ func TestEveryToolStatesItsBlastRadius(t *testing.T) {
 	}
 }
 
+func TestEveryToolHasTitle(t *testing.T) {
+	cs := connectWith(t, "test", Options{EnableLocalTools: true})
+	for _, tool := range listAllTools(t, cs) {
+		t.Run(tool.Name, func(t *testing.T) {
+			assert.NotEmpty(t, tool.Title, "%s has no title", tool.Name)
+			assert.LessOrEqual(t, len(tool.Title), 40, "%s title too long", tool.Name)
+		})
+	}
+}
+
 // TestToolsListStdioGoldenSnapshot pins the catalog PRODUCTION STDIO serves —
 // runStdio passes EnableLocalTools: true, so the real stdio surface is the
 // base catalog plus the local-only tools — against its own golden file.

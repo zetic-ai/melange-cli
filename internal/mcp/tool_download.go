@@ -21,6 +21,7 @@ const redactedURL = "<redacted>"
 func registerDownload(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "request_model_download",
+		Title: "Request model download",
 		Description: "Authorize downloading one converted target's artifacts. This is BILLABLE: " +
 			"the target's size counts against the account's bandwidth quota, also for public models " +
 			"owned by others — ask the user for explicit consent, then pass confirm: true. The " +

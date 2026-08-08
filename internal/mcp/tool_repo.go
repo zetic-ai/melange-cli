@@ -15,6 +15,7 @@ import (
 func registerRepo(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "list_repos",
+		Title: "List repositories",
 		Description: "List the repositories this token can see, newest first. " +
 			"Start here to discover the ACCOUNT/NAME identifier the model tools take; " +
 			"'search' filters server-side, and 'offset' walks further pages.",
@@ -30,6 +31,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "get_repo",
+		Title: "Get repository",
 		Description: "Show one repository: visibility, model type, use case, tags, " +
 			"description, and timestamps. The model type decides what may be uploaded " +
 			"or imported into it.",
@@ -44,6 +46,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "create_repo",
+		Title: "Create repository",
 		Description: "Create a repository in the account behind the token — pass NAME alone, " +
 			"never ACCOUNT/NAME. model_type fixes what the repository will accept and cannot be " +
 			"changed later: only an llm repository accepts import_model.",
@@ -58,6 +61,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "update_repo",
+		Title: "Update repository",
 		Description: "Update a repository's metadata. Only the arguments you pass change: " +
 			"tags replace the entire existing tag set, an empty description clears it, and " +
 			"changing visibility is restricted to the repository owner.",
@@ -72,6 +76,7 @@ func registerRepo(s *mcp.Server, d Deps) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "delete_repo",
+		Title: "Delete repository",
 		Description: "Permanently delete a repository and every model in it; this cannot be " +
 			"undone and is restricted to the repository owner. Ask the user for explicit consent " +
 			"first, then repeat the exact ACCOUNT/NAME in 'confirm' — without it nothing is deleted.",
