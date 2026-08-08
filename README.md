@@ -95,16 +95,18 @@ Restart your agent afterward so it can discover the skill.
 
 ## Authentication
 
-Get a Personal Access Token at [Melange](https://melange.zetic.ai/settings?tab=pat) (Settings → Personal Access Tokens). Then either export it:
+By default `melange auth login` opens a browser for OAuth (recommended, `zoa_`/`zor_` stored in OS keyring and auto-refreshed). For CI/headless use a Personal Access Token (`ztp_`) from [Melange Settings → Personal Access Tokens](https://melange.zetic.ai/settings?tab=pat):
 
 ```sh
 export MELANGE_API_KEY="ztp_your_personal_access_token"
+# or
+melange auth login --with-token < token.txt
 ```
 
-Or store it once:
+Or store it interactively once:
 
 ```sh
-melange auth login
+melange auth login   # browser OAuth; falls back to PAT paste if browser unavailable
 ```
 
 ### Check status
@@ -250,11 +252,11 @@ reverse proxy, or ingress). The `https://` client URLs below assume that.
 melange mcp --transport http --listen 0.0.0.0:8080
 ```
 
-Claude Code:
+Claude Code (PAT `ztp_...` or OAuth `zoa_...`):
 
 ```sh
 claude mcp add --transport http melange https://your-host:8080/ \
-  --header "Authorization: Bearer ztp_your_personal_access_token"
+  --header "Authorization: Bearer ztp_your_personal_access_token" # or zoa_... OAuth
 ```
 
 Cursor (`.cursor/mcp.json`):
@@ -265,7 +267,7 @@ Cursor (`.cursor/mcp.json`):
     "melange": {
       "url": "https://your-host:8080/",
       "headers": {
-        "Authorization": "Bearer ztp_your_personal_access_token"
+        "Authorization": "Bearer ztp_your_personal_access_token" // or zoa_... OAuth
       }
     }
   }

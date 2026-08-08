@@ -4,12 +4,14 @@
 package keyring
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	gokeyring "github.com/zalando/go-keyring"
+	"github.com/zetic-ai/melange-cli/internal/config"
 )
 
 // service is the keychain service name for all melange credentials.
@@ -74,4 +76,55 @@ func HostKey(host string) string {
 		h = h[:i]
 	}
 	return h
+}
+
+// SetOAuth stores OAuth credentials for host on a separate key.
+func SetOAuth(host string, creds config.OAuthCredentials) error {
+	data, err := json.Marshal(creds)
+	if err != nil {
+		return fmt.Errorf("marshaling oauth credentials: %w", err)
+	}
+	if err := gokeyring.Set(service, host+".oauth", string(data)); err != nil {
+		return fmt.Errorf("storing oauth credentials in keyring: %w", err)
+	}
+	return nil
+}
+
+// GetOAuth returns OAuth credentials for host or ErrNotFound.
+func GetOAuth(host string) (*config.OAuthCredentials, error) {
+	raw, err := gokeyring.Get(service, host+".oauth")
+	if err != nil {
+		if errors.Is(err, gokeyring.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("reading oauth credentials from keyring: %w", err)
+	}
+	var creds config.OAuthCredentials
+	if err := json.Unmarshal([]byte(raw), &creds); err != nil {
+		return nil, fmt.Errorf("parsing oauth credentials: %w", err)
+	}
+	return &creds, nil
+}
+
+// DeleteOAuth removes OAuth credentials for host.
+func DeleteOAuth(host string) error {
+	if err := gokeyring.Delete(service, host+".oauth"); err != nil {
+		if errors.Is(err, gokeyring.ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("deleting oauth credentials from keyring: %w", err)
+	}
+	return nil
+}
+
+// LookupOAuth adapts GetOAuth to the ResolveOAuth lookup signature.
+func LookupOAuth(host string) (*config.OAuthCredentials, bool, error) {
+	creds, err := GetOAuth(host)
+	if errors.Is(err, ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return creds, true, nil
 }

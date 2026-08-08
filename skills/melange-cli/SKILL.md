@@ -31,25 +31,26 @@ unchanged when the data came from MCP tools.
 
 ## Authentication
 
-Prefer the environment variable — it overrides every stored credential:
+Browser OAuth is the default for interactive use — `melange auth login` opens a browser (PKCE loopback, `zoa_`/`zor_`, auto-refreshed) and falls back to PAT paste when browser/display unavailable:
 
 ```sh
-export MELANGE_API_KEY=ztp_...          # personal access token
-melange auth status --json              # verify: exit 0 = authenticated
+melange auth login                          # OAuth recommended (browser)
+melange auth login --with-token < token.txt # PAT for CI/headless (ztp_...)
+export MELANGE_API_KEY=ztp_...              # PAT env var also overrides stored OAuth
+melange auth status --json                  # verify: exit 0 = authenticated
 ```
 
 Exit 4 from `auth status` means not logged in or token rejected. When the
 server supports it, `auth status` also shows the account's plan; `melange plan`
 reports it in detail.
 Alternatives: `MELANGE_API_KEY_FILE=/path/to/token` (fails loudly if
-unreadable), or a stored login for interactive setups:
-`melange auth login --with-token < token.txt`. `melange auth token`
-prints the resolved token (stdout has nothing else). Set `MELANGE_HOST`
-to target a non-default API host. Pass `--no-input` to guarantee no
+unreadable; empty file is ignored for OAuth), `melange auth login --no-browser`
+(prints URL for SSH), or `--insecure-storage` to store in 0600 `config.yml`.
+`melange auth token` prints the resolved token (stdout has nothing else).
+Set `MELANGE_HOST` to target a non-default API host. Pass `--no-input` to guarantee no
 interactive prompts.
 
-Credential precedence is `MELANGE_API_KEY` > `MELANGE_API_KEY_FILE` >
-explicitly selected config storage > OS keyring > legacy config fallback.
+Credential precedence is `MELANGE_API_KEY` > `MELANGE_API_KEY_FILE` (non-empty) > OAuth (keyring/config, auto-refreshed, `zoa_`/`zor_`) > PAT keyring > legacy config fallback.
 
 ## Exit codes — branch on these
 

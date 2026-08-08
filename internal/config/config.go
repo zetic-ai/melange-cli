@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -30,10 +31,21 @@ const (
 	CredentialStorageConfig = "config"
 )
 
+// OAuthCredentials holds OAuth token pair for a host.
+type OAuthCredentials struct {
+	AccessToken  string    `yaml:"access_token"`
+	RefreshToken string    `yaml:"refresh_token"`
+	Expiry       time.Time `yaml:"expiry,omitempty"`
+	ClientID     string    `yaml:"client_id"`
+	Scope        string    `yaml:"scope,omitempty"`
+	TokenType    string    `yaml:"token_type,omitempty"`
+}
+
 // HostEntry holds per-host credentials.
 type HostEntry struct {
-	APIKey  string `yaml:"api_key"`
-	Storage string `yaml:"storage,omitempty"`
+	APIKey  string            `yaml:"api_key"`
+	Storage string            `yaml:"storage,omitempty"`
+	OAuth   *OAuthCredentials `yaml:"oauth,omitempty"`
 }
 
 // Config is the top-level config file schema.
@@ -126,6 +138,7 @@ func (c *Config) SetHostAPIKey(host, key string) error {
 	if c.Hosts == nil {
 		c.Hosts = make(map[string]HostEntry)
 	}
+	// Clear OAuth for this host (mutually exclusive).
 	c.Hosts[host] = HostEntry{APIKey: key, Storage: CredentialStorageConfig}
 	return Save(c)
 }
@@ -133,11 +146,118 @@ func (c *Config) SetHostAPIKey(host, key string) error {
 // DeleteHostAPIKey removes the API key for host from the config file and
 // saves it. Removing an absent host is not an error.
 func (c *Config) DeleteHostAPIKey(host string) error {
-	if _, ok := c.Hosts[host]; !ok {
+	entry, ok := c.Hosts[host]
+	if !ok {
 		return nil
 	}
-	delete(c.Hosts, host)
+	entry.APIKey = ""
+	if entry.OAuth == nil {
+		delete(c.Hosts, host)
+	} else {
+		c.Hosts[host] = entry
+	}
 	return Save(c)
+}
+
+// SetHostOAuth stores OAuth credentials for host, clearing any PAT.
+func (c *Config) SetHostOAuth(host string, creds OAuthCredentials) error {
+	if c.Hosts == nil {
+		c.Hosts = make(map[string]HostEntry)
+	}
+	cc := creds
+	c.Hosts[host] = HostEntry{OAuth: &cc, Storage: CredentialStorageConfig}
+	return Save(c)
+}
+
+// DeleteHostOAuth removes OAuth credentials for host.
+func (c *Config) DeleteHostOAuth(host string) error {
+	entry, ok := c.Hosts[host]
+	if !ok {
+		return nil
+	}
+	if entry.OAuth == nil {
+		return nil
+	}
+	entry.OAuth = nil
+	if entry.APIKey == "" && entry.OAuth == nil {
+		delete(c.Hosts, host)
+	} else {
+		c.Hosts[host] = entry
+	}
+	return Save(c)
+}
+
+// ResolveOAuth returns OAuth credentials for host, checking config vs keyring.
+func (c *Config) ResolveOAuth(host string, lookup func(string) (*OAuthCredentials, bool, error)) (*OAuthCredentials, string, error) {
+	var configured HostEntry
+	if c != nil && c.Hosts != nil {
+		configured = c.Hosts[host]
+	}
+	if configured.Storage == CredentialStorageConfig && configured.OAuth != nil {
+		return configured.OAuth, "oauth(config)", nil
+	}
+	if lookup != nil {
+		creds, ok, err := lookup(host)
+		if err != nil {
+			return nil, "", fmt.Errorf("resolving oauth from keyring: %w", err)
+		}
+		if ok && creds != nil {
+			return creds, "oauth(keyring)", nil
+		}
+	}
+	if configured.OAuth != nil {
+		return configured.OAuth, "oauth(config)", nil
+	}
+	return nil, "", nil
+}
+
+// ResolveAnyTokenWith resolves the effective token with precedence:
+// MELANGE_API_KEY > MELANGE_API_KEY_FILE (non-empty) > OAuth(fresh) > PAT keyring > PAT config.
+// Empty MELANGE_API_KEY_FILE is treated as unset for OAuth path (falls through) but ResolveTokenWith preserves empty behavior.
+func (c *Config) ResolveAnyTokenWith(host string, lookupPAT func(string) (string, bool, error), lookupOAuth func(string) (*OAuthCredentials, bool, error)) (Resolved, *OAuthCredentials, error) {
+	if v := os.Getenv(EnvAPIKey); v != "" {
+		return Resolved{Value: v, Source: "env:" + EnvAPIKey}, nil, nil
+	}
+	if path := os.Getenv(EnvAPIKeyFile); path != "" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return Resolved{}, nil, fmt.Errorf("reading %s (%s): %w", EnvAPIKeyFile, path, err)
+		}
+		trimmed := strings.TrimSpace(string(raw))
+		if trimmed == "" {
+			if os.Getenv("MELANGE_DEBUG") != "" {
+				fmt.Fprintf(os.Stderr, "! %s empty, ignoring\n", EnvAPIKeyFile)
+			}
+		} else {
+			return Resolved{Value: trimmed, Source: "env:" + EnvAPIKeyFile}, nil, nil
+		}
+	}
+	// OAuth fresh check
+	if lookupOAuth != nil || (c != nil && c.Hosts != nil && c.Hosts[host].OAuth != nil) {
+		creds, src, err := c.ResolveOAuth(host, lookupOAuth)
+		if err != nil {
+			return Resolved{}, nil, err
+		}
+		if creds != nil {
+			if creds.Expiry.IsZero() {
+				// Treat zero expiry as absent per spec; fall through to PAT.
+			} else if creds.Expiry.After(time.Now().Add(30 * time.Second)) {
+				return Resolved{Value: creds.AccessToken, Source: src}, creds, nil
+			} else {
+				// Stale — return creds so caller can refresh instead of falling back to PAT.
+				return Resolved{}, creds, nil
+			}
+		}
+	}
+	// Fall back to PAT
+	res, err := c.ResolveTokenWith(host, lookupPAT)
+	if err != nil {
+		return Resolved{}, nil, err
+	}
+	if res.Value != "" {
+		return res, nil, nil
+	}
+	return Resolved{}, nil, nil
 }
 
 // ConfigDir returns the platform-appropriate directory for the config file.

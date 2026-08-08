@@ -144,3 +144,49 @@ From OpenAI's developer docs:
     `mcpName` field added here before `mcp-publisher publish` can succeed.
     Publication remains a manual, gated action like brew/npm — no CI step
     publishes the registry entry.
+
+## Submission checklist (manual)
+
+No automation publishes to these directories — a human completes the portals
+below. The hosted endpoint `https://mcp.zetic.ai` is already live
+(`GET /healthz` 200, `/.well-known/oauth-protected-resource` 200, ALB
+`mp-mcp` healthy, ACM `mcp.zetic.ai` ISSUED) and the `title` gap (item 3)
+is closed in this repo (every `mcp.Tool` now carries `Title`). The remaining
+portal steps are:
+
+### Anthropic Claude Connectors Directory
+
+- Portal: `https://claude.ai/admin-settings/directory/submissions/new` —
+  requires a Claude **Team or Enterprise organization** and
+  directory-management access (Owner by default).
+- Server URL: `https://mcp.zetic.ai/mcp` (Streamable HTTP).
+- Authentication: OAuth DCR or `/.well-known/oauth-authorization-server`
+  from `api.zetic.ai` (gap 2) — now live via the Melange API; verify end to
+  end from claude.ai before submitting.
+- Privacy policy URL: must cover collection, usage and storage, third-party
+  sharing, retention, and contact information (gap 5). No policy file is
+  added in this repo; supply the hosted URL in the portal.
+- Listing collateral: documentation URL, support contact, icon, name
+  (≤100 chars), tagline (≤55 chars), description (≤2,000 chars), 1–5
+  categories, and a permanent URL slug.
+- Reviewer access: test-account setup detailed enough for a reviewer to
+  exercise every tool end to end (e.g., `MELANGE_E2E_PAT` style PAT with
+  `read`+`write` scopes), plus confirmation that every tool was exercised
+  (MCP Inspector or a custom connector).
+- Compliance: accept the Anthropic Software Directory Terms and Policy and the
+  seven portal acknowledgments.
+
+### ChatGPT Connector
+
+- Enable **Developer Mode** in ChatGPT Settings, then add a custom connector
+  with URL `https://mcp.zetic.ai/mcp`. Exercise the full catalog and confirm
+  the hosted endpoint stays reachable for review and domain verification.
+- Optional deep-research `search`/`fetch` tools (gap 8) are **explicitly not
+  added in this plan** — the server remains a full-MCP connector; adding the
+  two read-only tools is a separate decision.
+- Broad distribution beyond a single workspace goes through the Apps SDK
+  submission and review with domain verification (gap 9).
+
+Out of scope for this plan: `search`/`fetch` tools, MCPB bundle, privacy
+policy file.
+

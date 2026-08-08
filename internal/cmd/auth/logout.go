@@ -3,12 +3,14 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/keyring"
+	"github.com/zetic-ai/melange-cli/internal/oauth"
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
@@ -34,7 +36,26 @@ Exit codes: 0 success, 1 storage error.`,
 				return err
 			}
 
+			// Revoke OAuth if present (best-effort, ignore errors)
+			transport := host.transport
+			if transport == nil {
+				transport = http.DefaultTransport
+			}
+			if creds, _, _ := host.cfg.ResolveOAuth(host.hostKey, keyring.LookupOAuth); creds != nil {
+				_ = oauth.RevokeWithTransport(cmd.Context(), host.host.Value, creds.ClientID, creds.RefreshToken, transport)
+				_ = oauth.RevokeWithTransport(cmd.Context(), host.host.Value, creds.ClientID, creds.AccessToken, transport)
+			} else if creds2, ok, _ := keyring.LookupOAuth(host.hostKey); ok && creds2 != nil {
+				_ = oauth.RevokeWithTransport(cmd.Context(), host.host.Value, creds2.ClientID, creds2.RefreshToken, transport)
+				_ = oauth.RevokeWithTransport(cmd.Context(), host.host.Value, creds2.ClientID, creds2.AccessToken, transport)
+			}
+
 			var deleteErrs []error
+			if err := keyring.DeleteOAuth(host.hostKey); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+				deleteErrs = append(deleteErrs, err)
+			}
+			if err := host.cfg.DeleteHostOAuth(host.hostKey); err != nil {
+				deleteErrs = append(deleteErrs, err)
+			}
 			if err := keyring.Delete(host.hostKey); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 				deleteErrs = append(deleteErrs, err)
 			}

@@ -5,9 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/build"
@@ -16,6 +19,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/keyring"
+	"github.com/zetic-ai/melange-cli/internal/oauth"
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
@@ -50,13 +54,17 @@ func Run(args []string) int {
 		}
 		host := cfg.ResolveHost(f.HostOverride)
 		hostKey := keyring.HostKey(host.Value)
-		token, err := cfg.ResolveTokenWith(hostKey, keyring.Lookup)
+		transport := f.HTTPTransport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		ctx := context.Background()
+		token, _, err := resolveAnyTokenMain(ctx, cfg, host.Value, hostKey, transport)
 		if err != nil {
 			return nil, err
 		}
 		if token.Value == "" {
-			return nil, cmdutil.AuthError{Err: fmt.Errorf(
-				"not logged in to %s; run `melange auth login` or set MELANGE_API_KEY", hostKey)}
+			return nil, cmdutil.AuthError{Err: fmt.Errorf("not logged in to %s; run `melange auth login` or set MELANGE_API_KEY", hostKey)}
 		}
 		return cmdutil.NewAPIClient(f, host.Value, token.Value)
 	}
@@ -88,8 +96,16 @@ func Run(args []string) int {
 // mapCobraError inspects cobra error messages and promotes certain error
 // classes to the appropriate typed error so ExitCode maps them correctly.
 func mapCobraError(err error) error {
+	if err == nil {
+		return nil
+	}
 	msg := err.Error()
-	// Cobra's unknown-command message starts with "unknown command"
+	if strings.Contains(msg, "unknown command") || strings.Contains(msg, "unknown flag") || strings.Contains(msg, "invalid flag") {
+		return cmdutil.FlagError{Err: err}
+	}
+	if strings.Contains(msg, "required flag") || strings.Contains(msg, "flag needs") {
+		return cmdutil.FlagError{Err: err}
+	}
 	if strings.HasPrefix(msg, "unknown command") {
 		return cmdutil.FlagError{Err: err}
 	}
@@ -103,4 +119,98 @@ func executable() string {
 		return "melange"
 	}
 	return exe
+}
+
+func resolveAnyTokenMain(ctx context.Context, cfg *config.Config, issuerHost, hostKey string, transport http.RoundTripper) (config.Resolved, *config.OAuthCredentials, error) {
+	res, creds, err := cfg.ResolveAnyTokenWith(hostKey, keyring.Lookup, keyring.LookupOAuth)
+	if err != nil {
+		if cfg.Hosts != nil {
+			if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig && entry.APIKey != "" {
+				res2, err2 := cfg.ResolveTokenWith(hostKey, keyring.Lookup)
+				if err2 != nil {
+					return config.Resolved{}, nil, err2
+				}
+				if res2.Value != "" {
+					return res2, nil, nil
+				}
+				return config.Resolved{}, nil, nil
+			}
+		}
+		return config.Resolved{}, nil, err
+	}
+	if res.Value != "" {
+		return res, creds, nil
+	}
+	if creds != nil {
+		muIface, _ := oauth.RefreshMu.LoadOrStore(hostKey, &sync.Mutex{})
+		mu := muIface.(*sync.Mutex)
+		mu.Lock()
+		defer mu.Unlock()
+		creds2, src2, err := cfg.ResolveOAuth(hostKey, keyring.LookupOAuth)
+		if err != nil {
+			if cfg.Hosts != nil {
+				if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig && entry.APIKey != "" {
+					creds2 = nil
+				} else {
+					return config.Resolved{}, nil, err
+				}
+			} else {
+				return config.Resolved{}, nil, err
+			}
+		}
+		if creds2 != nil && !creds2.Expiry.IsZero() && creds2.Expiry.After(time.Now().Add(30*time.Second)) {
+			return config.Resolved{Value: creds2.AccessToken, Source: src2}, creds2, nil
+		}
+		if creds2 != nil {
+			creds = creds2
+			src := src2
+			if transport == nil {
+				transport = http.DefaultTransport
+			}
+			newTok, err := oauth.RefreshWithTransport(ctx, issuerHost, creds.ClientID, creds.RefreshToken, transport)
+			if err != nil {
+				var oe *oauth.OAuthError
+				if errors.As(err, &oe) && oe.Code == "invalid_grant" {
+					_ = keyring.DeleteOAuth(hostKey)
+					_ = cfg.DeleteHostOAuth(hostKey)
+					return config.Resolved{}, nil, cmdutil.AuthError{Err: fmt.Errorf("session expired, run melange auth login")}
+				}
+				if strings.Contains(err.Error(), "invalid_grant") {
+					_ = keyring.DeleteOAuth(hostKey)
+					_ = cfg.DeleteHostOAuth(hostKey)
+					return config.Resolved{}, nil, cmdutil.AuthError{Err: fmt.Errorf("session expired, run melange auth login")}
+				}
+				return config.Resolved{}, nil, err
+			}
+			expiry := time.Now().Add(time.Duration(newTok.ExpiresIn) * time.Second).Add(-30 * time.Second)
+			newCreds := config.OAuthCredentials{
+				AccessToken:  newTok.AccessToken,
+				RefreshToken: newTok.RefreshToken,
+				Expiry:       expiry,
+				ClientID:     creds.ClientID,
+				Scope:        newTok.Scope,
+				TokenType:    newTok.TokenType,
+			}
+			if kerr := keyring.SetOAuth(hostKey, newCreds); kerr == nil {
+				if cfg.Hosts != nil {
+					if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig {
+						delete(cfg.Hosts, hostKey)
+						_ = config.Save(cfg)
+					}
+				}
+				_ = keyring.Delete(hostKey)
+			} else {
+				if cfg.Hosts != nil {
+					if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig {
+						_ = cfg.SetHostOAuth(hostKey, newCreds)
+					}
+				}
+			}
+			if src == "" {
+				src = "oauth(keyring)"
+			}
+			return config.Resolved{Value: newCreds.AccessToken, Source: src}, &newCreds, nil
+		}
+	}
+	return res, nil, nil
 }

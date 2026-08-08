@@ -126,7 +126,8 @@
       ],
       "title": "RepoResponse",
       "type": "object"
-    }
+    },
+    "title": "Create repository"
   },
   {
     "annotations": {
@@ -173,7 +174,8 @@
         "repo"
       ],
       "type": "object"
-    }
+    },
+    "title": "Delete repository"
   },
   {
     "annotations": {
@@ -399,7 +401,8 @@
         }
       },
       "type": "object"
-    }
+    },
+    "title": "Get account info"
   },
   {
     "annotations": {
@@ -517,7 +520,8 @@
       ],
       "title": "ModelStatusResponse",
       "type": "object"
-    }
+    },
+    "title": "Get conversion status"
   },
   {
     "annotations": {
@@ -803,7 +807,8 @@
       ],
       "description": "The deployment options catalog (called with no arguments) or one model version's deployment guide (called with repo and model_key).",
       "type": "object"
-    }
+    },
+    "title": "Get deployment info"
   },
   {
     "annotations": {
@@ -919,7 +924,8 @@
       ],
       "title": "LibraryModelDetailResponse",
       "type": "object"
-    }
+    },
+    "title": "Get library model"
   },
   {
     "annotations": {
@@ -1238,7 +1244,8 @@
       ],
       "description": "The model alone, or with include_targets the {\"model\", \"targets\"} envelope.",
       "type": "object"
-    }
+    },
+    "title": "Get model"
   },
   {
     "annotations": {
@@ -2599,7 +2606,8 @@
       ],
       "description": "One of the three report shapes, selected by report_type: general, llm, or package.",
       "type": "object"
-    }
+    },
+    "title": "Get model report"
   },
   {
     "annotations": {
@@ -2691,7 +2699,8 @@
       ],
       "title": "RepoResponse",
       "type": "object"
-    }
+    },
+    "title": "Get repository"
   },
   {
     "annotations": {
@@ -2749,7 +2758,8 @@
       ],
       "title": "ImportModelResponse",
       "type": "object"
-    }
+    },
+    "title": "Import model"
   },
   {
     "annotations": {
@@ -2854,7 +2864,8 @@
       ],
       "title": "PagedModelSummary",
       "type": "object"
-    }
+    },
+    "title": "List models"
   },
   {
     "annotations": {
@@ -2972,7 +2983,8 @@
       ],
       "title": "PagedRepoResponse",
       "type": "object"
-    }
+    },
+    "title": "List repositories"
   },
   {
     "annotations": {
@@ -3071,7 +3083,8 @@
       ],
       "title": "DownloadAuthorizationResponse",
       "type": "object"
-    }
+    },
+    "title": "Request model download"
   },
   {
     "annotations": {
@@ -3394,7 +3407,8 @@
       ],
       "description": "The model page alone, or with include_providers the {\"models\", \"providers\"} envelope.",
       "type": "object"
-    }
+    },
+    "title": "Search library"
   },
   {
     "annotations": {
@@ -3475,7 +3489,8 @@
       ],
       "title": "ModelSummary",
       "type": "object"
-    }
+    },
+    "title": "Set default model"
   },
   {
     "annotations": {
@@ -3602,7 +3617,8 @@
       ],
       "title": "RepoResponse",
       "type": "object"
-    }
+    },
+    "title": "Update repository"
   },
   {
     "annotations": {
@@ -3839,7 +3855,8 @@
         "session"
       ],
       "type": "object"
-    }
+    },
+    "title": "Upload model"
   },
   {
     "annotations": {
@@ -3938,6 +3955,7 @@
       ],
       "title": "MeResponse",
       "type": "object"
-    }
+    },
+    "title": "Who am I"
   }
 ]

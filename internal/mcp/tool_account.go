@@ -20,7 +20,8 @@ const (
 // registerAccount registers the account/identity tools.
 func registerAccount(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "whoami",
+		Name:  "whoami",
+		Title: "Who am I",
 		Description: "Verify credentials and report the identity behind them: " +
 			"user, account, and token name/scopes. Call this first to confirm " +
 			"authentication before using the other melange tools.",
@@ -34,7 +35,8 @@ func registerAccount(s *mcp.Server, d Deps) {
 	}, whoamiHandler(d))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "get_account_info",
+		Name:  "get_account_info",
+		Title: "Get account info",
 		Description: "Report the account's standing as the composite object " +
 			`{"usage": …, "quotas": …, "plan": …}: current billing-period counters, ` +
 			"those counters against the plan limits, and the effective plan tier. " +
