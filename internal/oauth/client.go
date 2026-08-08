@@ -66,7 +66,11 @@ func httpClientWithTransport(tr http.RoundTripper) *http.Client {
 }
 
 func normalizeHost(host string) string {
-	return strings.TrimSuffix(strings.TrimSpace(host), "/")
+	h := strings.TrimSuffix(strings.TrimSpace(host), "/")
+	if !strings.Contains(h, "://") {
+		h = "https://" + h
+	}
+	return h
 }
 
 // Discover fetches OIDC discovery.
