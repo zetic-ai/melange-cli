@@ -105,9 +105,9 @@ func TestDoLoginAttemptSuccess(t *testing.T) {
 	state := u.Query().Get("state")
 	require.NotEmpty(t, state)
 
-	// Send callback
+	// Send callback with retry for -race flakiness (Serve may not yet Accept)
 	callbackURL := redirectURI + "?code=authcode123&state=" + url.QueryEscape(state)
-	resp, err := http.Get(callbackURL)
+	resp, err := getWithRetry(callbackURL)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -196,7 +196,7 @@ func TestDoLoginAttemptInvalidTargetRetry(t *testing.T) {
 	require.NotEmpty(t, state)
 
 	callbackURL := redirectURI + "?code=authcode123&state=" + url.QueryEscape(state)
-	resp, err := http.Get(callbackURL)
+	resp, err := getWithRetry(callbackURL)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -278,9 +278,9 @@ func TestLoginFlowWithTransportIntegration(t *testing.T) {
 	redirectURI := u.Query().Get("redirect_uri")
 	require.NotEmpty(t, state)
 	require.NotEmpty(t, redirectURI)
-	// Send callback to redirectURI
+	// Send callback to redirectURI with retry for -race
 	callbackURL := redirectURI + "?code=authcode123&state=" + url.QueryEscape(state)
-	resp, err := http.Get(callbackURL)
+	resp, err := getWithRetry(callbackURL)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -294,6 +294,23 @@ func TestLoginFlowWithTransportIntegration(t *testing.T) {
 		t.Fatal("timeout waiting for LoginFlow")
 	}
 	reg.Verify(t)
+}
+
+func getWithRetry(url string) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	for i := 0; i < 5; i++ {
+		resp, err = http.Get(url)
+		if err == nil {
+			return resp, nil
+		}
+		if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "connection reset") {
+			time.Sleep(time.Duration(20*(i+1)) * time.Millisecond)
+			continue
+		}
+		return nil, err
+	}
+	return resp, err
 }
 
 func TestInvalidTargetRetry(t *testing.T) {

@@ -89,7 +89,7 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 	// First callback: simulate AS 302 ?error=invalid_target to loopback (prod allowlist hit)
 	// Handler will return Err invalid_target, triggering outer retry
 	invalidURL := redirectURI + "?error=invalid_target&error_description=not+allowlisted&state=" + url.QueryEscape(state1)
-	resp, err := http.Get(invalidURL)
+	resp, err := httpGetWithRetry(invalidURL)
 	require.NoError(t, err)
 	resp.Body.Close()
 
@@ -124,7 +124,7 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 	require.NotEmpty(t, redirectURI2)
 	// Use the retry's redirectURI (same port, new state)
 	callbackOK := redirectURI2 + "?code=outer_retry_code&state=" + url.QueryEscape(state2)
-	resp2, err := http.Get(callbackOK)
+	resp2, err := httpGetWithRetry(callbackOK)
 	require.NoError(t, err)
 	resp2.Body.Close()
 
@@ -142,4 +142,21 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 		t.Fatal("timeout waiting for LoginFlow outer retry — ln.Close() fix missing, ln2 bind failed")
 	}
 	reg.Verify(t)
+}
+
+func httpGetWithRetry(url string) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	for i := 0; i < 5; i++ {
+		resp, err = http.Get(url)
+		if err == nil {
+			return resp, nil
+		}
+		if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "connection reset") {
+			time.Sleep(time.Duration(20*(i+1)) * time.Millisecond)
+			continue
+		}
+		return nil, err
+	}
+	return resp, err
 }
