@@ -17,17 +17,20 @@ func Open(url string) error {
 			return ErrNoDisplay
 		}
 	}
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
+	cmd := commandForOS(runtime.GOOS, url)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	return nil
+}
+
+func commandForOS(goos, url string) *exec.Cmd {
+	switch goos {
+	case "darwin":
+		return exec.Command("open", url)
+	case "windows":
+		return exec.Command("cmd", "/c", "start", url)
+	default:
+		return exec.Command("xdg-open", url)
+	}
 }

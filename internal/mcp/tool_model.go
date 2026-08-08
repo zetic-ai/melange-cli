@@ -35,7 +35,7 @@ var (
 // registerModel registers the model read and write tools.
 func registerModel(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "list_models",
+		Name:  "list_models",
 		Title: "List models",
 		Description: "List a repository's models, newest first, with each model's key, " +
 			"version, type, state, and whether it is the repository default. Model keys are " +
@@ -51,7 +51,7 @@ func registerModel(s *mcp.Server, d Deps) {
 	}, listModelsHandler(d))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "get_model",
+		Name:  "get_model",
 		Title: "Get model",
 		Description: "Show one model: version, type, state, default flag, source, " +
 			"terminal and download-ready flags, failure code, and timestamps. With " +
@@ -68,7 +68,7 @@ func registerModel(s *mcp.Server, d Deps) {
 	}, getModelHandler(d))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "get_conversion_status",
+		Name:  "get_conversion_status",
 		Title: "Get conversion status",
 		Description: "Read a model's conversion status: state (converting, optimizing, " +
 			"ready, or failed), pipeline stage, download readiness, and a failure code when " +
@@ -86,7 +86,7 @@ func registerModel(s *mcp.Server, d Deps) {
 	}, getConversionStatusHandler(d))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "set_default_model",
+		Name:  "set_default_model",
 		Title: "Set default model",
 		Description: "Make one model the repository's default. Exactly one model per repository " +
 			"is the default, so this also clears the previous one; repeating the call returns the " +
@@ -100,7 +100,7 @@ func registerModel(s *mcp.Server, d Deps) {
 	}, setDefaultModelHandler(d))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "import_model",
+		Name:  "import_model",
 		Title: "Import model",
 		Description: "Import a model from a public HuggingFace repository into an llm-type " +
 			"repository (other repositories are rejected). Returns immediately with the new model " +

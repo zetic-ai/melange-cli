@@ -22,7 +22,7 @@ const (
 // registerReport registers the benchmark report read tool.
 func registerReport(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "get_model_report",
+		Name:  "get_model_report",
 		Title: "Get model report",
 		Description: "Read one of a model's on-device benchmark reports. report_type " +
 			"selects the shape: 'general' is per-device latency, SNR, and memory " +

@@ -20,7 +20,7 @@ const redactedURL = "<redacted>"
 // registerDownload registers the billable download-authorization tool.
 func registerDownload(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "request_model_download",
+		Name:  "request_model_download",
 		Title: "Request model download",
 		Description: "Authorize downloading one converted target's artifacts. This is BILLABLE: " +
 			"the target's size counts against the account's bandwidth quota, also for public models " +
