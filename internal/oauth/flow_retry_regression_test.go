@@ -63,18 +63,16 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 		}{creds, err}
 	}()
 
-	// Wait for first auth URL
+	// Wait for first auth URL — filter to actual authorize URL, not retry message
 	var authURL1 string
 	require.Eventually(t, func() bool {
 		s := out.String()
-		if strings.Contains(s, "https://") {
-			for _, line := range strings.Split(s, "\n") {
-				if strings.Contains(line, "https://") {
-					idx := strings.Index(line, "https://")
-					if idx >= 0 {
-						authURL1 = strings.TrimSpace(line[idx:])
-						return true
-					}
+		for _, line := range strings.Split(s, "\n") {
+			if strings.Contains(line, "Opening ") && strings.Contains(line, "https://") && strings.Contains(line, "oauth/authorize") {
+				idx := strings.Index(line, "https://")
+				if idx >= 0 {
+					authURL1 = strings.TrimSpace(line[idx:])
+					return true
 				}
 			}
 		}
@@ -99,20 +97,16 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 	var authURL2 string
 	require.Eventually(t, func() bool {
 		s := out.String()
-		// Count occurrences of "https://" — second should appear after retry message
-		count := strings.Count(s, "https://")
-		if count >= 2 {
-			// Find last auth URL
-			lines := strings.Split(s, "\n")
-			for i := len(lines) - 1; i >= 0; i-- {
-				if strings.Contains(lines[i], "https://") {
-					idx := strings.Index(lines[i], "https://")
-					if idx >= 0 {
-						candidate := strings.TrimSpace(lines[i][idx:])
-						if candidate != authURL1 {
-							authURL2 = candidate
-							return true
-						}
+		lines := strings.Split(s, "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			line := lines[i]
+			if strings.Contains(line, "Opening ") && strings.Contains(line, "https://") && strings.Contains(line, "oauth/authorize") {
+				idx := strings.Index(line, "https://")
+				if idx >= 0 {
+					candidate := strings.TrimSpace(line[idx:])
+					if candidate != authURL1 {
+						authURL2 = candidate
+						return true
 					}
 				}
 			}
