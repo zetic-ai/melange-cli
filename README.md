@@ -1,5 +1,7 @@
 # Melange CLI
 
+![Melange CLI](melange-cli.png)
+
 Give your AI agent access to [Melange](https://melange.zetic.ai), an on-device AI deployment platform by [ZETIC](https://zetic.ai). `melange` is designed agents-first: non-interactive safe, structured `--json` output, stable exit codes, and machine-actionable errors.
 
 ## Install
