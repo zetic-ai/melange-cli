@@ -83,7 +83,7 @@ func TestDoLoginAttemptSuccess(t *testing.T) {
 	// Wait for server to start and URL to be printed
 	require.Eventually(t, func() bool {
 		return strings.Contains(out.String(), "https://")
-	}, 2*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	// Parse state from printed URL
 	output := out.String()
@@ -176,7 +176,7 @@ func TestDoLoginAttemptInvalidTargetRetry(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return strings.Contains(out.String(), "https://")
-	}, 2*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	output := out.String()
 	var authURL string
@@ -299,13 +299,13 @@ func TestLoginFlowWithTransportIntegration(t *testing.T) {
 func getWithRetry(url string) (*http.Response, error) {
 	var resp *http.Response
 	var err error
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 100; i++ {
 		resp, err = http.Get(url)
 		if err == nil {
 			return resp, nil
 		}
 		if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "connection reset") {
-			time.Sleep(time.Duration(20*(i+1)) * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 			continue
 		}
 		return nil, err

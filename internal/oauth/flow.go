@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -73,16 +74,23 @@ func LoginFlowWithOptionsWithTransport(ctx context.Context, issuerHost string, o
 			if out != nil {
 				fmt.Fprintln(out, "! Resource https://api.zetic.ai not allowlisted — continuing without resource binding")
 			}
-			// doLoginAttempt's server.Close() does not free the custom net.Listener
-			// (Serve(ln)+Close() leaves bind: address already in use). Must close ln
-			// explicitly before re-binding same port, otherwise ln2 always fails with
-			// ErrLoopbackListen and OAuth primary login is broken for prod allowlist hit.
+			// First attempt's Serve was closed but the listener may still hold the
+			// port. Close it and retry on a fresh ephemeral port with a new DCR
+			// (exact redirect_uris match). This avoids the Close+Listen same-port
+			// race that flakes under -race (connection refused) on ubuntu/macOS.
 			_ = ln.Close()
-			ln2, err2 := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+			ln2, err2 := net.Listen("tcp", "127.0.0.1:0")
 			if err2 != nil {
 				return nil, fmt.Errorf("%w: %w", ErrLoopbackListen, err2)
 			}
-			return doLoginAttemptWithTransport(ctx, disc, issuerHost, clientID, redirectURI, ln2, out, false, noBrowser, transport)
+			defer ln2.Close()
+			port2 := ln2.Addr().(*net.TCPAddr).Port
+			redirectURI2 := fmt.Sprintf("http://127.0.0.1:%d/callback", port2)
+			clientID2, err2 := RegisterClientWithTransport(ctx, disc.RegistrationEndpoint, redirectURI2, transport)
+			if err2 != nil {
+				return nil, err2
+			}
+			return doLoginAttemptWithTransport(ctx, disc, issuerHost, clientID2, redirectURI2, ln2, out, false, noBrowser, transport)
 		}
 		return nil, err
 	}
@@ -115,13 +123,10 @@ func doLoginAttemptWithTransport(ctx context.Context, disc *Discovery, issuerHos
 	resultCh := make(chan callbackResult, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", loopbackHandler(state, resultCh))
-	server := &http.Server{Handler: mux}
-	go func() {
-		if err := server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			_ = err // only log at MELANGE_DEBUG, do not fail login
-		}
-	}()
-	defer server.Close()
+	srv := httptest.NewUnstartedServer(mux)
+	srv.Listener = ln
+	srv.Start()
+	defer srv.Close()
 
 	if out != nil {
 		fmt.Fprintf(out, "Opening %s\n", authURL)

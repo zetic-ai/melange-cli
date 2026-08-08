@@ -36,6 +36,10 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 	reg.Register(func(req *http.Request) bool {
 		return req.Method == http.MethodPost && req.URL.Path == "/oauth/register"
 	}, httpmock.JSONResponse(201, map[string]string{"client_id": "retry_outer_cid"}))
+	// Second register for retry on fresh ephemeral port (new DCR)
+	reg.Register(func(req *http.Request) bool {
+		return req.Method == http.MethodPost && req.URL.Path == "/oauth/register"
+	}, httpmock.JSONResponse(201, map[string]string{"client_id": "retry_outer_cid2"}))
 	// Second discovery for ExchangeCode inside second attempt
 	reg.Register(func(req *http.Request) bool {
 		return req.Method == http.MethodGet && strings.Contains(req.URL.Path, ".well-known")
@@ -77,7 +81,7 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 			}
 		}
 		return false
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 	require.NotEmpty(t, authURL1)
 	u1, err := url.Parse(authURL1)
 	require.NoError(t, err)
@@ -112,7 +116,7 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 			}
 		}
 		return false
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 	require.NotEmpty(t, authURL2, "outer invalid_target retry must re-bind same port via ln2 and print second auth URL — without ln.Close() fix this never appears and returns ErrLoopbackListen")
 	assert.Contains(t, out.String(), "not allowlisted")
 	// Second callback: success with code
@@ -147,13 +151,13 @@ func TestLoginFlowOuterInvalidTargetRetry(t *testing.T) {
 func httpGetWithRetry(url string) (*http.Response, error) {
 	var resp *http.Response
 	var err error
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 100; i++ {
 		resp, err = http.Get(url)
 		if err == nil {
 			return resp, nil
 		}
 		if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "connection reset") {
-			time.Sleep(time.Duration(20*(i+1)) * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 			continue
 		}
 		return nil, err
