@@ -212,18 +212,10 @@ func TestDiscoveryFallbackSetsRevocationEndpoint(t *testing.T) {
 }
 
 func TestRegisterClientFallbackPath(t *testing.T) {
-	// Force discovery to fail, test RegisterClient deprecated wrapper's fallback
-	orig := Transport
-	defer func() { Transport = orig }()
-	Transport = &errorTransport{err: errors.New("discovery down")}
 	reg := &httpmock.Registry{}
 	reg.Register(func(req *http.Request) bool {
 		return req.Method == http.MethodPost && req.URL.Path == "/oauth/register"
 	}, httpmock.JSONResponse(201, map[string]string{"client_id": "fallback_cid"}))
-	// Also need to intercept fallbackDiscovery URL which is https://api.zetic.ai/oauth/register
-	// Our errorTransport will error, but we replaced Transport with errorTransport, so RegisterClient will try errorTransport for RegisterClientWithTransport and fail.
-	// To test fallbackDiscovery path, we need DCR endpoint to succeed via mock that handles the fallback URL
-	// Instead test that RegisterClientWithTransport works with bad discovery but direct URL
 	id, err := RegisterClientWithTransport(context.Background(), "https://api.zetic.ai/oauth/register", "http://127.0.0.1:1234/callback", reg)
 	require.NoError(t, err)
 	assert.Equal(t, "fallback_cid", id)

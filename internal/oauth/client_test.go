@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,6 +33,17 @@ func TestDiscoverSuccess(t *testing.T) {
 	assert.Equal(t, "https://api.zetic.ai/oauth/register", d.RegistrationEndpoint)
 	assert.Equal(t, "https://api.zetic.ai/oauth/revoke", d.RevocationEndpoint)
 	reg.Verify(t)
+}
+
+func TestDiscoverTransportFailureIsTyped(t *testing.T) {
+	reg := &httpmock.Registry{}
+	reg.Register(func(*http.Request) bool { return true }, func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("dial failed")
+	})
+	_, err := DiscoverWithTransport(context.Background(), "https://api.zetic.ai", reg)
+	require.Error(t, err)
+	var transportErr *TransportError
+	assert.ErrorAs(t, err, &transportErr)
 }
 
 func TestDiscoverMissingEndpoints(t *testing.T) {

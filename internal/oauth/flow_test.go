@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zetic-ai/melange-cli/internal/browser"
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
@@ -294,6 +295,20 @@ func TestLoginFlowWithTransportIntegration(t *testing.T) {
 		t.Fatal("timeout waiting for LoginFlow")
 	}
 	reg.Verify(t)
+}
+
+func TestDoLoginAttemptBrowserFailureReturnsImmediately(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	redirectURI := "http://" + ln.Addr().String() + "/callback"
+	started := time.Now()
+	_, err = doLoginAttemptWithBrowser(
+		context.Background(), fallbackDiscovery("https://api.zetic.ai"),
+		"https://api.zetic.ai", "client", redirectURI, ln, nil, true, false,
+		&httpmock.Registry{}, func(string) error { return browser.ErrNoDisplay },
+	)
+	require.ErrorIs(t, err, browser.ErrNoDisplay)
+	assert.Less(t, time.Since(started), time.Second)
 }
 
 func getWithRetry(url string) (*http.Response, error) {

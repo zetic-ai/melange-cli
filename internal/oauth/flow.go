@@ -23,23 +23,9 @@ var (
 	ErrOAuthTimeout   = errors.New("oauth timeout")
 )
 
-func LoginFlow(ctx context.Context, issuerHost string, out io.Writer) (*config.OAuthCredentials, error) {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	return LoginFlowWithTransport(ctx, issuerHost, out, tr)
-}
-
 // LoginFlowWithTransport is the transport-injected variant.
 func LoginFlowWithTransport(ctx context.Context, issuerHost string, out io.Writer, transport http.RoundTripper) (*config.OAuthCredentials, error) {
 	return LoginFlowWithOptionsWithTransport(ctx, issuerHost, out, false, transport)
-}
-
-func LoginFlowWithOptions(ctx context.Context, issuerHost string, out io.Writer, noBrowser bool) (*config.OAuthCredentials, error) {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	return LoginFlowWithOptionsWithTransport(ctx, issuerHost, out, noBrowser, tr)
 }
 
 func LoginFlowWithOptionsWithTransport(ctx context.Context, issuerHost string, out io.Writer, noBrowser bool, transport http.RoundTripper) (*config.OAuthCredentials, error) {
@@ -97,15 +83,11 @@ func LoginFlowWithOptionsWithTransport(ctx context.Context, issuerHost string, o
 	return creds, nil
 }
 
-//nolint:unused // kept for backward compat; use doLoginAttemptWithTransport
-func doLoginAttempt(ctx context.Context, disc *Discovery, issuerHost, clientID, redirectURI string, ln net.Listener, out io.Writer, withResource bool, noBrowser bool) (*config.OAuthCredentials, error) {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	return doLoginAttemptWithTransport(ctx, disc, issuerHost, clientID, redirectURI, ln, out, withResource, noBrowser, tr)
+func doLoginAttemptWithTransport(ctx context.Context, disc *Discovery, issuerHost, clientID, redirectURI string, ln net.Listener, out io.Writer, withResource bool, noBrowser bool, transport http.RoundTripper) (*config.OAuthCredentials, error) {
+	return doLoginAttemptWithBrowser(ctx, disc, issuerHost, clientID, redirectURI, ln, out, withResource, noBrowser, transport, browser.Open)
 }
 
-func doLoginAttemptWithTransport(ctx context.Context, disc *Discovery, issuerHost, clientID, redirectURI string, ln net.Listener, out io.Writer, withResource bool, noBrowser bool, transport http.RoundTripper) (*config.OAuthCredentials, error) {
+func doLoginAttemptWithBrowser(ctx context.Context, disc *Discovery, issuerHost, clientID, redirectURI string, ln net.Listener, out io.Writer, withResource bool, noBrowser bool, transport http.RoundTripper, openBrowser func(string) error) (*config.OAuthCredentials, error) {
 	verifier, err := generateVerifier()
 	if err != nil {
 		ln.Close()
@@ -133,13 +115,14 @@ func doLoginAttemptWithTransport(ctx context.Context, disc *Discovery, issuerHos
 		fmt.Fprintf(out, "If browser doesn't open, visit: %s\n", authURL)
 	}
 	if !noBrowser {
-		if err := browser.Open(authURL); err != nil {
+		if err := openBrowser(authURL); err != nil {
 			if out != nil {
 				fmt.Fprintf(out, "Browser open failed: %v\n", err)
 			}
 			if os.Getenv("MELANGE_DEBUG") != "" {
 				fmt.Fprintf(os.Stderr, "browser open failed: %v\n", err)
 			}
+			return nil, fmt.Errorf("%w: %w", browser.ErrNoDisplay, err)
 		}
 	}
 

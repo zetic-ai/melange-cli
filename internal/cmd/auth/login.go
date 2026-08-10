@@ -85,6 +85,11 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 				isNoDisplay := errors.Is(oauthErr, browser.ErrNoDisplay)
 				isLoopback := errors.Is(oauthErr, oauth.ErrLoopbackListen)
 				isTimeout := errors.Is(oauthErr, oauth.ErrOAuthTimeout)
+				var transportErr *oauth.TransportError
+				isTransport := errors.As(oauthErr, &transportErr)
+				if !isNoDisplay && !isLoopback && !isTimeout && !isTransport {
+					return fmt.Errorf("oauth login: %w", oauthErr)
+				}
 				fmt.Fprintf(f.IOStreams.ErrOut, "! Browser login unavailable (%s), falling back to personal access token.\n", text.SanitizeTerminalInline(oauthErr.Error()))
 				if isLoopback {
 					fmt.Fprintln(f.IOStreams.ErrOut, oauthErr.Error())
@@ -96,10 +101,6 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 				}
 				return runPATPromptLogin(cmd, f, host, insecureStorage, exporter)
 			}
-			storage, err := storeOAuth(host, *creds, insecureStorage)
-			if err != nil {
-				return err
-			}
 			client, err := cmdutil.NewAPIClient(f, host.host.Value, creds.AccessToken)
 			if err != nil {
 				return err
@@ -110,6 +111,10 @@ Exit codes: 0 success, 1 storage or validation error, 2 usage error
 				if errors.As(err, &apiErr) && apiErr.StatusCode == 401 {
 					return cmdutil.AuthError{Err: fmt.Errorf("%s rejected the token (%s); create a new one at Settings → Personal Access Tokens", host.hostKey, apiErr.Message)}
 				}
+				return err
+			}
+			storage, err := storeOAuth(host, *creds, insecureStorage)
+			if err != nil {
 				return err
 			}
 			for _, env := range []string{config.EnvAPIKey, config.EnvAPIKeyFile} {

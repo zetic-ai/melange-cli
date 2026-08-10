@@ -9,17 +9,15 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/zetic-ai/melange-cli/internal/api"
+	"github.com/zetic-ai/melange-cli/internal/authn"
 	"github.com/zetic-ai/melange-cli/internal/build"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/config"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 	"github.com/zetic-ai/melange-cli/internal/keyring"
-	"github.com/zetic-ai/melange-cli/internal/oauth"
 	"github.com/zetic-ai/melange-cli/internal/text"
 )
 
@@ -122,95 +120,9 @@ func executable() string {
 }
 
 func resolveAnyTokenMain(ctx context.Context, cfg *config.Config, issuerHost, hostKey string, transport http.RoundTripper) (config.Resolved, *config.OAuthCredentials, error) {
-	res, creds, err := cfg.ResolveAnyTokenWith(hostKey, keyring.Lookup, keyring.LookupOAuth)
-	if err != nil {
-		if cfg.Hosts != nil {
-			if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig && entry.APIKey != "" {
-				res2, err2 := cfg.ResolveTokenWith(hostKey, keyring.Lookup)
-				if err2 != nil {
-					return config.Resolved{}, nil, err2
-				}
-				if res2.Value != "" {
-					return res2, nil, nil
-				}
-				return config.Resolved{}, nil, nil
-			}
-		}
-		return config.Resolved{}, nil, err
+	res, creds, err := authn.ResolveAnyToken(ctx, cfg, issuerHost, hostKey, transport)
+	if errors.Is(err, authn.ErrSessionExpired) {
+		return config.Resolved{}, nil, cmdutil.AuthError{Err: err}
 	}
-	if res.Value != "" {
-		return res, creds, nil
-	}
-	if creds != nil {
-		muIface, _ := oauth.RefreshMu.LoadOrStore(hostKey, &sync.Mutex{})
-		mu := muIface.(*sync.Mutex)
-		mu.Lock()
-		defer mu.Unlock()
-		creds2, src2, err := cfg.ResolveOAuth(hostKey, keyring.LookupOAuth)
-		if err != nil {
-			if cfg.Hosts != nil {
-				if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig && entry.APIKey != "" {
-					creds2 = nil
-				} else {
-					return config.Resolved{}, nil, err
-				}
-			} else {
-				return config.Resolved{}, nil, err
-			}
-		}
-		if creds2 != nil && !creds2.Expiry.IsZero() && creds2.Expiry.After(time.Now().Add(30*time.Second)) {
-			return config.Resolved{Value: creds2.AccessToken, Source: src2}, creds2, nil
-		}
-		if creds2 != nil {
-			creds = creds2
-			src := src2
-			if transport == nil {
-				transport = http.DefaultTransport
-			}
-			newTok, err := oauth.RefreshWithTransport(ctx, issuerHost, creds.ClientID, creds.RefreshToken, transport)
-			if err != nil {
-				var oe *oauth.OAuthError
-				if errors.As(err, &oe) && oe.Code == "invalid_grant" {
-					_ = keyring.DeleteOAuth(hostKey)
-					_ = cfg.DeleteHostOAuth(hostKey)
-					return config.Resolved{}, nil, cmdutil.AuthError{Err: fmt.Errorf("session expired, run melange auth login")}
-				}
-				if strings.Contains(err.Error(), "invalid_grant") {
-					_ = keyring.DeleteOAuth(hostKey)
-					_ = cfg.DeleteHostOAuth(hostKey)
-					return config.Resolved{}, nil, cmdutil.AuthError{Err: fmt.Errorf("session expired, run melange auth login")}
-				}
-				return config.Resolved{}, nil, err
-			}
-			expiry := time.Now().Add(time.Duration(newTok.ExpiresIn) * time.Second).Add(-30 * time.Second)
-			newCreds := config.OAuthCredentials{
-				AccessToken:  newTok.AccessToken,
-				RefreshToken: newTok.RefreshToken,
-				Expiry:       expiry,
-				ClientID:     creds.ClientID,
-				Scope:        newTok.Scope,
-				TokenType:    newTok.TokenType,
-			}
-			if kerr := keyring.SetOAuth(hostKey, newCreds); kerr == nil {
-				if cfg.Hosts != nil {
-					if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig {
-						delete(cfg.Hosts, hostKey)
-						_ = config.Save(cfg)
-					}
-				}
-				_ = keyring.Delete(hostKey)
-			} else {
-				if cfg.Hosts != nil {
-					if entry, ok := cfg.Hosts[hostKey]; ok && entry.Storage == config.CredentialStorageConfig {
-						_ = cfg.SetHostOAuth(hostKey, newCreds)
-					}
-				}
-			}
-			if src == "" {
-				src = "oauth(keyring)"
-			}
-			return config.Resolved{Value: newCreds.AccessToken, Source: src}, &newCreds, nil
-		}
-	}
-	return res, nil, nil
+	return res, creds, err
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +112,129 @@ func TestResolveAnyTokenStaleWithGenericRefreshError(t *testing.T) {
 	require.Error(t, err)
 	// Should not be "session expired"
 	assert.NotContains(t, err.Error(), "session expired")
+}
+
+func TestResolveAnyTokenRefreshPreservesOmittedFields(t *testing.T) {
+	t.Setenv(config.EnvAPIKey, "")
+	t.Setenv(config.EnvAPIKeyFile, "")
+	gokeyring.MockInit()
+	old := config.OAuthCredentials{
+		AccessToken: "zoa_old", RefreshToken: "zor_still_valid",
+		Expiry: time.Now().Add(-time.Hour), ClientID: "cid",
+		Scope: "write", TokenType: "Bearer",
+	}
+	require.NoError(t, keyring.SetOAuth("api.zetic.ai", old))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, ".well-known") {
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"authorization_endpoint": "https://api.zetic.ai/oauth/authorize",
+				"token_endpoint":         "https://api.zetic.ai/oauth/token",
+				"registration_endpoint":  "https://api.zetic.ai/oauth/register",
+			})
+			return
+		}
+		if r.URL.Path == "/oauth/token" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "zoa_new", "expires_in": 3600,
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	h := &hostContext{
+		cfg: &config.Config{}, host: config.Resolved{Value: srv.URL},
+		hostKey: "api.zetic.ai", transport: &redirectTransportForTest{target: srv.URL},
+	}
+	_, _, err := h.resolveAnyToken(context.Background())
+	require.NoError(t, err)
+	stored, err := keyring.GetOAuth("api.zetic.ai")
+	require.NoError(t, err)
+	assert.Equal(t, "zor_still_valid", stored.RefreshToken)
+	assert.Equal(t, "write", stored.Scope)
+	assert.Equal(t, "Bearer", stored.TokenType)
+}
+
+func TestResolveAnyTokenRefreshPreservesConfigStorage(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
+	t.Setenv(config.EnvAPIKey, "")
+	t.Setenv(config.EnvAPIKeyFile, "")
+	gokeyring.MockInit()
+	old := config.OAuthCredentials{
+		AccessToken: "zoa_old", RefreshToken: "zor_old",
+		Expiry: time.Now().Add(-time.Hour), ClientID: "cid",
+	}
+	cfg := &config.Config{Hosts: map[string]config.HostEntry{
+		"api.zetic.ai": {Storage: config.CredentialStorageConfig, OAuth: &old},
+	}}
+
+	srv := refreshServer(t, "zoa_new", "zor_new")
+	h := &hostContext{
+		cfg: cfg, host: config.Resolved{Value: srv.URL}, hostKey: "api.zetic.ai",
+		transport: &redirectTransportForTest{target: srv.URL},
+	}
+	_, _, err := h.resolveAnyToken(context.Background())
+	require.NoError(t, err)
+	_, err = keyring.GetOAuth("api.zetic.ai")
+	assert.ErrorIs(t, err, keyring.ErrNotFound)
+	loaded, err := config.Load()
+	require.NoError(t, err)
+	require.NotNil(t, loaded.Hosts["api.zetic.ai"].OAuth)
+	assert.Equal(t, "zoa_new", loaded.Hosts["api.zetic.ai"].OAuth.AccessToken)
+}
+
+func TestResolveAnyTokenRefreshReturnsConfigPersistenceError(t *testing.T) {
+	dir := t.TempDir()
+	blocked := filepath.Join(dir, "not-a-directory")
+	require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o600))
+	t.Setenv("XDG_CONFIG_HOME", blocked)
+	t.Setenv("APPDATA", blocked)
+	t.Setenv(config.EnvAPIKey, "")
+	t.Setenv(config.EnvAPIKeyFile, "")
+	gokeyring.MockInit()
+	old := config.OAuthCredentials{
+		AccessToken: "zoa_old", RefreshToken: "zor_old",
+		Expiry: time.Now().Add(-time.Hour), ClientID: "cid",
+	}
+	cfg := &config.Config{Hosts: map[string]config.HostEntry{
+		"api.zetic.ai": {Storage: config.CredentialStorageConfig, OAuth: &old},
+	}}
+	srv := refreshServer(t, "zoa_new", "zor_new")
+	h := &hostContext{
+		cfg: cfg, host: config.Resolved{Value: srv.URL}, hostKey: "api.zetic.ai",
+		transport: &redirectTransportForTest{target: srv.URL},
+	}
+	_, _, err := h.resolveAnyToken(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config")
+}
+
+func refreshServer(t *testing.T, accessToken, refreshToken string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, ".well-known") {
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"authorization_endpoint": "https://api.zetic.ai/oauth/authorize",
+				"token_endpoint":         "https://api.zetic.ai/oauth/token",
+				"registration_endpoint":  "https://api.zetic.ai/oauth/register",
+			})
+			return
+		}
+		if r.URL.Path == "/oauth/token" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": accessToken, "refresh_token": refreshToken,
+				"expires_in": 3600, "scope": "write", "token_type": "Bearer",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func TestResolveAnyTokenStaleWithInvalidGrantStringMatch(t *testing.T) {

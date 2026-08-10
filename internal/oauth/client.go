@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -36,6 +35,16 @@ type OAuthError struct {
 	State       string
 }
 
+// TransportError identifies an OAuth HTTP request that failed before an HTTP
+// response was received. Callers may offer a non-OAuth fallback for this
+// class without masking protocol or authorization-server errors.
+type TransportError struct {
+	Err error
+}
+
+func (e *TransportError) Error() string { return "oauth transport: " + e.Err.Error() }
+func (e *TransportError) Unwrap() error { return e.Err }
+
 func (e *OAuthError) Error() string {
 	if e.Description != "" {
 		return fmt.Sprintf("%s: %s", e.Code, e.Description)
@@ -51,18 +60,19 @@ type Discovery struct {
 	RevocationEndpoint    string `json:"revocation_endpoint"`
 }
 
-// Transport is the HTTP transport for OAuth requests. Tests can override it.
-//
-// Deprecated: pass Transport explicitly via DiscoverWithTransport, RegisterClientWithTransport, etc.
-var Transport http.RoundTripper = http.DefaultTransport
-
-var transportMu sync.RWMutex
-
 func httpClientWithTransport(tr http.RoundTripper) *http.Client {
 	if tr == nil {
 		tr = http.DefaultTransport
 	}
 	return &http.Client{Transport: tr, Timeout: 10 * time.Second}
+}
+
+func doRequest(transport http.RoundTripper, req *http.Request) (*http.Response, error) {
+	resp, err := httpClientWithTransport(transport).Do(req)
+	if err != nil {
+		return nil, &TransportError{Err: err}
+	}
+	return resp, nil
 }
 
 func normalizeHost(host string) string {
@@ -73,16 +83,6 @@ func normalizeHost(host string) string {
 	return h
 }
 
-// Discover fetches OIDC discovery.
-//
-// Deprecated: use DiscoverWithTransport.
-func Discover(ctx context.Context, issuerHost string) (*Discovery, error) {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	return DiscoverWithTransport(ctx, issuerHost, tr)
-}
-
 // DiscoverWithTransport fetches OIDC discovery using the provided transport.
 func DiscoverWithTransport(ctx context.Context, issuerHost string, transport http.RoundTripper) (*Discovery, error) {
 	issuer := normalizeHost(issuerHost)
@@ -91,7 +91,7 @@ func DiscoverWithTransport(ctx context.Context, issuerHost string, transport htt
 	if err != nil {
 		return nil, err
 	}
-	resp, err := httpClientWithTransport(transport).Do(req)
+	resp, err := doRequest(transport, req)
 	if err != nil {
 		return nil, err
 	}
@@ -124,22 +124,6 @@ func fallbackDiscovery(issuerHost string) *Discovery {
 	}
 }
 
-// RegisterClient performs DCR.
-//
-// Deprecated: use RegisterClientWithTransport with explicit registrationURL.
-func RegisterClient(ctx context.Context, issuerHost, redirectURI string) (string, error) {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	var regURL string
-	if d, err := DiscoverWithTransport(ctx, issuerHost, tr); err == nil {
-		regURL = d.RegistrationEndpoint
-	} else {
-		regURL = fallbackDiscovery(issuerHost).RegistrationEndpoint
-	}
-	return RegisterClientWithTransport(ctx, regURL, redirectURI, tr)
-}
-
 // RegisterClientWithTransport performs DCR using the provided registration URL and transport.
 func RegisterClientWithTransport(ctx context.Context, registrationURL, redirectURI string, transport http.RoundTripper) (string, error) {
 	payload := map[string]any{
@@ -156,7 +140,7 @@ func RegisterClientWithTransport(ctx context.Context, registrationURL, redirectU
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClientWithTransport(transport).Do(req)
+	resp, err := doRequest(transport, req)
 	if err != nil {
 		return "", err
 	}
@@ -175,16 +159,6 @@ func RegisterClientWithTransport(ctx context.Context, registrationURL, redirectU
 		return "", fmt.Errorf("DCR missing client_id")
 	}
 	return out.ClientID, nil
-}
-
-// ExchangeCode exchanges authorization code for tokens.
-//
-// Deprecated: use ExchangeCodeWithTransport.
-func ExchangeCode(ctx context.Context, issuerHost, clientID, code, verifier, redirectURI, resource string) (*TokenResponse, error) {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	return ExchangeCodeWithTransport(ctx, issuerHost, clientID, code, verifier, redirectURI, resource, tr)
 }
 
 // ExchangeCodeWithTransport exchanges authorization code for tokens using the provided transport.
@@ -214,7 +188,7 @@ func exchangeCodeWithURLWithTransport(ctx context.Context, tokenURL, clientID, c
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := httpClientWithTransport(transport).Do(req)
+	resp, err := doRequest(transport, req)
 	if err != nil {
 		return nil, err
 	}
@@ -237,16 +211,6 @@ func exchangeCodeWithURLWithTransport(ctx context.Context, tokenURL, clientID, c
 	return &tok, nil
 }
 
-// Refresh exchanges refresh token for new tokens.
-//
-// Deprecated: use RefreshWithTransport.
-func Refresh(ctx context.Context, issuerHost, clientID, refreshToken string) (*TokenResponse, error) {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	return RefreshWithTransport(ctx, issuerHost, clientID, refreshToken, tr)
-}
-
 // RefreshWithTransport exchanges refresh token for new tokens using the provided transport.
 func RefreshWithTransport(ctx context.Context, issuerHost, clientID, refreshToken string, transport http.RoundTripper) (*TokenResponse, error) {
 	d, err := DiscoverWithTransport(ctx, issuerHost, transport)
@@ -265,7 +229,7 @@ func RefreshWithTransport(ctx context.Context, issuerHost, clientID, refreshToke
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := httpClientWithTransport(transport).Do(req)
+	resp, err := doRequest(transport, req)
 	if err != nil {
 		return nil, err
 	}
@@ -287,16 +251,6 @@ func RefreshWithTransport(ctx context.Context, issuerHost, clientID, refreshToke
 	return &tok, nil
 }
 
-// Revoke revokes a token (oracle-free).
-//
-// Deprecated: use RevokeWithTransport.
-func Revoke(ctx context.Context, issuerHost, clientID, token string) error {
-	transportMu.RLock()
-	tr := Transport
-	transportMu.RUnlock()
-	return RevokeWithTransport(ctx, issuerHost, clientID, token, tr)
-}
-
 // RevokeWithTransport revokes a token using the provided transport.
 func RevokeWithTransport(ctx context.Context, issuerHost, clientID, token string, transport http.RoundTripper) error {
 	d, err := DiscoverWithTransport(ctx, issuerHost, transport)
@@ -316,7 +270,7 @@ func RevokeWithTransport(ctx context.Context, issuerHost, clientID, token string
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := httpClientWithTransport(transport).Do(req)
+	resp, err := doRequest(transport, req)
 	if err != nil {
 		return err
 	}

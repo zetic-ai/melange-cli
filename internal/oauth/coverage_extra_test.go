@@ -30,7 +30,7 @@ func TestHttpClientWithTransportNil(t *testing.T) {
 	assert.Equal(t, http.DefaultTransport, c2.Transport)
 }
 
-func TestDiscoverDeprecated(t *testing.T) {
+func TestDiscoverWithRedirectTransport(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, ".well-known") {
 			_ = json.NewEncoder(w).Encode(map[string]string{
@@ -44,11 +44,8 @@ func TestDiscoverDeprecated(t *testing.T) {
 		w.WriteHeader(404)
 	}))
 	defer srv.Close()
-	orig := Transport
-	defer func() { Transport = orig }()
 	tr := &redirectTransport{target: srv.URL, base: srv.Client().Transport}
-	Transport = tr
-	d, err := Discover(context.Background(), "https://api.zetic.ai")
+	d, err := DiscoverWithTransport(context.Background(), "https://api.zetic.ai", tr)
 	require.NoError(t, err)
 	assert.Equal(t, "https://api.zetic.ai/oauth/authorize", d.AuthorizationEndpoint)
 }
@@ -78,112 +75,6 @@ func (r *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-func TestRegisterClientDeprecated(t *testing.T) {
-	reg := &httpmock.Registry{}
-	discovery := map[string]string{
-		"authorization_endpoint": "https://api.zetic.ai/oauth/authorize",
-		"token_endpoint":         "https://api.zetic.ai/oauth/token",
-		"registration_endpoint":  "https://api.zetic.ai/oauth/register",
-		"revocation_endpoint":    "https://api.zetic.ai/oauth/revoke",
-	}
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodGet && strings.Contains(req.URL.Path, ".well-known")
-	}, httpmock.JSONResponse(200, discovery))
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodPost && req.URL.Path == "/oauth/register"
-	}, httpmock.JSONResponse(201, map[string]string{"client_id": "dep_client"}))
-
-	orig := Transport
-	defer func() { Transport = orig }()
-	Transport = reg
-
-	id, err := RegisterClient(context.Background(), "https://api.zetic.ai", "http://127.0.0.1:1234/callback")
-	require.NoError(t, err)
-	assert.Equal(t, "dep_client", id)
-	reg.Verify(t)
-}
-
-func TestExchangeCodeDeprecated(t *testing.T) {
-	reg := &httpmock.Registry{}
-	discovery := map[string]string{
-		"authorization_endpoint": "https://api.zetic.ai/oauth/authorize",
-		"token_endpoint":         "https://api.zetic.ai/oauth/token",
-		"registration_endpoint":  "https://api.zetic.ai/oauth/register",
-		"revocation_endpoint":    "https://api.zetic.ai/oauth/revoke",
-	}
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodGet && strings.Contains(req.URL.Path, ".well-known")
-	}, httpmock.JSONResponse(200, discovery))
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodPost && req.URL.Path == "/oauth/token"
-	}, httpmock.JSONResponse(200, map[string]any{
-		"access_token":  "zoa_dep",
-		"refresh_token": "zor_dep",
-		"expires_in":    3600,
-	}))
-
-	orig := Transport
-	defer func() { Transport = orig }()
-	Transport = reg
-
-	tok, err := ExchangeCode(context.Background(), "https://api.zetic.ai", "cid", "code", "verifier", "http://127.0.0.1:1234/callback", "")
-	require.NoError(t, err)
-	assert.Equal(t, "zoa_dep", tok.AccessToken)
-	reg.Verify(t)
-}
-
-func TestRefreshDeprecated(t *testing.T) {
-	reg := &httpmock.Registry{}
-	discovery := map[string]string{
-		"authorization_endpoint": "https://api.zetic.ai/oauth/authorize",
-		"token_endpoint":         "https://api.zetic.ai/oauth/token",
-		"registration_endpoint":  "https://api.zetic.ai/oauth/register",
-	}
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodGet && strings.Contains(req.URL.Path, ".well-known")
-	}, httpmock.JSONResponse(200, discovery))
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodPost && req.URL.Path == "/oauth/token"
-	}, httpmock.JSONResponse(200, map[string]any{
-		"access_token":  "zoa_r",
-		"refresh_token": "zor_r",
-		"expires_in":    3600,
-	}))
-
-	orig := Transport
-	defer func() { Transport = orig }()
-	Transport = reg
-
-	tok, err := Refresh(context.Background(), "https://api.zetic.ai", "cid", "old")
-	require.NoError(t, err)
-	assert.Equal(t, "zoa_r", tok.AccessToken)
-	reg.Verify(t)
-}
-
-func TestRevokeDeprecated(t *testing.T) {
-	reg := &httpmock.Registry{}
-	discovery := map[string]string{
-		"authorization_endpoint": "https://api.zetic.ai/oauth/authorize",
-		"token_endpoint":         "https://api.zetic.ai/oauth/token",
-		"registration_endpoint":  "https://api.zetic.ai/oauth/register",
-		"revocation_endpoint":    "https://api.zetic.ai/oauth/revoke",
-	}
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodGet && strings.Contains(req.URL.Path, ".well-known")
-	}, httpmock.JSONResponse(200, discovery))
-	reg.Register(func(req *http.Request) bool {
-		return req.Method == http.MethodPost && req.URL.Path == "/oauth/revoke"
-	}, httpmock.StatusStringResponse(200, ""))
-
-	orig := Transport
-	defer func() { Transport = orig }()
-	Transport = reg
-
-	err := Revoke(context.Background(), "https://api.zetic.ai", "cid", "tok")
-	require.NoError(t, err)
-	reg.Verify(t)
-}
-
 func TestPortFromListener(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -205,18 +96,16 @@ type mockAddr struct{}
 func (m *mockAddr) Network() string { return "tcp" }
 func (m *mockAddr) String() string  { return "mock:1234" }
 
-func TestLoginFlowDeprecatedWrappers(t *testing.T) {
+func TestLoginFlowExplicitTransportCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := LoginFlow(ctx, "https://example.invalid", nil)
+	_, err := LoginFlowWithTransport(ctx, "https://example.invalid", nil, &httpmock.Registry{})
 	assert.Error(t, err)
-	_, err = LoginFlowWithTransport(ctx, "https://example.invalid", nil, &httpmock.Registry{})
-	assert.Error(t, err)
-	_, err = LoginFlowWithOptions(ctx, "https://example.invalid", nil, true)
+	_, err = LoginFlowWithOptionsWithTransport(ctx, "https://example.invalid", nil, true, &httpmock.Registry{})
 	assert.Error(t, err)
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	ln.Close()
-	_, err = doLoginAttempt(ctx, &Discovery{AuthorizationEndpoint: "https://example.invalid/oauth/authorize", TokenEndpoint: "https://example.invalid/oauth/token", RegistrationEndpoint: "https://example.invalid/oauth/register"}, "https://example.invalid", "cid", "http://127.0.0.1:1234/callback", ln, nil, true, true)
+	_, err = doLoginAttemptWithTransport(ctx, &Discovery{AuthorizationEndpoint: "https://example.invalid/oauth/authorize", TokenEndpoint: "https://example.invalid/oauth/token", RegistrationEndpoint: "https://example.invalid/oauth/register"}, "https://example.invalid", "cid", "http://127.0.0.1:1234/callback", ln, nil, true, true, &httpmock.Registry{})
 	assert.Error(t, err)
 }
 
