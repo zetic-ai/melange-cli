@@ -136,9 +136,8 @@ From OpenAI's developer docs:
 
 10. **Namespace authentication**: prove ownership of `zetic.ai` via the
     registry's DNS authentication to publish under `ai.zetic/*`.
-11. **Version alignment**: `server.json` carries the placeholder version
-    `0.4.0`; before publishing, set it (and the npm package reference) to
-    the first released version that actually ships `melange mcp`.
+11. **Version alignment**: `server.json` and its npm package reference are
+    aligned at `0.5.0`, the first release that ships `melange mcp`.
 12. **npm release**: the ownership check reads `mcpName` from the package
     published on npmjs.org, so the next npm release must include the
     `mcpName` field added here before `mcp-publisher publish` can succeed.
@@ -189,4 +188,3 @@ portal steps are:
 
 Out of scope for this plan: `search`/`fetch` tools, MCPB bundle, privacy
 policy file.
-

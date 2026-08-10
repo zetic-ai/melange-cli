@@ -90,6 +90,7 @@ homebrew_casks:
       email: dev@zetic.ai
 
 release:
+  name_template: "Melange CLI {{ .Tag }}"
   draft: false
   # Tags like v1.2.3-rc.1 become GitHub prereleases automatically.
   prerelease: auto
