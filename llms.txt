@@ -90,25 +90,24 @@ templates these rules refer to.
 
 ## Environment variables
 
-MELANGE_API_KEY       personal access token (ztp_...); overrides all stored creds
-MELANGE_API_KEY_FILE  path to token file; unreadable => error (no fallback)
+MELANGE_API_KEY       personal access token (ztp_...) or PAT file token; overrides all stored creds (also shadows OAuth)
+MELANGE_API_KEY_FILE  path to token file; unreadable => error (no fallback); empty file is ignored for OAuth (falls through)
 MELANGE_HOST          API host (default https://api.zetic.ai)
 MELANGE_API_TIMEOUT   positive duration per ordinary API call (default 30s)
 MELANGE_DEBUG         1/true/yes/on: log request/response lines to stderr
 NO_COLOR, TERM=dumb   disable color
-Credential precedence: MELANGE_API_KEY > MELANGE_API_KEY_FILE > explicitly
-selected config storage > OS keyring > legacy config fallback. Host precedence:
+Credential precedence: MELANGE_API_KEY > MELANGE_API_KEY_FILE (non-empty) > OAuth (keyring/config, auto-refreshed, zoa_/zor_) > PAT keyring > PAT config fallback. Host precedence:
 --host > MELANGE_HOST > config > default.
-Config file: ${XDG_CONFIG_HOME:-~/.config}/melange/config.yml
+Config file: ${XDG_CONFIG_HOME:-~/.config}/melange/config.yml (0600) — OAuth stores {access_token,refresh_token,expiry,client_id,scope}
 Upload state: ${XDG_STATE_HOME:-~/.local/state}/melange/uploads
 
 ## melange auth
 
-Manage authentication (personal access tokens, prefix ztp_).
+Manage authentication — browser OAuth (default, `zoa_`/`zor_`) or personal access tokens (`ztp_`).
 
-melange auth login [--with-token] [--insecure-storage] [--json]
-  Verify a token against the API and store it (OS keyring; config file with
-  --insecure-storage). Non-interactive runs must use --with-token (stdin).
+melange auth login [--with-token] [--no-browser] [--insecure-storage] [--json]
+  Default opens a browser for OAuth PKCE loopback (recommended); verifies via /v1/me then stores OAuth in OS keyring (or 0600 config with --insecure-storage). Falls back to PAT paste when browser/display unavailable or on 90s timeout. --with-token reads a PAT (ztp_) from stdin for CI/headless; --no-browser prints the authorize URL. Non-interactive runs must use --with-token.
+  Example: melange auth login            # browser OAuth
   Example: melange auth login --with-token < token.txt
 
 melange auth status [--json|--jq|--template]

@@ -25,7 +25,8 @@ const uploadStallTimeout = 2 * time.Minute
 // server process runs on, which is only the caller's machine over stdio.
 func registerUpload(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
-		Name: "upload_model",
+		Name:  "upload_model",
+		Title: "Upload model",
 		Description: "Upload a local model file (with optional sample inputs and external data) " +
 			"into a repository through a resumable upload session, then register it and start " +
 			"conversion. Not billable. File paths are read by the MCP SERVER process, so they " +

@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api"
+	"github.com/zetic-ai/melange-cli/internal/authn"
 	"github.com/zetic-ai/melange-cli/internal/build"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
@@ -50,13 +52,17 @@ func Run(args []string) int {
 		}
 		host := cfg.ResolveHost(f.HostOverride)
 		hostKey := keyring.HostKey(host.Value)
-		token, err := cfg.ResolveTokenWith(hostKey, keyring.Lookup)
+		transport := f.HTTPTransport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		ctx := context.Background()
+		token, _, err := resolveAnyTokenMain(ctx, cfg, host.Value, hostKey, transport)
 		if err != nil {
 			return nil, err
 		}
 		if token.Value == "" {
-			return nil, cmdutil.AuthError{Err: fmt.Errorf(
-				"not logged in to %s; run `melange auth login` or set MELANGE_API_KEY", hostKey)}
+			return nil, cmdutil.AuthError{Err: fmt.Errorf("not logged in to %s; run `melange auth login` or set MELANGE_API_KEY", hostKey)}
 		}
 		return cmdutil.NewAPIClient(f, host.Value, token.Value)
 	}
@@ -88,8 +94,16 @@ func Run(args []string) int {
 // mapCobraError inspects cobra error messages and promotes certain error
 // classes to the appropriate typed error so ExitCode maps them correctly.
 func mapCobraError(err error) error {
+	if err == nil {
+		return nil
+	}
 	msg := err.Error()
-	// Cobra's unknown-command message starts with "unknown command"
+	if strings.Contains(msg, "unknown command") || strings.Contains(msg, "unknown flag") || strings.Contains(msg, "invalid flag") {
+		return cmdutil.FlagError{Err: err}
+	}
+	if strings.Contains(msg, "required flag") || strings.Contains(msg, "flag needs") {
+		return cmdutil.FlagError{Err: err}
+	}
 	if strings.HasPrefix(msg, "unknown command") {
 		return cmdutil.FlagError{Err: err}
 	}
@@ -103,4 +117,12 @@ func executable() string {
 		return "melange"
 	}
 	return exe
+}
+
+func resolveAnyTokenMain(ctx context.Context, cfg *config.Config, issuerHost, hostKey string, transport http.RoundTripper) (config.Resolved, *config.OAuthCredentials, error) {
+	res, creds, err := authn.ResolveAnyToken(ctx, cfg, issuerHost, hostKey, transport)
+	if errors.Is(err, authn.ErrSessionExpired) {
+		return config.Resolved{}, nil, cmdutil.AuthError{Err: err}
+	}
+	return res, creds, err
 }

@@ -27,7 +27,7 @@ Exit codes: 0 token printed, 4 no token found.`,
 			if err != nil {
 				return err
 			}
-			token, err := host.resolveToken()
+			token, _, err := host.resolveAnyToken(cmd.Context())
 			if err != nil {
 				return err
 			}

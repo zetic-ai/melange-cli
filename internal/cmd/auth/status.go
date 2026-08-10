@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api"
@@ -34,7 +35,7 @@ token was rejected.`,
 			if err != nil {
 				return err
 			}
-			token, err := host.resolveToken()
+			token, oauthCreds, err := host.resolveAnyToken(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -60,13 +61,16 @@ token was rejected.`,
 				return err
 			}
 
-			// Best-effort: the plan enriches status but is not what status
-			// verifies. A read failure (e.g. a backend that predates the
-			// endpoint) must not turn a valid token into an error, so the
-			// plan line is simply omitted when unavailable.
 			var planName string
 			if p, perr := client.GetBillingPlan(cmd.Context()); perr == nil {
 				planName = string(p.Plan)
+			}
+
+			authType := "pat"
+			if oauthCreds != nil {
+				authType = "oauth"
+			} else if isOAuthSource(token.Source) {
+				authType = "oauth"
 			}
 
 			if exporter != nil {
@@ -77,9 +81,13 @@ token was rejected.`,
 					"token_name":   me.Token.Name,
 					"token_source": token.Source,
 					"storage":      storageLocation(token.Source),
+					"auth_type":    authType,
 				}
 				if planName != "" {
 					payload["plan"] = planName
+				}
+				if oauthCreds != nil && !oauthCreds.Expiry.IsZero() {
+					payload["expiry"] = oauthCreds.Expiry.Format(time.RFC3339)
 				}
 				return exporter.Write(f.IOStreams, payload)
 			}
@@ -98,6 +106,16 @@ token was rejected.`,
 			fmt.Fprintf(out, "Source: %s\n", text.SanitizeTerminalInline(token.Source))
 			fmt.Fprintf(out, "Storage: %s\n",
 				text.SanitizeTerminalInline(storageLocation(token.Source)))
+			if authType == "oauth" && oauthCreds != nil && !oauthCreds.Expiry.IsZero() {
+				dur := time.Until(oauthCreds.Expiry).Round(time.Minute)
+				if dur > 0 {
+					fmt.Fprintf(out, "Auth type: oauth (expires in %s)\n", dur)
+				} else {
+					fmt.Fprintf(out, "Auth type: oauth (expired)\n")
+				}
+			} else {
+				fmt.Fprintf(out, "Auth type: %s\n", authType)
+			}
 			return nil
 		},
 	}
@@ -105,4 +123,8 @@ token was rejected.`,
 	cmdutil.AddJSONFlags(cmd, &exporter)
 
 	return cmd
+}
+
+func isOAuthSource(src string) bool {
+	return src == "oauth(keyring)" || src == "oauth(config)" || src == "oauth"
 }
