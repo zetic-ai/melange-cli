@@ -1,13 +1,13 @@
 # Qualcomm LLM report
 
-Fill this template from `melange-qualcomm` output and print it in the reply.
+Fill this template from `melange-qcom` output and print it in the reply.
 
 Set:
 
 ```sh
 repo=ACCOUNT/REPO
-model_key="$(melange-qualcomm model list -R "$repo" --jq '.results[] | select(.is_default) | .key')"
-report="$(melange-qualcomm report view "$model_key" -R "$repo" --type llm --json)"
+model_key="$(melange-qcom model list -R "$repo" --jq '.results[] | select(.is_default) | .key')"
+report="$(melange-qcom report view "$model_key" -R "$repo" --type llm --json)"
 ```
 
 ## Identity

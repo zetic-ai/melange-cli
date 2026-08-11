@@ -167,8 +167,8 @@ func TestQualcommToolErrorUsesEditionBranding(t *testing.T) {
 		StatusCode: 401, Type: "authentication_error",
 		Message: "invalid token", RequestID: "req_1",
 	})
-	want := "melange-qualcomm API: invalid token (authentication_error, HTTP 401, request req_1)\n" +
-		"To fix: run 'melange-qualcomm auth login' or set MELANGE_API_KEY."
+	want := "melange-qcom API: invalid token (authentication_error, HTTP 401, request req_1)\n" +
+		"To fix: run 'melange-qcom auth login' or set MELANGE_API_KEY."
 	assert.Equal(t, want, textOf(t, res))
 }
 

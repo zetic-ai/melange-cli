@@ -1,13 +1,13 @@
 # Qualcomm general-model report
 
-Fill this template from `melange-qualcomm` output and print it in the reply.
+Fill this template from `melange-qcom` output and print it in the reply.
 
 Set:
 
 ```sh
 repo=ACCOUNT/REPO
-model_key="$(melange-qualcomm model list -R "$repo" --jq '.results[] | select(.is_default) | .key')"
-report="$(melange-qualcomm report view "$model_key" -R "$repo" --type general --json)"
+model_key="$(melange-qcom model list -R "$repo" --jq '.results[] | select(.is_default) | .key')"
+report="$(melange-qcom report view "$model_key" -R "$repo" --type general --json)"
 ```
 
 ## Identity
@@ -57,4 +57,4 @@ decimals and memory to one decimal.
 ## Deployment
 
 Name the selected Qualcomm or device-unscoped target, then provide the exact
-Android or Flutter guide from `melange-qualcomm deploy guide`.
+Android or Flutter guide from `melange-qcom deploy guide`.

@@ -36,8 +36,8 @@ Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupte
 Reference topics: melange help environment, melange help exit-codes,
 melange help formatting.`
 	if f.Edition.IsQualcomm() {
-		short = "melange-qualcomm — Qualcomm-focused on-device AI deployment & benchmarking"
-		long = `melange-qualcomm is the Qualcomm-focused edition of the Zetic.ai Melange CLI.
+		short = "melange-qcom — Qualcomm-focused on-device AI deployment & benchmarking"
+		long = `melange-qcom is the Qualcomm-focused edition of the Zetic.ai Melange CLI.
 It shares Melange authentication and model management while curating benchmark
 reports, converted targets, and deployment guides for Qualcomm team workflows.
 
@@ -45,8 +45,8 @@ Report and target commands fail closed against the reviewed Qualcomm device
 fleet. The raw api command is intentionally unfiltered and is not an enforcement
 boundary. Data is written to stdout; progress and diagnostics go to stderr.
 
-Reference topics: melange-qualcomm help environment,
-melange-qualcomm help exit-codes, melange-qualcomm help formatting.`
+Reference topics: melange-qcom help environment,
+melange-qcom help exit-codes, melange-qcom help formatting.`
 	}
 	cmd := &cobra.Command{
 		Use:   program + " <command> <subcommand> [flags]",

@@ -1,18 +1,18 @@
 ---
-name: melange-qualcomm
-description: "Use when operating the ZETIC Melange platform for Qualcomm-focused on-device AI work with the `melange-qualcomm` CLI or MCP server: model upload/import and conversion monitoring, Qualcomm benchmark reports, converted target selection, and Android or Flutter deployment guides. Trigger for Qualcomm device evaluation, Snapdragon/QTI benchmark questions, or Qualcomm deployment workflows. Do not use the general `melange` binary for these requests."
+name: melange-qcom
+description: "Use when operating the ZETIC Melange platform for Qualcomm-focused on-device AI work with the `melange-qcom` CLI or MCP server: model upload/import and conversion monitoring, Qualcomm benchmark reports, converted target selection, and Android or Flutter deployment guides. Trigger for Qualcomm device evaluation, Snapdragon/QTI benchmark questions, or Qualcomm deployment workflows. Do not use the general `melange` binary for these requests."
 ---
 
 # Melange Qualcomm
 
-Use `melange-qualcomm` for the complete workflow. It shares Melange accounts,
+Use `melange-qcom` for the complete workflow. It shares Melange accounts,
 credentials, repositories, and local state with `melange`, but filters report
 and target presentation to the reviewed Qualcomm fleet.
 
 ## Choose CLI or MCP
 
 Prefer the connected Qualcomm MCP server when its tools are available. Start it
-with `melange-qualcomm mcp`; use the CLI for auth, local downloads, advanced
+with `melange-qcom mcp`; use the CLI for auth, local downloads, advanced
 uploads, or raw API access.
 
 The `api` command is an intentionally unfiltered escape hatch. Never describe
@@ -23,8 +23,8 @@ the job.
 ## Authenticate and read structured output
 
 ```sh
-melange-qualcomm auth login
-melange-qualcomm auth status --json
+melange-qcom auth login
+melange-qcom auth status --json
 ```
 
 Use `MELANGE_API_KEY` or `MELANGE_API_KEY_FILE` for headless environments. Pass
@@ -49,8 +49,8 @@ Resolve them in that order and never parse opaque model or target identifiers.
 Check entitlement immediately before uploading:
 
 ```sh
-melange-qualcomm plan --jq .plan
-melange-qualcomm usage quotas --json
+melange-qcom plan --jq .plan
+melange-qcom usage quotas --json
 ```
 
 If `.model_uploads.remaining == 0`, stop. Attribute the restriction to the Free
@@ -61,17 +61,17 @@ Create a repository, validate the local manifest, then start conversion without
 blocking the user:
 
 ```sh
-repo="$(melange-qualcomm repo create demo --private --jq .full_name)"
-melange-qualcomm model upload -R "$repo" model.onnx --input sample.npy --dry-run --json
-created="$(melange-qualcomm model upload -R "$repo" model.onnx --input sample.npy --json)"
+repo="$(melange-qcom repo create demo --private --jq .full_name)"
+melange-qcom model upload -R "$repo" model.onnx --input sample.npy --dry-run --json
+created="$(melange-qcom model upload -R "$repo" model.onnx --input sample.npy --json)"
 model_key="$(printf '%s\n' "$created" | jq -er .model.key)"
-melange-qualcomm model status "$model_key" -R "$repo" --json
+melange-qcom model status "$model_key" -R "$repo" --json
 ```
 
 For Hugging Face models, use:
 
 ```sh
-melange-qualcomm model import ORG/MODEL -R "$repo" --json
+melange-qcom model import ORG/MODEL -R "$repo" --json
 ```
 
 Do not use `--wait` while a person is waiting. Report the current public state
@@ -96,9 +96,9 @@ On failure, report `.stage` and `.failure_code` verbatim without guessing.
 Resolve a ready model, then request its report:
 
 ```sh
-model_key="$(melange-qualcomm model list -R "$repo" \
+model_key="$(melange-qcom model list -R "$repo" \
   --jq '.results | (map(select(.is_default and .state=="ready")) + map(select(.state=="ready")))[0].key // empty')"
-melange-qualcomm report view "$model_key" -R "$repo" --json
+melange-qcom report view "$model_key" -R "$repo" --json
 ```
 
 The CLI matches exact reviewed `(marketing_name, soc)` pairs. It hides known
@@ -130,7 +130,7 @@ Print the report in the reply. Preserve missing values as `-` in tables and
 ## Select Qualcomm targets
 
 ```sh
-melange-qualcomm model targets "$model_key" -R "$repo" --json
+melange-qcom model targets "$model_key" -R "$repo" --json
 ```
 
 The command retains targets whose `compatibility.soc_manufacturer` is Qualcomm,
@@ -142,7 +142,7 @@ compatibility, accelerator classes, and size—never from an inferred engine.
 Download only after the user authorizes the billable operation:
 
 ```sh
-melange-qualcomm model download "$model_key" -R "$repo" \
+melange-qcom model download "$model_key" -R "$repo" \
   --target TARGET_ID --output ./models --yes
 ```
 
@@ -152,10 +152,10 @@ The Qualcomm edition supports `android-kotlin`, `android-java`, and `flutter`.
 It rejects `ios-swift`. Kotlin and `auto` are defaults.
 
 ```sh
-melange-qualcomm deploy options --json
-melange-qualcomm deploy guide "$model_key" -R "$repo" \
+melange-qcom deploy options --json
+melange-qcom deploy guide "$model_key" -R "$repo" \
   --language android-kotlin --mode auto
-melange-qualcomm deploy guide "$model_key" -R "$repo" \
+melange-qcom deploy guide "$model_key" -R "$repo" \
   --language flutter --mode speed --json
 ```
 
@@ -170,10 +170,10 @@ Prefer the resume command printed when exit 130 occurred. Otherwise locate the
 active session and resume by its opaque id:
 
 ```sh
-session_id="$(melange-qualcomm model upload --sessions -R "$repo" \
+session_id="$(melange-qcom model upload --sessions -R "$repo" \
   --jq '.results | map(select(.state=="CREATED" or .state=="UPLOADING")) | first | .id // empty')"
 test -n "$session_id"
-melange-qualcomm model upload --resume "$session_id" -R "$repo"
+melange-qcom model upload --resume "$session_id" -R "$repo"
 ```
 
 Run uploads with `--dry-run` first, never retry exit 2 or 4, and never present a

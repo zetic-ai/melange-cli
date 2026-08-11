@@ -408,7 +408,7 @@ func TestQualcommAPINon2xxUsesEditionBranding(t *testing.T) {
 
 	err := run(t, e, "api", "/v1/down")
 	require.ErrorIs(t, err, cmdutil.ErrSilent)
-	assert.Equal(t, "melange-qualcomm: HTTP 500: upstream exploded\n", e.errOut.String())
+	assert.Equal(t, "melange-qcom: HTTP 500: upstream exploded\n", e.errOut.String())
 }
 
 func TestAPINon2xxSummaryNeutralizesServerControlledOSC52(t *testing.T) {

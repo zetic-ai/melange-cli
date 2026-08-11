@@ -3,7 +3,7 @@
 # https://github.com/zetic-ai/melange-cli
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install-qualcomm.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install-qcom.sh | sh
 #
 # Options (pass with `| sh -s -- <flags>`, or use the environment variables):
 #   --version VERSION     MELANGE_VERSION       install a specific release (e.g. v1.2.3); default: latest
@@ -33,8 +33,8 @@ if [ -n "${ZSH_VERSION:-}" ]; then
 fi
 
 REPO="zetic-ai/melange-cli"
-BINARY="melange-qualcomm"
-SKILL="melange-qualcomm"
+BINARY="melange-qcom"
+SKILL="melange-qcom"
 
 # --- Output -----------------------------------------------------------------
 # Everything the installer says goes to stderr, so `curl … | sh` leaves stdout
@@ -43,7 +43,7 @@ info() { printf '%s\n' "$*" >&2; }
 step() { printf '==> %s\n' "$*" >&2; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 err() {
-    printf 'install-qualcomm.sh: %s\n' "$*" >&2
+    printf 'install-qcom.sh: %s\n' "$*" >&2
     exit 1
 }
 
@@ -55,7 +55,7 @@ usage() {
     cat >&2 <<'USAGE'
 Install the Qualcomm-focused Melange CLI and its agent skill.
 
-  curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install-qualcomm.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install-qcom.sh | sh
 
 Options (append with `| sh -s -- <flags>`, or use the environment variable):
   --version VERSION     MELANGE_VERSION       release to install (e.g. v1.2.3); default: latest

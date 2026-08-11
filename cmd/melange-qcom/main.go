@@ -1,4 +1,4 @@
-// Command melange-qualcomm is the Qualcomm-focused Melange CLI entry point.
+// Command melange-qcom is the Qualcomm-focused Melange CLI entry point.
 package main
 
 import (

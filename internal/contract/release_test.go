@@ -156,9 +156,9 @@ func TestQualcommInstallerInstallsMatchingBinaryAndSkill(t *testing.T) {
 
 	archiveRoot := filepath.Join(fixtureDir, "archive")
 	require.NoError(t, os.MkdirAll(archiveRoot, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(archiveRoot, "melange-qualcomm"), []byte("qualcomm-binary\n"), 0o755))
-	archive := filepath.Join(fixtureDir, "melange-qualcomm_1.2.3_"+runtime.GOOS+"_"+runtime.GOARCH+".tar.gz")
-	cmd := exec.Command("tar", "-czf", archive, "-C", archiveRoot, "melange-qualcomm")
+	require.NoError(t, os.WriteFile(filepath.Join(archiveRoot, "melange-qcom"), []byte("qcom-binary\n"), 0o755))
+	archive := filepath.Join(fixtureDir, "melange-qcom_1.2.3_"+runtime.GOOS+"_"+runtime.GOARCH+".tar.gz")
+	cmd := exec.Command("tar", "-czf", archive, "-C", archiveRoot, "melange-qcom")
 	require.NoError(t, cmd.Run())
 	archiveBytes, err := os.ReadFile(archive)
 	require.NoError(t, err)
@@ -166,9 +166,9 @@ func TestQualcommInstallerInstallsMatchingBinaryAndSkill(t *testing.T) {
 	checksums := filepath.Join(fixtureDir, "checksums.txt")
 	require.NoError(t, os.WriteFile(checksums, []byte(fmt.Sprintf("%x  %s\n", digest, filepath.Base(archive))), 0o644))
 
-	sourceRoot := filepath.Join(fixtureDir, "source", "melange-cli-1.2.3", "skills", "melange-qualcomm")
+	sourceRoot := filepath.Join(fixtureDir, "source", "melange-cli-1.2.3", "skills", "melange-qcom")
 	require.NoError(t, os.MkdirAll(sourceRoot, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(sourceRoot, "SKILL.md"), []byte("name: melange-qualcomm\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceRoot, "SKILL.md"), []byte("name: melange-qcom\n"), 0o644))
 	sourceArchive := filepath.Join(fixtureDir, "source.tar.gz")
 	cmd = exec.Command("tar", "-czf", sourceArchive, "-C", filepath.Join(fixtureDir, "source"), "melange-cli-1.2.3")
 	require.NoError(t, cmd.Run())
@@ -188,14 +188,14 @@ case "$url" in
 	*/checksums.txt.sigstore.json) : > "$out" ;;
 	*/checksums.txt) cp "$FIXTURE_CHECKSUMS" "$out" ;;
   */archive/refs/tags/*.tar.gz) cp "$FIXTURE_SOURCE" "$out" ;;
-  */melange-qualcomm_*.tar.gz) cp "$FIXTURE_ARCHIVE" "$out" ;;
+  */melange-qcom_*.tar.gz) cp "$FIXTURE_ARCHIVE" "$out" ;;
   *) exit 22 ;;
 esac
 `), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "npx"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(binDir, "cosign"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 
-	installer := filepath.Join(root, "script", "install-qualcomm.sh")
+	installer := filepath.Join(root, "script", "install-qcom.sh")
 	cmd = exec.Command("sh", installer)
 	cmd.Env = append(os.Environ(),
 		"MELANGE_VERSION=v1.2.3",
@@ -210,27 +210,27 @@ esac
 	)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
-	assert.FileExists(t, filepath.Join(installDir, "melange-qualcomm"))
-	assert.FileExists(t, filepath.Join(xdgDir, "agents", "skills", "melange-qualcomm", "SKILL.md"))
-	assert.Contains(t, string(output), "melange-qualcomm (v1.2.3)")
+	assert.FileExists(t, filepath.Join(installDir, "melange-qcom"))
+	assert.FileExists(t, filepath.Join(xdgDir, "agents", "skills", "melange-qcom", "SKILL.md"))
+	assert.Contains(t, string(output), "melange-qcom (v1.2.3)")
 }
 
 func TestReleaseAddsQualcommArchivesWithoutChangingExistingDistributionInputs(t *testing.T) {
 	config := readRepoFile(t, ".goreleaser.yml")
-	assert.Contains(t, config, "id: melange-qualcomm")
-	assert.Contains(t, config, "main: ./cmd/melange-qualcomm")
-	assert.Contains(t, config, `name_template: "melange-qualcomm_{{ .Version }}_{{ .Os }}_{{ .Arch }}"`)
+	assert.Contains(t, config, "id: melange-qcom")
+	assert.Contains(t, config, "main: ./cmd/melange-qcom")
+	assert.Contains(t, config, `name_template: "melange-qcom_{{ .Version }}_{{ .Os }}_{{ .Arch }}"`)
 	assert.Contains(t, config, "ids:\n      - melange\n", "the existing archive must only contain the standard binary")
 
 	homebrewSection := section(t, config, "homebrew_casks:", "\nrelease:")
-	assert.NotContains(t, homebrewSection, "melange-qualcomm")
+	assert.NotContains(t, homebrewSection, "melange-qcom")
 	packageJSON := readRepoFile(t, "npm/package.json")
 	assert.NotContains(t, packageJSON, "qualcomm")
 
-	installer := readRepoFile(t, "script/install-qualcomm.sh")
-	assert.Contains(t, installer, `BINARY="melange-qualcomm"`)
-	assert.Contains(t, installer, `SKILL="melange-qualcomm"`)
-	assert.Contains(t, installer, "script/install-qualcomm.sh")
+	installer := readRepoFile(t, "script/install-qcom.sh")
+	assert.Contains(t, installer, `BINARY="melange-qcom"`)
+	assert.Contains(t, installer, `SKILL="melange-qcom"`)
+	assert.Contains(t, installer, "script/install-qcom.sh")
 }
 
 func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {

@@ -30,7 +30,7 @@ func Standard() Policy { return Policy{programName: "melange"} }
 
 // Qualcomm returns the curated Qualcomm behavior.
 func Qualcomm() Policy {
-	return Policy{programName: "melange-qualcomm", qualcomm: true}
+	return Policy{programName: "melange-qcom", qualcomm: true}
 }
 
 // ProgramName is the executable name shown to users.
