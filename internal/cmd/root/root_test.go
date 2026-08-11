@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
 
@@ -27,6 +28,50 @@ func runRoot(t *testing.T, args ...string) (string, string, error) {
 	cmd.SetArgs(args)
 	err := cmd.ExecuteContext(context.Background())
 	return out.String(), errOut.String(), err
+}
+
+func runQualcommRoot(t *testing.T, args ...string) (string, string, error) {
+	t.Helper()
+	ios, in, out, errOut := iostreams.Test()
+	f := &cmdutil.Factory{IOStreams: ios, Version: "test", Edition: edition.Qualcomm()}
+	cmd := root.NewCmdRoot(f)
+	cmd.SetIn(in)
+	cmd.SetOut(out)
+	cmd.SetErr(errOut)
+	cmd.SetArgs(args)
+	err := cmd.ExecuteContext(context.Background())
+	return out.String(), errOut.String(), err
+}
+
+func TestQualcommRootUsesDedicatedBrandingAndNearFullCommandTree(t *testing.T) {
+	out, _, err := runQualcommRoot(t, "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "melange-qcom")
+	assert.Contains(t, out, "Qualcomm-focused")
+	for _, command := range []string{"api", "auth", "deploy", "library", "mcp", "model", "plan", "repo", "report", "usage", "version"} {
+		assert.Contains(t, out, command)
+	}
+	assert.NotContains(t, out, "  melange repo")
+}
+
+func TestQualcommVersionUsesDedicatedExecutableName(t *testing.T) {
+	out, _, err := runQualcommRoot(t, "version")
+	require.NoError(t, err)
+	assert.Contains(t, out, "melange-qcom version")
+	assert.NotContains(t, out, "melange version")
+}
+
+func TestQualcommNestedHelpAndErrorsUseDedicatedExecutableName(t *testing.T) {
+	out, _, err := runQualcommRoot(t, "model", "download", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "melange-qcom model targets")
+	assert.NotContains(t, out, "`melange model targets`")
+
+	_, _, err = runQualcommRoot(t, "api", "https://example.com/v1/me")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "melange-qcom api")
+	assert.Contains(t, err.Error(), "melange-qcom auth status")
+	assert.NotContains(t, err.Error(), "melange api")
 }
 
 // ---------------------------------------------------------------------------

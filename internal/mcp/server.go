@@ -8,16 +8,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// serverName is the implementation name advertised during initialization.
-const serverName = "melange"
-
 // New builds the MCP server with the full tool catalog registered.
 // opts.EnableLocalTools additionally registers the tools that only make sense
 // when the server runs on the caller's machine — today upload_model, which
 // reads local files; the HTTP transport keeps it hidden.
 func New(deps Deps, opts Options) *mcp.Server {
 	s := mcp.NewServer(
-		&mcp.Implementation{Name: serverName, Version: deps.Version},
+		&mcp.Implementation{Name: deps.Edition.ProgramName(), Version: deps.Version},
 		// quietSDKLogger drops the SDK's three content-free per-connection
 		// INFO lines for both transports; see lognoise.go.
 		&mcp.ServerOptions{Logger: quietSDKLogger(deps.logger()), SchemaCache: opts.SchemaCache},

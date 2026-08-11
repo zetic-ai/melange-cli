@@ -141,7 +141,7 @@ func newHelpTopic(topic helpTopic) *cobra.Command {
 		fmt.Fprint(c.OutOrStdout(), c.Long)
 	})
 	cmd.SetUsageFunc(func(c *cobra.Command) error {
-		_, err := fmt.Fprintf(c.ErrOrStderr(), "Usage: melange help %s\n", c.Name())
+		_, err := fmt.Fprintf(c.ErrOrStderr(), "Usage: %s help %s\n", c.Root().Name(), c.Name())
 		return err
 	})
 	return cmd

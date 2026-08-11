@@ -13,10 +13,10 @@ import (
 func NewCmdVersion(f *cmdutil.Factory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print the melange CLI version",
+		Short: "Print the " + f.Edition.ProgramName() + " CLI version",
 		Args:  cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintf(f.IOStreams.Out, "melange version %s\n", build.Info())
+			fmt.Fprintf(f.IOStreams.Out, "%s version %s\n", f.Edition.ProgramName(), build.Info())
 			return nil
 		},
 	}

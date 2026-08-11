@@ -35,10 +35,21 @@ React Native is intentionally excluded. Use --json for the structured contract.`
 			if resp.JSON200 == nil {
 				return fmt.Errorf("unexpected response fetching deployment options (HTTP %d)", resp.StatusCode())
 			}
-			if exporter != nil {
-				return exporter.Write(f.IOStreams, json.RawMessage(resp.Body))
+			body, err := f.Edition.FilterDeploymentOptions(resp.Body)
+			if err != nil {
+				return err
 			}
-			return printOptions(f, resp.JSON200)
+			if exporter != nil {
+				return exporter.Write(f.IOStreams, json.RawMessage(body))
+			}
+			options := resp.JSON200
+			if f.Edition.IsQualcomm() {
+				options = &gen.DeploymentOptionsResponse{}
+				if err := json.Unmarshal(body, options); err != nil {
+					return fmt.Errorf("decoding filtered deployment options: %w", err)
+				}
+			}
+			return printOptions(f, options)
 		},
 	}
 	cmdutil.AddJSONFlags(cmd, &exporter)

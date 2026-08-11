@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,7 +13,7 @@ import (
 
 // registerDeploy registers the deployment read tool.
 func registerDeploy(s *mcp.Server, d Deps) {
-	mcp.AddTool(s, &mcp.Tool{
+	tool := &mcp.Tool{
 		Name:  "get_deployment_info",
 		Title: "Get deployment info",
 		Description: "Answer deployment questions in one of two modes. Called with no " +
@@ -22,7 +23,6 @@ func registerDeploy(s *mcp.Server, d Deps) {
 			"code — optionally narrowed by language and inference_mode. Guides carry the " +
 			"literal YOUR_PERSONAL_KEY placeholder; no real credential is ever emitted, " +
 			"so tell the user to substitute their own key.",
-		InputSchema:  inputSchemaFor[deploymentInfoArgs](withDeploymentEnums),
 		OutputSchema: outputSchema("get_deployment_info"),
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    true,
@@ -30,7 +30,14 @@ func registerDeploy(s *mcp.Server, d Deps) {
 			DestructiveHint: falsePtr(),
 			OpenWorldHint:   falsePtr(),
 		},
-	}, getDeploymentInfoHandler(d))
+	}
+	if d.Edition.IsQualcomm() {
+		tool.InputSchema = inputSchemaFor[qualcommDeploymentInfoArgs](withQualcommDeploymentEnums)
+		mcp.AddTool(s, tool, getQualcommDeploymentInfoHandler(d))
+		return
+	}
+	tool.InputSchema = inputSchemaFor[deploymentInfoArgs](withDeploymentEnums)
+	mcp.AddTool(s, tool, getDeploymentInfoHandler(d))
 }
 
 // deploymentInfoArgs are the arguments of get_deployment_info. Every field is
@@ -42,6 +49,10 @@ type deploymentInfoArgs struct {
 	InferenceMode string `json:"inference_mode,omitempty" jsonschema:"Inference mode for the guide; omit for the platform default."`
 }
 
+// qualcommDeploymentInfoArgs has its own schema identity so the MCP schema
+// cache can safely hold the narrowed enum alongside the standard catalog.
+type qualcommDeploymentInfoArgs deploymentInfoArgs
+
 // withDeploymentEnums advertises the exact selectors the guide endpoint
 // accepts, so an unsupported language (React Native, say) is refused by the
 // schema instead of costing a round trip.
@@ -52,11 +63,31 @@ func withDeploymentEnums(props map[string]*jsonschema.Schema) {
 		gen.GetDeploymentGuideParamsLanguageIosSwift,
 		gen.GetDeploymentGuideParamsLanguageFlutter,
 	)
+	withInferenceModeEnum(props)
+}
+
+func withQualcommDeploymentEnums(props map[string]*jsonschema.Schema) {
+	props["language"].Enum = enumValues(
+		gen.GetDeploymentGuideParamsLanguageAndroidKotlin,
+		gen.GetDeploymentGuideParamsLanguageAndroidJava,
+		gen.GetDeploymentGuideParamsLanguageFlutter,
+	)
+	withInferenceModeEnum(props)
+}
+
+func withInferenceModeEnum(props map[string]*jsonschema.Schema) {
 	props["inference_mode"].Enum = enumValues(
 		gen.GetDeploymentGuideParamsInferenceModeAuto,
 		gen.GetDeploymentGuideParamsInferenceModeSpeed,
 		gen.GetDeploymentGuideParamsInferenceModeAccuracy,
 	)
+}
+
+func getQualcommDeploymentInfoHandler(d Deps) mcp.ToolHandlerFor[qualcommDeploymentInfoArgs, any] {
+	handler := getDeploymentInfoHandler(d)
+	return func(ctx context.Context, req *mcp.CallToolRequest, in qualcommDeploymentInfoArgs) (*mcp.CallToolResult, any, error) {
+		return handler(ctx, req, deploymentInfoArgs(in))
+	}
 }
 
 // getDeploymentInfoHandler wraps GET /v1/deployment/options and
@@ -89,6 +120,9 @@ func getDeploymentInfoHandler(d Deps) mcp.ToolHandlerFor[deploymentInfoArgs, any
 		}
 		params := &gen.GetDeploymentGuideParams{}
 		if in.Language != "" {
+			if d.Edition.IsQualcomm() && !d.Edition.AllowsDeploymentLanguage(in.Language) {
+				return d.toolError(fmt.Errorf("unsupported deployment language %q for %s", in.Language, d.Edition.ProgramName())), nil, nil
+			}
 			language := gen.GetDeploymentGuideParamsLanguage(in.Language)
 			params.Language = &language
 		}
@@ -103,6 +137,9 @@ func getDeploymentInfoHandler(d Deps) mcp.ToolHandlerFor[deploymentInfoArgs, any
 		if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 			return d.toolError(err), nil, nil
 		}
+		if d.Edition.IsQualcomm() && resp.JSON200 != nil && !d.Edition.AllowsDeploymentLanguage(string(resp.JSON200.Language)) {
+			return d.toolError(fmt.Errorf("deployment guide returned unsupported language %q for %s", resp.JSON200.Language, d.Edition.ProgramName())), nil, nil
+		}
 		return rawResult(resp.Body)
 	}
 }
@@ -116,5 +153,9 @@ func deploymentOptions(ctx context.Context, d Deps, g *gen.ClientWithResponses) 
 	if err := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); err != nil {
 		return d.toolError(err), nil, nil
 	}
-	return rawResult(resp.Body)
+	body, err := d.Edition.FilterDeploymentOptions(resp.Body)
+	if err != nil {
+		return d.toolError(err), nil, nil
+	}
+	return rawResult(body)
 }

@@ -70,12 +70,23 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 			if resp.JSON200 == nil {
 				return fmt.Errorf("unexpected response listing targets (HTTP %d)", resp.StatusCode())
 			}
+			body, err := f.Edition.FilterTargets(resp.Body)
+			if err != nil {
+				return err
+			}
 
 			ios := f.IOStreams
 			if exporter != nil {
-				return exporter.Write(ios, json.RawMessage(resp.Body))
+				return exporter.Write(ios, json.RawMessage(body))
 			}
-			targets := resp.JSON200.Results
+			targetResponse := resp.JSON200
+			if f.Edition.IsQualcomm() {
+				targetResponse = &gen.ListModelTargetsResponse{}
+				if err := json.Unmarshal(body, targetResponse); err != nil {
+					return fmt.Errorf("decoding filtered model targets: %w", err)
+				}
+			}
+			targets := targetResponse.Results
 			if len(targets) == 0 {
 				if ios.HumanOutput() {
 					fmt.Fprintln(ios.ErrOut, "No targets found")

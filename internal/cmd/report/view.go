@@ -103,6 +103,10 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 			if err != nil {
 				return err
 			}
+			body, err = f.Edition.FilterReport(string(kind), body)
+			if err != nil {
+				return err
+			}
 			if cmd.Flags().Changed("mode") && kind != kindGeneral {
 				return modeKindError()
 			}

@@ -16,6 +16,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
@@ -210,6 +211,38 @@ func TestReportGeneralJSONByteExact(t *testing.T) {
 
 	require.NoError(t, run(t, e, "report", "view", "m_x", "-R", "zetic/whisper", "--json"))
 	assert.Equal(t, body+"\n", e.out.String(), "--json preserves API JSON with exactly one trailing newline")
+}
+
+func TestQualcommReportJSONFiltersBeforeStructuredOutput(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+	body := `{"derivation_version":3,"model":{"key":"m_x","version":1},"records":[` +
+		`{"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"ap_type":"npu","variant":"q","precision":"fp16","run":0,"metric":"latency_ms","value":8,"unit":"ms"},` +
+		`{"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"ap_type":"npu","variant":"g","precision":"fp16","run":0,"metric":"latency_ms","value":4,"unit":"ms"}` +
+		`],"summary":{"latency_ms":{"all":null,"fp16":null,"fp32":null,"int8":null},"snr_db":{"all":null,"fp16":null,"fp32":null,"int8":null},"memory_mb":{"all":null,"fp16":null,"fp32":null,"int8":null}}}`
+	e.reg.Register(httpmock.REST("GET", generalPath), jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "report", "view", "m_x", "-R", "zetic/whisper", "--type", "general", "--json"))
+
+	assert.Contains(t, e.out.String(), "Samsung Galaxy S25")
+	assert.NotContains(t, e.out.String(), "Google Pixel 10")
+	assert.Contains(t, e.out.String(), `"qualcomm_filter"`)
+}
+
+func TestQualcommReportZeroMatchReturnsExitOneWithoutStdout(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+	body := `{"derivation_version":3,"model":{"key":"m_x","version":1},"records":[` +
+		`{"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"ap_type":"npu","variant":"g","precision":"fp16","run":0,"metric":"latency_ms","value":4,"unit":"ms"}` +
+		`],"summary":{"latency_ms":{"all":null,"fp16":null,"fp32":null,"int8":null},"snr_db":{"all":null,"fp16":null,"fp32":null,"int8":null},"memory_mb":{"all":null,"fp16":null,"fp32":null,"int8":null}}}`
+	e.reg.Register(httpmock.REST("GET", generalPath), jsonStub(200, body))
+
+	err := run(t, e, "report", "view", "m_x", "-R", "zetic/whisper", "--type", "general", "--json")
+
+	require.Error(t, err)
+	assert.Equal(t, 1, cmdutil.ExitCode(err))
+	assert.ErrorIs(t, err, edition.ErrNoQualcommMeasurements)
+	assert.Empty(t, e.out.String())
 }
 
 // ---------------------------------------------------------------------------

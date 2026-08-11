@@ -19,6 +19,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
@@ -396,6 +397,24 @@ func TestModelTargetsJSONPassthrough(t *testing.T) {
 
 	require.NoError(t, run(t, e, "model", "targets", "m_ab12cd", "-R", "zetic/whisper", "--json"))
 	assert.Equal(t, body+"\n", e.out.String())
+}
+
+func TestQualcommModelTargetsFiltersStructuredOutput(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+	body := strings.Replace(targetsBody(), `],"count":2}`,
+		`,{"target_id":"tm_apple","kind":"general","precision":"fp16","quant_type":null,`+
+			`"compatibility":{"ap_types":["gpu"],"soc_manufacturer":"Apple","soc_model":"A18","os":"ios"},`+
+			`"download_size":42,"created_at":"`+ts(testNow)+`"}],"count":3}`, 1)
+	e.reg.Register(httpmock.REST("GET", targetsPath), jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "model", "targets", "m_ab12cd", "-R", "zetic/whisper", "--json"))
+
+	assert.Contains(t, e.out.String(), "tm_71")
+	assert.Contains(t, e.out.String(), "ltm_9")
+	assert.NotContains(t, e.out.String(), "tm_apple")
+	assert.Contains(t, e.out.String(), `"count":2`)
+	assert.Contains(t, e.out.String(), `"retained_unscoped_targets":1`)
 }
 
 func TestModelTargetsEmptyTTY(t *testing.T) {

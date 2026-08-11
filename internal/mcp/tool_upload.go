@@ -27,21 +27,21 @@ func registerUpload(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "upload_model",
 		Title: "Upload model",
-		Description: "Upload a local model file (with optional sample inputs and external data) " +
-			"into a repository through a resumable upload session, then register it and start " +
-			"conversion. Not billable. File paths are read by the MCP SERVER process, so they " +
-			"must be absolute or relative to the server process's working directory — not the " +
-			"user's. Success returns the envelope {\"session\": <upload-complete response>, " +
-			"\"model\": <model reference>}; \"model\" appears once registration produced one, " +
-			"and with wait_seconds a \"status\" key carries the latest conversion status the " +
-			"wait observed. If the upload is interrupted or fails, the error names the session " +
-			"id: fix the issue, then call upload_model again with resume_session_id to continue " +
-			"— already-acknowledged bytes are never re-sent, and once the session reaches " +
-			"VERIFYING, DISPATCH_PENDING, or CONVERTING the resume replays completion without " +
-			"needing the local files. Conversion usually outlives one call: follow up with " +
-			"get_conversion_status on the returned model key rather than blocking on a long wait. " +
-			"Bucketed .pt2 uploads and manifest files are CLI-only for now " +
-			"('melange model upload').",
+		Description: fmt.Sprintf("Upload a local model file (with optional sample inputs and external data) "+
+			"into a repository through a resumable upload session, then register it and start "+
+			"conversion. Not billable. File paths are read by the MCP SERVER process, so they "+
+			"must be absolute or relative to the server process's working directory — not the "+
+			"user's. Success returns the envelope {\"session\": <upload-complete response>, "+
+			"\"model\": <model reference>}; \"model\" appears once registration produced one, "+
+			"and with wait_seconds a \"status\" key carries the latest conversion status the "+
+			"wait observed. If the upload is interrupted or fails, the error names the session "+
+			"id: fix the issue, then call upload_model again with resume_session_id to continue "+
+			"— already-acknowledged bytes are never re-sent, and once the session reaches "+
+			"VERIFYING, DISPATCH_PENDING, or CONVERTING the resume replays completion without "+
+			"needing the local files. Conversion usually outlives one call: follow up with "+
+			"get_conversion_status on the returned model key rather than blocking on a long wait. "+
+			"Bucketed .pt2 uploads and manifest files are CLI-only for now "+
+			"('%s model upload').", d.Edition.ProgramName()),
 		InputSchema:  inputSchemaFor[uploadModelArgs](withWaitBounds),
 		OutputSchema: outputSchema("upload_model"),
 		Annotations: &mcp.ToolAnnotations{
@@ -297,13 +297,13 @@ func (d Deps) uploadFlowError(err error, events uploadflow.Events) error {
 		}
 		if cerr.SessionID == "" {
 			return fmt.Errorf("%s. Another upload session holds this repository's single "+
-				"active slot; inspect sessions with the CLI: melange model upload --sessions", cause)
+				"active slot; inspect sessions with the CLI: %s model upload --sessions", cause, d.Edition.ProgramName())
 		}
 		return fmt.Errorf("%s. Session %s (%s) holds this repository's single active upload "+
 			"slot: continue it by calling upload_model with resume_session_id %q (pass the "+
 			"original files while bytes are still missing), or discard it with the CLI: "+
-			"melange model upload --cancel %s --yes",
-			cause, cerr.SessionID, strings.ToUpper(cerr.State), cerr.SessionID, cerr.SessionID)
+			"%s model upload --cancel %s --yes",
+			cause, cerr.SessionID, strings.ToUpper(cerr.State), cerr.SessionID, d.Edition.ProgramName(), cerr.SessionID)
 	}
 
 	var terr *uploadflow.TerminalStateError

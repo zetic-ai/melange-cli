@@ -446,7 +446,7 @@ func renderUploadFlowError(opts *uploadOptions, err error) error {
 			return fmt.Errorf("%w\nThe conflicting session is no longer active; retry the upload", cerr.Err)
 		}
 		if cerr.SessionID == "" {
-			return fmt.Errorf("%w\nList sessions with: melange model upload --sessions -R %s", cerr.Err, opts.repo)
+			return fmt.Errorf("%w\nList sessions with: %s model upload --sessions -R %s", cerr.Err, opts.f.Edition.ProgramName(), opts.repo)
 		}
 		printActiveSessionGuidance(opts, cerr.SessionID, cerr.State)
 		return cmdutil.ErrSilent
@@ -468,8 +468,8 @@ func renderUploadFlowError(opts *uploadOptions, err error) error {
 				printResumeHint(opts, serr.SessionID, serr.Repo)
 				return canceledSilently{}
 			}
-			return fmt.Errorf("%w\nThe session is preserved; resume with: melange model upload --resume %s -R %s",
-				serr.Err, serr.SessionID, serr.Repo)
+			return fmt.Errorf("%w\nThe session is preserved; resume with: %s model upload --resume %s -R %s",
+				serr.Err, opts.f.Edition.ProgramName(), serr.SessionID, serr.Repo)
 		default: // uploadflow.PhaseComplete
 			if errors.Is(serr.Err, wait.ErrTimeout) {
 				return completionTimeout(opts, serr.SessionID)
@@ -488,8 +488,8 @@ func renderUploadFlowError(opts *uploadOptions, err error) error {
 func printResumeHint(opts *uploadOptions, sessionID, repo string) {
 	errOut := opts.f.IOStreams.ErrOut
 	fmt.Fprintf(errOut, "\nInterrupted. The upload session is preserved; already-uploaded bytes will not be re-sent.\n")
-	fmt.Fprintf(errOut, "Resume with: melange model upload --resume %s -R %s\n",
-		text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(repo))
+	fmt.Fprintf(errOut, "Resume with: %s model upload --resume %s -R %s\n",
+		opts.f.Edition.ProgramName(), text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(repo))
 }
 
 func printActiveSessionGuidance(opts *uploadOptions, sessionID, state string) {
@@ -506,14 +506,14 @@ func printActiveSessionGuidance(opts *uploadOptions, sessionID, state string) {
 
 	detailPath := fmt.Sprintf("/v1/repos/%s/%s/models/uploads/%s",
 		opts.account, opts.name, safeSessionID)
-	fmt.Fprintf(&b, "\nInspect it:  melange api %s --jq .state\n", detailPath)
+	fmt.Fprintf(&b, "\nInspect it:  %s api %s --jq .state\n", opts.f.Edition.ProgramName(), detailPath)
 	switch normalizedState {
 	case uploadflow.SessionStateCreated, uploadflow.SessionStateUploading:
-		fmt.Fprintf(&b, "Resume it:   melange model upload --resume %s -R %s\n", safeSessionID, opts.repo)
-		fmt.Fprintf(&b, "Cancel it:   melange model upload --cancel %s -R %s --yes\n", safeSessionID, opts.repo)
+		fmt.Fprintf(&b, "Resume it:   %s model upload --resume %s -R %s\n", opts.f.Edition.ProgramName(), safeSessionID, opts.repo)
+		fmt.Fprintf(&b, "Cancel it:   %s model upload --cancel %s -R %s --yes\n", opts.f.Edition.ProgramName(), safeSessionID, opts.repo)
 	case uploadflow.SessionStateVerifying, uploadflow.SessionStateDispatchPending:
 		fmt.Fprintln(&b, "The files are server-owned; resume completion without local artifacts:")
-		fmt.Fprintf(&b, "  melange model upload --resume %s -R %s --wait\n", safeSessionID, opts.repo)
+		fmt.Fprintf(&b, "  %s model upload --resume %s -R %s --wait\n", opts.f.Edition.ProgramName(), safeSessionID, opts.repo)
 	default:
 		fmt.Fprintln(&b, "Inspect the session state before deciding whether to resume, cancel, wait, or retry.")
 	}
@@ -566,8 +566,8 @@ func completeReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithR
 			text.SanitizeTerminalInline(out.Id),
 			text.SanitizeTerminalInline(strings.ToLower(string(out.State))))
 		fmt.Fprintf(ios.ErrOut, "Completion is still in progress; the session is preserved.\n")
-		fmt.Fprintf(ios.ErrOut, "Resume with: melange model upload --resume %s -R %s\n",
-			text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+		fmt.Fprintf(ios.ErrOut, "Resume with: %s model upload --resume %s -R %s\n",
+			opts.f.Edition.ProgramName(), text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
 		if opts.exporter != nil {
 			return opts.exporter.Write(ios, json.RawMessage(res.Completion))
 		}
@@ -589,8 +589,8 @@ func completeReport(ctx context.Context, opts *uploadOptions, g *gen.ClientWithR
 		remaining := remainingCompletionBudget(res.WaitStarted, opts.timeout)
 		if remaining <= 0 {
 			fmt.Fprintf(ios.ErrOut, "Timed out after %s; the model is still processing.\n", opts.timeout)
-			fmt.Fprintf(ios.ErrOut, "Check again with: melange model status %s -R %s\n",
-				text.SanitizeTerminalInline(out.Model.Key),
+			fmt.Fprintf(ios.ErrOut, "Check again with: %s model status %s -R %s\n",
+				opts.f.Edition.ProgramName(), text.SanitizeTerminalInline(out.Model.Key),
 				text.SanitizeTerminalInline(opts.repo))
 			return cmdutil.ErrSilent
 		}
@@ -622,20 +622,20 @@ func completionTimeout(opts *uploadOptions, sessionID string) error {
 	fmt.Fprintf(opts.f.IOStreams.ErrOut,
 		"Timed out after %s waiting for upload completion; the session is preserved.\n", opts.timeout)
 	fmt.Fprintf(opts.f.IOStreams.ErrOut,
-		"Resume with: melange model upload --resume %s -R %s --wait\n",
-		text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+		"Resume with: %s model upload --resume %s -R %s --wait\n",
+		opts.f.Edition.ProgramName(), text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
 	return cmdutil.ErrSilent
 }
 
 func completionRecoveryError(opts *uploadOptions, sessionID string, err error) error {
-	return fmt.Errorf("%w\nThe session is preserved; resume with: melange model upload --resume %s -R %s",
-		err, text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+	return fmt.Errorf("%w\nThe session is preserved; resume with: %s model upload --resume %s -R %s",
+		err, opts.f.Edition.ProgramName(), text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
 }
 
 func printCompletionResumeHint(opts *uploadOptions, sessionID string) {
 	fmt.Fprintf(opts.f.IOStreams.ErrOut,
-		"\nInterrupted. The upload session is preserved.\nResume with: melange model upload --resume %s -R %s\n",
-		text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+		"\nInterrupted. The upload session is preserved.\nResume with: %s model upload --resume %s -R %s\n",
+		opts.f.Edition.ProgramName(), text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
 }
 
 // ---------------------------------------------------------------------------
@@ -889,8 +889,8 @@ func waitForModelWithResultWithin(ctx context.Context, f *cmdutil.Factory, g *ge
 	})
 	if errors.Is(err, wait.ErrTimeout) {
 		fmt.Fprintf(ios.ErrOut, "Timed out after %s; the model is still processing.\n", displayTimeout)
-		fmt.Fprintf(ios.ErrOut, "Check again with: melange model status %s -R %s/%s\n",
-			text.SanitizeTerminalInline(key), text.SanitizeTerminalInline(account),
+		fmt.Fprintf(ios.ErrOut, "Check again with: %s model status %s -R %s/%s\n",
+			f.Edition.ProgramName(), text.SanitizeTerminalInline(key), text.SanitizeTerminalInline(account),
 			text.SanitizeTerminalInline(name))
 		return cmdutil.ErrSilent
 	}

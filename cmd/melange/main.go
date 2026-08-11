@@ -3,22 +3,12 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
-	"strings"
 
-	"github.com/zetic-ai/melange-cli/internal/api"
-	"github.com/zetic-ai/melange-cli/internal/authn"
-	"github.com/zetic-ai/melange-cli/internal/build"
-	"github.com/zetic-ai/melange-cli/internal/cmd/root"
-	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/cliapp"
 	"github.com/zetic-ai/melange-cli/internal/config"
-	"github.com/zetic-ai/melange-cli/internal/iostreams"
-	"github.com/zetic-ai/melange-cli/internal/keyring"
-	"github.com/zetic-ai/melange-cli/internal/text"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 )
 
 func main() {
@@ -29,100 +19,15 @@ func main() {
 // Run executes the CLI with the given args and returns the exit code.
 // It is a separate function so tests can call it without triggering os.Exit.
 func Run(args []string) int {
-	ios := iostreams.System()
-
-	// Build factory.
-	f := &cmdutil.Factory{
-		IOStreams:  ios,
-		Executable: executable(),
-		Version:    build.Version,
-		Config: func() (*config.Config, error) {
-			return config.Load()
-		},
-	}
-
-	// ApiClient resolves host+token (env > env file > explicitly selected
-	// config > keyring > legacy config fallback) and returns an authenticated
-	// client. Only commands that require auth should call it; it returns
-	// AuthError (exit 4) when no token is available.
-	f.ApiClient = func() (*api.Client, error) {
-		cfg, err := f.Config()
-		if err != nil {
-			return nil, err
-		}
-		host := cfg.ResolveHost(f.HostOverride)
-		hostKey := keyring.HostKey(host.Value)
-		transport := f.HTTPTransport
-		if transport == nil {
-			transport = http.DefaultTransport
-		}
-		ctx := context.Background()
-		token, _, err := resolveAnyTokenMain(ctx, cfg, host.Value, hostKey, transport)
-		if err != nil {
-			return nil, err
-		}
-		if token.Value == "" {
-			return nil, cmdutil.AuthError{Err: fmt.Errorf("not logged in to %s; run `melange auth login` or set MELANGE_API_KEY", hostKey)}
-		}
-		return cmdutil.NewAPIClient(f, host.Value, token.Value)
-	}
-
-	// Build root command.
-	rootCmd := root.NewCmdRoot(f)
-	rootCmd.SetArgs(args)
-
-	// Handle SIGINT: cancel the context so commands can react gracefully.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		// Cobra surfaces unknown command errors as plain strings;
-		// map them to FlagError (exit 2) so the contract is met.
-		mappedErr := mapCobraError(err)
-		code := cmdutil.ExitCode(mappedErr)
-		// errors.Is (not ==): typed errors may wrap ErrSilent to combine
-		// "already printed" with a specific exit code (e.g. exit 4 from
-		// `melange api` after it printed its own HTTP 401 summary).
-		if !errors.Is(mappedErr, cmdutil.ErrSilent) {
-			fmt.Fprintf(ios.ErrOut, "melange: %s\n", text.SanitizeTerminal(mappedErr.Error()))
-		}
-		return code
-	}
-	return 0
+	return cliapp.Run(args, edition.Standard())
 }
 
 // mapCobraError inspects cobra error messages and promotes certain error
 // classes to the appropriate typed error so ExitCode maps them correctly.
 func mapCobraError(err error) error {
-	if err == nil {
-		return nil
-	}
-	msg := err.Error()
-	if strings.Contains(msg, "unknown command") || strings.Contains(msg, "unknown flag") || strings.Contains(msg, "invalid flag") {
-		return cmdutil.FlagError{Err: err}
-	}
-	if strings.Contains(msg, "required flag") || strings.Contains(msg, "flag needs") {
-		return cmdutil.FlagError{Err: err}
-	}
-	if strings.HasPrefix(msg, "unknown command") {
-		return cmdutil.FlagError{Err: err}
-	}
-	return err
-}
-
-// executable returns the path of the running binary, or "melange" on failure.
-func executable() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "melange"
-	}
-	return exe
+	return cliapp.MapCobraError(err)
 }
 
 func resolveAnyTokenMain(ctx context.Context, cfg *config.Config, issuerHost, hostKey string, transport http.RoundTripper) (config.Resolved, *config.OAuthCredentials, error) {
-	res, creds, err := authn.ResolveAnyToken(ctx, cfg, issuerHost, hostKey, transport)
-	if errors.Is(err, authn.ErrSessionExpired) {
-		return config.Resolved{}, nil, cmdutil.AuthError{Err: err}
-	}
-	return res, creds, err
+	return cliapp.ResolveAnyToken(ctx, cfg, issuerHost, hostKey, transport)
 }

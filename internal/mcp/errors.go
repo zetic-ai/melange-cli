@@ -21,19 +21,19 @@ const (
 )
 
 // unauthenticated returns the remediation for authentication failures.
-func (h AuthHints) unauthenticated() string {
-	if h.Unauthenticated != "" {
-		return h.Unauthenticated
+func (d Deps) unauthenticatedHint() string {
+	if d.AuthHints.Unauthenticated != "" {
+		return d.AuthHints.Unauthenticated
 	}
-	return stdioUnauthenticatedHint
+	return strings.Replace(stdioUnauthenticatedHint, "melange", d.Edition.ProgramName(), 1)
 }
 
 // forbidden returns the remediation for permission failures.
-func (h AuthHints) forbidden() string {
-	if h.Forbidden != "" {
-		return h.Forbidden
+func (d Deps) forbiddenHint() string {
+	if d.AuthHints.Forbidden != "" {
+		return d.AuthHints.Forbidden
 	}
-	return stdioForbiddenHint
+	return strings.Replace(stdioForbiddenHint, "melange", d.Edition.ProgramName(), 1)
 }
 
 // toolError wraps an API or auth failure as an IsError tool result so the
@@ -57,7 +57,7 @@ func (d Deps) toolErrorText(err error) string {
 	var authErr cmdutil.AuthError
 	if errors.As(err, &authErr) {
 		// No token resolved: same remediation as an authentication_error.
-		return err.Error() + "\n" + d.AuthHints.unauthenticated()
+		return err.Error() + "\n" + d.unauthenticatedHint()
 	}
 	// Everything else — including context.Canceled and DeadlineExceeded —
 	// passes through as plain error text.
@@ -68,12 +68,12 @@ func (d Deps) toolErrorText(err error) string {
 // Error()) plus per-type guidance.
 func (d Deps) apiErrorText(e *api.Error) string {
 	var b strings.Builder
-	b.WriteString(e.Error())
+	b.WriteString(strings.Replace(e.Error(), "melange API:", d.Edition.ProgramName()+" API:", 1))
 	switch e.Type {
 	case "authentication_error":
-		b.WriteString("\n" + d.AuthHints.unauthenticated())
+		b.WriteString("\n" + d.unauthenticatedHint())
 	case "permission_error":
-		b.WriteString("\n" + d.AuthHints.forbidden())
+		b.WriteString("\n" + d.forbiddenHint())
 	case "rate_limit_error":
 		if e.RetryAfter > 0 {
 			fmt.Fprintf(&b, "\nRetry after %d seconds.", int(e.RetryAfter.Seconds()))

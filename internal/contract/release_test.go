@@ -3,6 +3,7 @@ package contract
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -137,6 +138,99 @@ func TestInstallerAcceptsStrictVSemVer(t *testing.T) {
 				"a valid version must reach the release download")
 		})
 	}
+}
+
+func TestQualcommInstallerInstallsMatchingBinaryAndSkill(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("installer is a POSIX shell script")
+	}
+
+	root := repoRoot(t)
+	fixtureDir := t.TempDir()
+	binDir := filepath.Join(fixtureDir, "fake-bin")
+	installDir := filepath.Join(fixtureDir, "installed-bin")
+	homeDir := filepath.Join(fixtureDir, "home")
+	xdgDir := filepath.Join(fixtureDir, "xdg")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.MkdirAll(installDir, 0o755))
+
+	archiveRoot := filepath.Join(fixtureDir, "archive")
+	require.NoError(t, os.MkdirAll(archiveRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(archiveRoot, "melange-qcom"), []byte("qcom-binary\n"), 0o755))
+	archive := filepath.Join(fixtureDir, "melange-qcom_1.2.3_"+runtime.GOOS+"_"+runtime.GOARCH+".tar.gz")
+	cmd := exec.Command("tar", "-czf", archive, "-C", archiveRoot, "melange-qcom")
+	require.NoError(t, cmd.Run())
+	archiveBytes, err := os.ReadFile(archive)
+	require.NoError(t, err)
+	digest := sha256.Sum256(archiveBytes)
+	checksums := filepath.Join(fixtureDir, "checksums.txt")
+	require.NoError(t, os.WriteFile(checksums, []byte(fmt.Sprintf("%x  %s\n", digest, filepath.Base(archive))), 0o644))
+
+	sourceRoot := filepath.Join(fixtureDir, "source", "melange-cli-1.2.3", "skills", "melange-qcom")
+	require.NoError(t, os.MkdirAll(sourceRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceRoot, "SKILL.md"), []byte("name: melange-qcom\n"), 0o644))
+	sourceArchive := filepath.Join(fixtureDir, "source.tar.gz")
+	cmd = exec.Command("tar", "-czf", sourceArchive, "-C", filepath.Join(fixtureDir, "source"), "melange-cli-1.2.3")
+	require.NoError(t, cmd.Run())
+
+	fakeCurl := filepath.Join(binDir, "curl")
+	require.NoError(t, os.WriteFile(fakeCurl, []byte(`#!/bin/sh
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    http*) url="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+case "$url" in
+	*/checksums.txt.sigstore.json) : > "$out" ;;
+	*/checksums.txt) cp "$FIXTURE_CHECKSUMS" "$out" ;;
+  */archive/refs/tags/*.tar.gz) cp "$FIXTURE_SOURCE" "$out" ;;
+  */melange-qcom_*.tar.gz) cp "$FIXTURE_ARCHIVE" "$out" ;;
+  *) exit 22 ;;
+esac
+`), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "npx"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "cosign"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	installer := filepath.Join(root, "script", "install-qcom.sh")
+	cmd = exec.Command("sh", installer)
+	cmd.Env = append(os.Environ(),
+		"MELANGE_VERSION=v1.2.3",
+		"MELANGE_INSTALL_DIR="+installDir,
+		"MELANGE_SKILL_AGENTS=universal",
+		"HOME="+homeDir,
+		"XDG_CONFIG_HOME="+xdgDir,
+		"FIXTURE_ARCHIVE="+archive,
+		"FIXTURE_CHECKSUMS="+checksums,
+		"FIXTURE_SOURCE="+sourceArchive,
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	assert.FileExists(t, filepath.Join(installDir, "melange-qcom"))
+	assert.FileExists(t, filepath.Join(xdgDir, "agents", "skills", "melange-qcom", "SKILL.md"))
+	assert.Contains(t, string(output), "melange-qcom (v1.2.3)")
+}
+
+func TestReleaseAddsQualcommArchivesWithoutChangingExistingDistributionInputs(t *testing.T) {
+	config := readRepoFile(t, ".goreleaser.yml")
+	assert.Contains(t, config, "id: melange-qcom")
+	assert.Contains(t, config, "main: ./cmd/melange-qcom")
+	assert.Contains(t, config, `name_template: "melange-qcom_{{ .Version }}_{{ .Os }}_{{ .Arch }}"`)
+	assert.Contains(t, config, "ids:\n      - melange\n", "the existing archive must only contain the standard binary")
+
+	homebrewSection := section(t, config, "homebrew_casks:", "\nrelease:")
+	assert.NotContains(t, homebrewSection, "melange-qcom")
+	packageJSON := readRepoFile(t, "npm/package.json")
+	assert.NotContains(t, packageJSON, "qualcomm")
+
+	installer := readRepoFile(t, "script/install-qcom.sh")
+	assert.Contains(t, installer, `BINARY="melange-qcom"`)
+	assert.Contains(t, installer, `SKILL="melange-qcom"`)
+	assert.Contains(t, installer, "script/install-qcom.sh")
 }
 
 func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {

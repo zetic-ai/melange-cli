@@ -3,7 +3,7 @@
   "name": "ai.zetic/melange",
   "title": "Melange",
   "description": "ZETIC Melange on-device AI: model library, uploads, conversion, benchmarks, deployment guides.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "repository": {
     "url": "https://github.com/zetic-ai/melange-cli",
     "source": "github"
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@zetic-ai/melange-cli",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

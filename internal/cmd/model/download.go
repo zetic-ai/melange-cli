@@ -149,8 +149,8 @@ authenticated, 130 interrupted.`,
 			opts.account, opts.name, opts.key = account, name, args[0]
 			if opts.target == "" {
 				return cmdutil.FlagError{Err: fmt.Errorf(
-					"--target TARGET_ID is required; list targets with: melange model targets %s -R %s",
-					opts.key, opts.repo)}
+					"--target TARGET_ID is required; list targets with: %s model targets %s -R %s",
+					f.Edition.ProgramName(), opts.key, opts.repo)}
 			}
 			if opts.output == "-" && opts.exporter != nil {
 				return cmdutil.FlagError{Err: errors.New(
@@ -292,7 +292,7 @@ func authorizeDownload(ctx context.Context, g *gen.ClientWithResponses, opts *do
 	if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
 		var apiErr *api.Error
 		if errors.As(aerr, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
-			hint := "The download was not authorized and nothing was charged; check `melange usage quotas`."
+			hint := fmt.Sprintf("The download was not authorized and nothing was charged; check `%s usage quotas`.", opts.f.Edition.ProgramName())
 			if apiErr.RetryAfter > 0 {
 				hint += fmt.Sprintf(" Retry after %s.", apiErr.RetryAfter)
 			}
@@ -471,8 +471,8 @@ func confirmBillableDownload(ctx context.Context, opts *downloadOptions, g *gen.
 		}
 	}
 	if target == nil {
-		return fmt.Errorf("target %s not found for model %s in %s; list targets with: melange model targets %s -R %s",
-			opts.target, opts.key, opts.repo, opts.key, opts.repo)
+		return fmt.Errorf("target %s not found for model %s in %s; list targets with: %s model targets %s -R %s",
+			opts.target, opts.key, opts.repo, opts.f.Edition.ProgramName(), opts.key, opts.repo)
 	}
 
 	desc := string(target.Kind)

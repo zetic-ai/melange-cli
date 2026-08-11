@@ -28,6 +28,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	mcpserver "github.com/zetic-ai/melange-cli/internal/mcp"
 )
 
@@ -73,6 +74,9 @@ type Config struct {
 	// Version is the MCP server version advertised during initialization and
 	// reported by /healthz.
 	Version string
+	// Edition selects the result policy and server identity. Zero means the
+	// standard Melange MCP server.
+	Edition edition.Policy
 	// Logger receives server diagnostics; nil means discard. It must never
 	// receive credentials.
 	Logger *slog.Logger
@@ -416,6 +420,7 @@ func (s *Server) getServer(req *http.Request) *sdk.Server {
 		Version:   s.cfg.Version,
 		Logger:    s.logger,
 		AuthHints: httpAuthHints,
+		Edition:   s.cfg.Edition,
 	}, mcpserver.Options{
 		// Local tools act on the server's own filesystem, which is
 		// meaningless (and dangerous) for a remote caller.
