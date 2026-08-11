@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 )
 
 // textOf asserts the result is a single text block and returns its text.
@@ -158,6 +159,16 @@ func TestToolErrorExactAuthText(t *testing.T) {
 	})
 	want := "melange API: invalid token (authentication_error, HTTP 401, request req_1)\n" +
 		"To fix: run 'melange auth login' or set MELANGE_API_KEY."
+	assert.Equal(t, want, textOf(t, res))
+}
+
+func TestQualcommToolErrorUsesEditionBranding(t *testing.T) {
+	res := (Deps{Edition: edition.Qualcomm()}).toolError(&api.Error{
+		StatusCode: 401, Type: "authentication_error",
+		Message: "invalid token", RequestID: "req_1",
+	})
+	want := "melange-qualcomm API: invalid token (authentication_error, HTTP 401, request req_1)\n" +
+		"To fix: run 'melange-qualcomm auth login' or set MELANGE_API_KEY."
 	assert.Equal(t, want, textOf(t, res))
 }
 

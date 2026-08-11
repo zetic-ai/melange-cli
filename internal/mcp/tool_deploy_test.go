@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
 
@@ -162,6 +163,33 @@ func TestGetDeploymentInfoRejectsUnsupportedSelectorsBeforeCallingTheAPI(t *test
 			assert.Empty(t, reg.Requests)
 		})
 	}
+}
+
+func TestQualcommDeploymentToolAdvertisesAndroidAndFlutterButNotIOS(t *testing.T) {
+	cs, _ := connectDeps(t, Deps{
+		Clients: registryProvider(t, &httpmock.Registry{}), Version: "test", Edition: edition.Qualcomm(),
+	})
+
+	schema, err := json.Marshal(toolNamed(t, cs, "get_deployment_info").InputSchema)
+	require.NoError(t, err)
+	assert.Contains(t, string(schema),
+		`"enum":["android-kotlin","android-java","flutter"]`)
+	assert.NotContains(t, string(schema), "ios-swift")
+}
+
+func TestQualcommDeploymentOptionsFilterIOSFromToolResult(t *testing.T) {
+	body := `{"languages":[{"id":"android-kotlin","label":"Android (Kotlin)","code_language":"kotlin"},{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"},{"id":"flutter","label":"Flutter","code_language":"dart"}],` +
+		`"inference_modes":[{"id":"auto","label":"Auto","description":"pick per device"}],"default_language":"android-kotlin","default_inference_mode":"auto","guide_version":1}`
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", "/v1/deployment/options"),
+		httpmock.JSONResponse(200, json.RawMessage(body)))
+	cs, _ := connectDeps(t, Deps{Clients: registryProvider(t, reg), Version: "test", Edition: edition.Qualcomm()})
+
+	res := callTool(t, cs, "get_deployment_info", nil)
+
+	assert.False(t, res.IsError)
+	assert.Contains(t, textOf(t, res), "flutter")
+	assert.NotContains(t, textOf(t, res), "ios-swift")
 }
 
 func TestGetDeploymentInfoGuideFailureIsToolError(t *testing.T) {

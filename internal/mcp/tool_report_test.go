@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 )
 
@@ -160,4 +161,26 @@ func TestGetModelReportAnnotationsAndDescription(t *testing.T) {
 	for _, want := range []string{"general", "llm", "package", "not-found"} {
 		assert.Contains(t, tool.Description, want)
 	}
+}
+
+func TestQualcommGetModelReportFiltersBeforeReturningToolResult(t *testing.T) {
+	qualcommDevice := `{"name":"SM-S931U1","marketing_name":"Samsung Galaxy S25","soc":"SM8750","os":"15"}`
+	pixelDevice := `{"name":"Pixel 10","marketing_name":"Google Pixel 10","soc":"Tensor G5","os":"16"}`
+	body := `{"derivation_version":3,"model":{"key":"whisper-tiny-1","version":1},"records":[` +
+		`{"device":` + qualcommDevice + `,"ap_type":"npu","variant":"q","precision":"fp16","run":0,"metric":"latency_ms","value":8,"unit":"ms"},` +
+		`{"device":` + pixelDevice + `,"ap_type":"npu","variant":"p","precision":"fp16","run":0,"metric":"latency_ms","value":4,"unit":"ms"}` +
+		`],"summary":{"latency_ms":{"fp32":null,"fp16":null,"int8":null,"all":null},"snr_db":{"fp32":null,"fp16":null,"int8":null,"all":null},"memory_mb":{"fp32":null,"fp16":null,"int8":null,"all":null}}}`
+	reg := &httpmock.Registry{}
+	reg.Register(httpmock.REST("GET", reportPathPrefix+"general"),
+		httpmock.JSONResponse(200, json.RawMessage(body)))
+	cs, _ := connectDeps(t, Deps{Clients: registryProvider(t, reg), Version: "test", Edition: edition.Qualcomm()})
+
+	res := callTool(t, cs, "get_model_report", map[string]any{
+		"repo": "zetic/whisper-tiny", "model_key": "whisper-tiny-1", "report_type": "general",
+	})
+
+	assert.False(t, res.IsError)
+	assert.Contains(t, textOf(t, res), "Samsung Galaxy S25")
+	assert.NotContains(t, textOf(t, res), "Google Pixel 10")
+	assert.Contains(t, textOf(t, res), `"qualcomm_filter"`)
 }

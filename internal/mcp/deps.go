@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 )
 
 // Deps carries the shared dependencies every MCP tool handler receives.
@@ -18,6 +19,9 @@ type Deps struct {
 	// AuthHints overrides the remediation text attached to credential
 	// failures. The zero value keeps the stdio defaults.
 	AuthHints AuthHints
+	// Edition narrows selected result and schema surfaces for sibling CLI
+	// products. Its zero value is the standard Melange contract.
+	Edition edition.Policy
 	// Bare is the HTTP client the local upload tool uses against signed
 	// storage URLs. Like the CLI's bare client, it must carry NO API
 	// transport chain — no Authorization header, no debug logging — because

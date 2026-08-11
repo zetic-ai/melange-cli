@@ -115,9 +115,9 @@ func printModelTTY(f *cmdutil.Factory, m *gen.LibraryModelDetailResponse) error 
 		p.Paragraph(readme)
 	}
 	p.Paragraph(fmt.Sprintf(
-		"Next: list converted model keys with `melange model list -R %s`.\n"+
-			"Then render code with `melange deploy guide MODEL_KEY -R %s`.",
-		m.FullName, m.FullName))
+		"Next: list converted model keys with `%s model list -R %s`.\n"+
+			"Then render code with `%s deploy guide MODEL_KEY -R %s`.",
+		f.Edition.ProgramName(), m.FullName, f.Edition.ProgramName(), m.FullName))
 	return p.Render()
 }
 

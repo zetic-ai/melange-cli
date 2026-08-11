@@ -107,7 +107,7 @@ func printModelTTY(f *cmdutil.Factory, m *gen.ModelDetailResponse, repo string) 
 	}
 	fmt.Fprintf(&b, "Created:         %s\n", text.RelativeTime(m.CreatedAt, now))
 	fmt.Fprintf(&b, "Updated:         %s\n", text.RelativeTime(m.UpdatedAt, now))
-	fmt.Fprintf(&b, "\nDeployment guide: melange deploy guide %s -R %s\n", m.Key, repo)
+	fmt.Fprintf(&b, "\nDeployment guide: %s deploy guide %s -R %s\n", f.Edition.ProgramName(), m.Key, repo)
 	_, err := fmt.Fprint(ios.Out, text.SanitizeTerminal(b.String()))
 	return err
 }

@@ -29,10 +29,43 @@ builds:
       - -X github.com/zetic-ai/melange-cli/internal/build.Commit={{ .ShortCommit }}
       - -X github.com/zetic-ai/melange-cli/internal/build.Date={{ .Date }}
     mod_timestamp: "{{ .CommitTimestamp }}"
+  - id: melange-qualcomm
+    main: ./cmd/melange-qualcomm
+    binary: melange-qualcomm
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/zetic-ai/melange-cli/internal/build.Version={{ .Version }}
+      - -X github.com/zetic-ai/melange-cli/internal/build.Commit={{ .ShortCommit }}
+      - -X github.com/zetic-ai/melange-cli/internal/build.Date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
   - id: default
+    ids:
+      - melange
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+  - id: qualcomm
+    ids:
+      - melange-qualcomm
+    name_template: "melange-qualcomm_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
     format_overrides:

@@ -84,11 +84,15 @@ func registryProvider(t *testing.T, reg *httpmock.Registry) ClientProvider {
 // connect wires a fresh server for provider to an in-memory client session
 // and returns the session plus the client-side wire log.
 func connect(t *testing.T, provider ClientProvider) (*mcp.ClientSession, *syncWriter) {
+	return connectDeps(t, Deps{Clients: provider, Version: "test"})
+}
+
+func connectDeps(t *testing.T, deps Deps) (*mcp.ClientSession, *syncWriter) {
 	t.Helper()
 	ctx := context.Background()
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	srv := New(Deps{Clients: provider, Version: "test"}, Options{})
+	srv := New(deps, Options{})
 	serverSession, err := srv.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = serverSession.Wait() })

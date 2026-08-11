@@ -3,8 +3,10 @@ package root
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	apicmd "github.com/zetic-ai/melange-cli/internal/cmd/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/auth"
 	"github.com/zetic-ai/melange-cli/internal/cmd/deploy"
@@ -22,10 +24,9 @@ import (
 
 // NewCmdRoot builds the root cobra.Command for the melange CLI.
 func NewCmdRoot(f *cmdutil.Factory) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "melange <command> <subcommand> [flags]",
-		Short: "melange — on-device AI model deployment & benchmarking",
-		Long: `melange is the command-line interface for the Zetic.ai Melange platform,
+	program := f.Edition.ProgramName()
+	short := "melange — on-device AI model deployment & benchmarking"
+	long := `melange is the command-line interface for the Zetic.ai Melange platform,
 which lets you deploy, benchmark, and manage on-device AI models.
 
 Authenticate by setting MELANGE_API_KEY or by running melange auth login.
@@ -33,16 +34,33 @@ Data is written to stdout; progress and diagnostics go to stderr.
 Exit codes: 0 success, 1 error, 2 usage/flag error, 4 auth error, 130 interrupted.
 
 Reference topics: melange help environment, melange help exit-codes,
-melange help formatting.`,
+melange help formatting.`
+	if f.Edition.IsQualcomm() {
+		short = "melange-qualcomm — Qualcomm-focused on-device AI deployment & benchmarking"
+		long = `melange-qualcomm is the Qualcomm-focused edition of the Zetic.ai Melange CLI.
+It shares Melange authentication and model management while curating benchmark
+reports, converted targets, and deployment guides for Qualcomm team workflows.
 
-		Example: `  # List repositories as JSON
-  melange repo list --json
+Report and target commands fail closed against the reviewed Qualcomm device
+fleet. The raw api command is intentionally unfiltered and is not an enforcement
+boundary. Data is written to stdout; progress and diagnostics go to stderr.
+
+Reference topics: melange-qualcomm help environment,
+melange-qualcomm help exit-codes, melange-qualcomm help formatting.`
+	}
+	cmd := &cobra.Command{
+		Use:   program + " <command> <subcommand> [flags]",
+		Short: short,
+		Long:  long,
+
+		Example: fmt.Sprintf(`  # List repositories as JSON
+  %s repo list --json
 
   # Upload a model and wait for conversion
-  melange model upload -R acme/whisper model.onnx --input x.npy --wait
+  %s model upload -R acme/whisper model.onnx --input x.npy --wait
 
   # Call any API endpoint and extract a value
-  melange api /v1/me --jq .account.name`,
+  %s api /v1/me --jq .account.name`, program, program, program),
 
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -111,6 +129,51 @@ melange help formatting.`,
 	for _, topic := range helpTopics {
 		cmd.AddCommand(newHelpTopic(topic))
 	}
+	if f.Edition.IsQualcomm() {
+		applyEditionPresentation(cmd, program)
+	}
 
 	return cmd
+}
+
+func applyEditionPresentation(cmd *cobra.Command, program string) {
+	cmd.Short = rewriteProgramReferences(cmd.Short, program)
+	cmd.Long = rewriteProgramReferences(cmd.Long, program)
+	cmd.Example = rewriteProgramReferences(cmd.Example, program)
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		flag.Usage = rewriteProgramReferences(flag.Usage, program)
+	})
+	if cmd.RunE != nil {
+		run := cmd.RunE
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			err := run(cmd, args)
+			if err == nil {
+				return nil
+			}
+			message := rewriteProgramReferences(err.Error(), program)
+			if message == err.Error() {
+				return err
+			}
+			return brandedError{message: message, err: err}
+		}
+	}
+	for _, child := range cmd.Commands() {
+		applyEditionPresentation(child, program)
+	}
+}
+
+type brandedError struct {
+	message string
+	err     error
+}
+
+func (e brandedError) Error() string { return e.message }
+func (e brandedError) Unwrap() error { return e.err }
+
+func rewriteProgramReferences(value, program string) string {
+	for _, old := range []string{"melange ", "`melange`", "`melange ", `"melange `} {
+		replacement := strings.Replace(old, "melange", program, 1)
+		value = strings.ReplaceAll(value, old, replacement)
+	}
+	return value
 }

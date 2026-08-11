@@ -5,6 +5,7 @@ import (
 
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/config"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
 
@@ -14,6 +15,7 @@ type Factory struct {
 	Config     func() (*config.Config, error)
 	Executable string
 	Version    string
+	Edition    edition.Policy
 	NoInput    bool
 
 	// HostOverride is the value of the persistent --host flag, set by the

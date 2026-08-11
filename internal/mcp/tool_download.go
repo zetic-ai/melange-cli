@@ -22,16 +22,16 @@ func registerDownload(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "request_model_download",
 		Title: "Request model download",
-		Description: "Authorize downloading one converted target's artifacts. This is BILLABLE: " +
-			"the target's size counts against the account's bandwidth quota, also for public models " +
-			"owned by others — ask the user for explicit consent, then pass confirm: true. The " +
-			"result lists the artifacts with every signed url replaced by \"<redacted>\"; " +
-			"include_urls: true returns the real short-lived URLs into the transcript instead. " +
-			"Every confirmed call is charged separately, so if a call fails ambiguously (timeout " +
-			"or connection error) check with the user before retrying. " +
-			"When the user is on the machine that should hold the files, tell them to run " +
-			"'melange model download' instead: it verifies checksums and writes the files for them. " +
-			"Take model_key from list_models and target_id from get_model with include_targets.",
+		Description: fmt.Sprintf("Authorize downloading one converted target's artifacts. This is BILLABLE: "+
+			"the target's size counts against the account's bandwidth quota, also for public models "+
+			"owned by others — ask the user for explicit consent, then pass confirm: true. The "+
+			"result lists the artifacts with every signed url replaced by \"<redacted>\"; "+
+			"include_urls: true returns the real short-lived URLs into the transcript instead. "+
+			"Every confirmed call is charged separately, so if a call fails ambiguously (timeout "+
+			"or connection error) check with the user before retrying. "+
+			"When the user is on the machine that should hold the files, tell them to run "+
+			"'%s model download' instead: it verifies checksums and writes the files for them. "+
+			"Take model_key from list_models and target_id from get_model with include_targets.", d.Edition.ProgramName()),
 		OutputSchema: outputSchema("request_model_download"),
 		Annotations: &mcp.ToolAnnotations{
 			IdempotentHint:  false,

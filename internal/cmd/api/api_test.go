@@ -18,6 +18,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
@@ -398,6 +399,16 @@ func TestAPINon2xxEnvelopePassthroughAndSummary(t *testing.T) {
 
 	assert.Equal(t, body, e.out.String(), "error bodies still pass through to stdout")
 	assert.Equal(t, "melange: HTTP 404: repository zetic/nope not found (req_4)\n", e.errOut.String())
+}
+
+func TestQualcommAPINon2xxUsesEditionBranding(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+	e.reg.Register(httpmock.REST("GET", "/v1/down"), httpmock.StatusStringResponse(500, "upstream exploded"))
+
+	err := run(t, e, "api", "/v1/down")
+	require.ErrorIs(t, err, cmdutil.ErrSilent)
+	assert.Equal(t, "melange-qualcomm: HTTP 500: upstream exploded\n", e.errOut.String())
 }
 
 func TestAPINon2xxSummaryNeutralizesServerControlledOSC52(t *testing.T) {

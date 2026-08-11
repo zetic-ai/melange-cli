@@ -215,13 +215,13 @@ func runAPI(f *cmdutil.Factory, cmd *cobra.Command, opts *options, pathArg strin
 		_ = resp.Body.Close()
 	}()
 
-	return printResponse(ios, resp, exporter, opts.include, opts.silent)
+	return printResponse(ios, resp, exporter, opts.include, opts.silent, f.Edition.ProgramName())
 }
 
 // printResponse implements the output contract: bodies go to stdout verbatim
 // (2xx and non-2xx alike), summaries go to stderr, and the exit code follows
 // the response status.
-func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdutil.Exporter, include, silent bool) error {
+func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdutil.Exporter, include, silent bool, program string) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if silent && !include {
 			_, err := io.Copy(io.Discard, resp.Body)
@@ -259,7 +259,7 @@ func printResponse(ios *iostreams.IOStreams, resp *http.Response, exporter *cmdu
 			summary += fmt.Sprintf(" (%s)", apiErr.RequestID)
 		}
 	}
-	fmt.Fprintf(ios.ErrOut, "melange: %s\n", text.SanitizeTerminalInline(summary))
+	fmt.Fprintf(ios.ErrOut, "%s: %s\n", program, text.SanitizeTerminalInline(summary))
 
 	// The summary is already printed, so wrap ErrSilent; AuthError still
 	// carries the exit-4 contract for rejected tokens.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Melange Qualcomm"
+  short_description: "Manage and deploy models on Qualcomm devices"
+  default_prompt: "Use $melange-qualcomm to evaluate and deploy this model for Qualcomm devices."

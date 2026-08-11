@@ -11,6 +11,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
+	"github.com/zetic-ai/melange-cli/internal/edition"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
@@ -78,6 +79,73 @@ func TestDeployOptionsHumanShowsDefaultsAndAllSelectors(t *testing.T) {
 	assert.Contains(t, out, "Auto")
 	assert.Contains(t, out, "Speed")
 	assert.Contains(t, out, "default")
+}
+
+func TestQualcommDeployOptionsHideIOSAndKeepFlutter(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+	body := strings.Replace(optionsBody,
+		`{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"}`,
+		`{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"},{"id":"flutter","label":"Flutter","code_language":"dart"}`, 1)
+	e.reg.Register(httpmock.REST("GET", "/v1/deployment/options"), jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "deploy", "options", "--json"))
+	assert.Contains(t, e.out.String(), `"id":"android-kotlin"`)
+	assert.Contains(t, e.out.String(), `"id":"flutter"`)
+	assert.NotContains(t, e.out.String(), "ios-swift")
+}
+
+func TestQualcommDeployGuideRejectsIOSLocally(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+
+	err := run(t, e, "deploy", "guide", "abc123", "-R", "acme/chat", "--language", "ios-swift")
+
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "android-kotlin, android-java, or flutter")
+	assert.Empty(t, e.reg.Requests)
+}
+
+func TestQualcommDeployGuideHelpOnlyOffersApprovedLanguages(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+
+	require.NoError(t, run(t, e, "deploy", "guide", "--help"))
+	assert.Contains(t, e.out.String(), "android-kotlin, android-java, or flutter")
+	assert.NotContains(t, e.out.String(), "ios-swift")
+}
+
+func TestQualcommDeployGuideAllowsAndroidAndFlutter(t *testing.T) {
+	for _, language := range []string{"android-kotlin", "android-java", "flutter"} {
+		t.Run(language, func(t *testing.T) {
+			e := setup(t)
+			e.f.Edition = edition.Qualcomm()
+			body := strings.ReplaceAll(guideBody, "ios-swift", language)
+			e.reg.Register(
+				httpmock.REST("GET", "/v1/repos/acme/chat/models/abc123/deployment-guide"),
+				jsonStub(200, body),
+			)
+
+			require.NoError(t, run(t, e, "deploy", "guide", "abc123", "-R", "acme/chat", "--language", language, "--json"))
+			assert.Equal(t, language, e.reg.Requests[0].URL.Query().Get("language"))
+			assert.Equal(t, body+"\n", e.out.String())
+		})
+	}
+}
+
+func TestQualcommDeployGuideRejectsUnsupportedServerResponse(t *testing.T) {
+	e := setup(t)
+	e.f.Edition = edition.Qualcomm()
+	e.reg.Register(
+		httpmock.REST("GET", "/v1/repos/acme/chat/models/abc123/deployment-guide"),
+		jsonStub(200, guideBody),
+	)
+
+	err := run(t, e, "deploy", "guide", "abc123", "-R", "acme/chat", "--language", "android-kotlin", "--json")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported language")
+	assert.Empty(t, e.out.String())
 }
 
 func TestDeployGuideSendsExactSelectorsAndPrintsCopyableCodeWhenCaptured(t *testing.T) {

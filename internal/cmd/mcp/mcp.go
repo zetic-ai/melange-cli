@@ -252,6 +252,7 @@ func runHTTP(cmd *cobra.Command, f *cmdutil.Factory, hc httpConfig) error {
 		UserAgent:      cmdutil.UserAgent(f.Version),
 		APITimeout:     timeout,
 		Version:        build.Version,
+		Edition:        f.Edition,
 		Logger:         serverLogger(f, slog.LevelInfo),
 		AllowedOrigins: hc.allowedOrigins,
 		ValidateTokens: hc.validateTokens,
@@ -348,6 +349,7 @@ func newDeps(f *cmdutil.Factory) mcpserver.Deps {
 		}),
 		Version: build.Version,
 		Logger:  stderrLogger(f),
+		Edition: f.Edition,
 	}
 }
 

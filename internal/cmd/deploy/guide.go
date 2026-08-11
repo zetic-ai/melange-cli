@@ -33,6 +33,26 @@ func newCmdGuide(f *cmdutil.Factory) *cobra.Command {
 		mode     string
 		exporter *cmdutil.Exporter
 	)
+	examples := `  # Android Kotlin, automatic target selection
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO
+
+  # iOS Swift, prefer speed
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language ios-swift --mode speed
+
+  # Structured guide for an agent
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language flutter --mode accuracy --json`
+	languageHelp := "SDK language: android-kotlin, android-java, ios-swift, or flutter"
+	if f.Edition.IsQualcomm() {
+		examples = `  # Android Kotlin, automatic target selection
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO
+
+  # Android Java, prefer speed
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language android-java --mode speed
+
+  # Structured Flutter guide for an agent
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language flutter --mode accuracy --json`
+		languageHelp = "SDK language: android-kotlin, android-java, or flutter"
+	}
 	cmd := &cobra.Command{
 		Use:   "guide MODEL_KEY",
 		Short: "Print exact SDK deployment code for a model",
@@ -44,24 +64,21 @@ The guide always contains YOUR_PERSONAL_KEY. For credential safety this command
 does not interpolate, print, or persist the active PAT. General-model tensor
 construction remains an explicit TODO because tensor shapes and preprocessing
 are model-specific.`,
-		Example: `  # Android Kotlin, automatic target selection
-  melange deploy guide MODEL_KEY -R ACCOUNT/REPO
-
-  # iOS Swift, prefer speed
-  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language ios-swift --mode speed
-
-  # Structured guide for an agent
-  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language flutter --mode accuracy --json`,
-		Args: cmdutil.ExactArgs(1),
+		Example: examples,
+		Args:    cmdutil.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			account, name, err := splitRepoFlag(repo)
 			if err != nil {
 				return err
 			}
 			languageValue, ok := supportedLanguages[language]
-			if !ok {
+			if !ok || !f.Edition.AllowsDeploymentLanguage(language) {
+				expected := "android-kotlin, android-java, ios-swift, or flutter"
+				if f.Edition.IsQualcomm() {
+					expected = "android-kotlin, android-java, or flutter"
+				}
 				return cmdutil.FlagError{Err: fmt.Errorf(
-					"invalid --language %q; expected android-kotlin, android-java, ios-swift, or flutter", language)}
+					"invalid --language %q; expected %s", language, expected)}
 			}
 			modeValue, ok := supportedModes[mode]
 			if !ok {
@@ -91,6 +108,9 @@ are model-specific.`,
 			if resp.JSON200.CredentialPlaceholder != "YOUR_PERSONAL_KEY" {
 				return errors.New("invalid deployment guide: credential_placeholder must be YOUR_PERSONAL_KEY")
 			}
+			if f.Edition.IsQualcomm() && !f.Edition.AllowsDeploymentLanguage(string(resp.JSON200.Language)) {
+				return fmt.Errorf("deployment guide returned unsupported language %q for %s", resp.JSON200.Language, f.Edition.ProgramName())
+			}
 			if exporter != nil {
 				return exporter.Write(f.IOStreams, json.RawMessage(resp.Body))
 			}
@@ -98,7 +118,7 @@ are model-specific.`,
 		},
 	}
 	cmd.Flags().StringVarP(&repo, "repo", "R", "", "Repository as `ACCOUNT/REPO` (required)")
-	cmd.Flags().StringVar(&language, "language", "android-kotlin", "SDK language: android-kotlin, android-java, ios-swift, or flutter")
+	cmd.Flags().StringVar(&language, "language", "android-kotlin", languageHelp)
 	cmd.Flags().StringVar(&mode, "mode", "auto", "Inference mode: auto, speed, or accuracy")
 	cmdutil.AddJSONFlags(cmd, &exporter)
 	return cmd
