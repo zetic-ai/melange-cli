@@ -597,7 +597,11 @@ func TestModelImportZtcPackagePostsToZtcRoute(t *testing.T) {
 	require.Len(t, e.reg.Requests, 1)
 	req := e.reg.Requests[0]
 	assert.Equal(t, ztcPackagePath, req.URL.Path)
-	assert.NotEmpty(t, req.Header.Get("Idempotency-Key"), "ztc-package import must carry an Idempotency-Key")
+	// No Idempotency-Key: the route does not read one and disables its own HF
+	// dedup, so sending the header would only make the POST retry-eligible and
+	// a transient 5xx would replay it into a second import and a second credit
+	// hold. Restore the key here once the route honors it.
+	assert.Empty(t, req.Header.Get("Idempotency-Key"), "ztc-package import must not be made retry-eligible while the route ignores the key")
 	body := requestBody(t, req)
 	assert.Equal(t, "meta-llama/Llama-3.2-1B", body["uri"], "ztc-package body is {\"uri\": ...}")
 	assert.NotContains(t, body, "hf_repo", "ztc-package uses uri, not the llama.cpp hf_repo field")

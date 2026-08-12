@@ -75,7 +75,7 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
 					return err
 				}
 				imported, raw, err := client.ImportModelZtcPackage(cmd.Context(), account, name,
-					args[0], api.NewIdempotencyKey())
+					args[0])
 				if err != nil {
 					return err
 				}
