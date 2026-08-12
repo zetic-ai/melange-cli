@@ -21,8 +21,9 @@ which system governs the account (legacy or v3).
 It preflights only that size entitlement — other billing checks (credits,
 debt, subscription state) are enforced separately at conversion time.
 
-On a terminal this prints a human-readable block. When stdout is not a
-terminal it prints stable tab-separated key/value lines (plan, is_trial,
+On a terminal this prints a human-readable block; every field is always
+shown, and one the account does not carry renders as "-". When stdout is
+not a terminal it prints stable tab-separated key/value lines (plan, is_trial,
 trial_ends_at, billing_generation, tier, max_model_bytes; trial_ends_at
 is empty when not a trial, tier and max_model_bytes are empty when null).
 With --json, API fields and order are preserved and output ends with

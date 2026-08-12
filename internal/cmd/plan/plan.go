@@ -40,8 +40,9 @@ which system governs the account (legacy or v3).
 It preflights only that size entitlement — other billing checks (credits,
 debt, subscription state) are enforced separately at conversion time.
 
-On a terminal this prints a human-readable block. When stdout is not a
-terminal it prints stable tab-separated key/value lines (plan, is_trial,
+On a terminal this prints a human-readable block; every field is always
+shown, and one the account does not carry renders as "-". When stdout is
+not a terminal it prints stable tab-separated key/value lines (plan, is_trial,
 trial_ends_at, billing_generation, tier, max_model_bytes; trial_ends_at
 is empty when not a trial, tier and max_model_bytes are empty when null).
 With --json, API fields and order are preserved and output ends with
@@ -122,11 +123,14 @@ func printPlan(ios *iostreams.IOStreams, p *gen.BillingPlanResponse) error {
 		fields := tableprinter.NewFields(ios)
 		fields.Add("Plan", plan)
 		fields.Add("Trial", trial)
-		if tier != "" {
-			fields.Add("Tier", tier)
-		}
+		// The human field set is stable across accounts. A legacy account
+		// has no tier and a custom-contract account no size cap; both
+		// render the absent-value dash rather than dropping the row, since
+		// Fields.Add skips empty values and a shorter block reads as though
+		// the CLI does not know about the field at all.
+		fields.Add("Tier", orDash(tier))
 		fields.Add("Billing generation", generation)
-		fields.Add("Max model bytes", maxBytes)
+		fields.Add("Max model bytes", orDash(maxBytes))
 		return fields.Render()
 	}
 	fmt.Fprintf(out, "plan\t%s\n", plan)
@@ -136,6 +140,15 @@ func printPlan(ios *iostreams.IOStreams, p *gen.BillingPlanResponse) error {
 	fmt.Fprintf(out, "tier\t%s\n", tier)
 	fmt.Fprintf(out, "max_model_bytes\t%s\n", maxBytes)
 	return nil
+}
+
+// orDash renders an absent value as "-", the convention this CLI's tables use
+// for a field the object does not carry.
+func orDash(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
 }
 
 // genClient returns the generated API client over the authenticated transport.
