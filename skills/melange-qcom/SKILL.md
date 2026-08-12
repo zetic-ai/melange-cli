@@ -68,11 +68,21 @@ model_key="$(printf '%s\n' "$created" | jq -er .model.key)"
 melange-qcom model status "$model_key" -R "$repo" --json
 ```
 
-For Hugging Face models, use:
+For a Hugging Face model, the path depends on its type, and model type is fixed
+at `repo create`. Classify first with
+`curl -fsSL "https://huggingface.co/api/models/OWNER/NAME" | jq -r .pipeline_tag`:
+`text-generation` imports the repo id, everything else ships as artifacts.
 
 ```sh
-melange-qcom model import ORG/MODEL -R "$repo" --json
+llm_repo="$(melange-qcom repo create demo-llm --private --model-type llm --jq .full_name)"
+melange-qcom model import ORG/MODEL -R "$llm_repo" --json
 ```
+
+For a general model, tell the user what the artifact path involves before
+starting it: a local export to `.pt2` plus `.npy` sample inputs, which downloads
+the weights, needs PyTorch >= 2.9, and fixes the input shape the deployed model
+will accept. Then export and upload as above. See
+<https://docs.zetic.ai/model-preparation/pytorch-export>.
 
 Do not use `--wait` while a person is waiting. Report the current public state
 (`converting`, `optimizing`, `ready`, or `failed`) and monitor in the background.
