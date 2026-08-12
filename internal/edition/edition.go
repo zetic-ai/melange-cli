@@ -131,6 +131,7 @@ var qualcommFleet = map[deviceIdentity]struct{}{
 	identity("Samsung Galaxy Tab S9", "SM8550"):         {},
 	identity("Xiaomi 12 Pro", "SM8450"):                 {},
 	identity("Xiaomi 13 Pro", "SM8550"):                 {},
+	identity("Qualcomm SW6100 Wearable", "SW6100"):      {},
 }
 
 // knownNonQualcommFleet lets the edition distinguish reviewed non-Qualcomm

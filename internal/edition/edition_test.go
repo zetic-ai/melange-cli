@@ -74,6 +74,7 @@ func TestQualcommFixedFleetIncludesEveryApprovedPairAndFailsClosed(t *testing.T)
 		{"Samsung Galaxy Tab S9", "SM8550"},
 		{"Xiaomi 12 Pro", "SM8450"},
 		{"Xiaomi 13 Pro", "SM8550"},
+		{"Qualcomm SW6100 Wearable", "SW6100"},
 	}
 	excluded := [][2]string{
 		{"Apple iPhone 16 Pro", "A18 Pro"},
