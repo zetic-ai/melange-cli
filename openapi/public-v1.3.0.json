@@ -135,7 +135,7 @@
             }
           }
         },
-        "description": "A size limit was exceeded and nothing was uploaded or charged. `error.code` distinguishes the causes: `custom_model_too_large` (the model exceeds the plan's custom-model size entitlement), `credit_model_too_large` (the model exceeds the self-service credit-band ceiling), or — on the legacy upload create — a declared file exceeds the per-file size limit.",
+        "description": "A size limit was exceeded and nothing was uploaded or charged. Which limit it was is per-operation: when the refusal comes from a pricing-v3 size gate the response carries an `error.code` naming it, and the operation's own description lists exactly the codes reachable there. A 413 without an `error.code` is a plain request-shape limit (the legacy upload create's per-file cap).",
         "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
@@ -3874,7 +3874,7 @@
       },
       "post": {
         "deprecated": true,
-        "description": "Start an upload session. Returns presigned PUT URLs for each requested file.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
+        "description": "Start an upload session. Returns presigned PUT URLs for each requested file.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_create_upload",
         "parameters": [
           {
@@ -4075,7 +4075,7 @@
     "/v1/projects/{project_name}/uploads/{upload_id}/complete": {
       "post": {
         "deprecated": true,
-        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
+        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_complete_upload",
         "parameters": [
           {
@@ -4649,7 +4649,7 @@
         ]
       },
       "post": {
-        "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.",
+        "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.",
         "operationId": "create_model_upload",
         "parameters": [
           {
@@ -4768,7 +4768,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/import": {
       "post": {
-        "description": "Register an LLM model from a public HuggingFace repo.\n\nReturns 201 with the created model reference; conversion continues\nasynchronously (poll `get_model_status`). An `Idempotency-Key` replay of\nthe same body returns the original model with 200. The repository must\nhave `model_type` \"llm\".",
+        "description": "Register an LLM model from a public HuggingFace repo.\n\nReturns 201 with the created model reference; conversion continues\nasynchronously (poll `get_model_status`). An `Idempotency-Key` replay of\nthe same body returns the original model with 200. The repository must\nhave `model_type` \"llm\".\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.",
         "operationId": "import_model",
         "parameters": [
           {
@@ -5076,7 +5076,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete": {
       "post": {
-        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed — not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.\n\nSession expiry is deliberately not checked here: an expired session the\ncleanup sweep has not processed yet may still complete (the sweep\nre-checks state under a lock, so the race resolves to one winner).\n\nIf the account's conversion quota is exhausted the request returns the\nstandard 429 `rate_limit_error`: the conversion has NOT started and the\nsession stays DISPATCH_PENDING — complete again after resolving the\nquota to retry the dispatch.",
+        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed — not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.\n\nSession expiry is deliberately not checked here: an expired session the\ncleanup sweep has not processed yet may still complete (the sweep\nre-checks state under a lock, so the race resolves to one winner).\n\nIf the account's conversion quota is exhausted the request returns the\nstandard 429 `rate_limit_error`: the conversion has NOT started and the\nsession stays DISPATCH_PENDING — complete again after resolving the\nquota to retry the dispatch.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.",
         "operationId": "complete_model_upload",
         "parameters": [
           {
@@ -5864,7 +5864,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations": {
       "post": {
-        "description": "Authorize downloading a converted target's artifacts (BILLABLE).\n\nCharges the target's aggregate `download_size` against the CALLER's\nbandwidth quota — also for public models owned by others. Over quota is\na 429 with nothing charged and no row created. Returns signed GET URLs\nvalid until `expires_at` (about one hour).\n\nWith an `Idempotency-Key`, replaying returns the original authorization\n(200) with fresh URLs and does NOT charge again; without one, EVERY\ncall charges. The key is scoped to the caller's account; reusing it for\na different target is a 409.",
+        "description": "Authorize downloading a converted target's artifacts (BILLABLE).\n\nCharges the target's aggregate `download_size` against the CALLER's\nbandwidth quota — also for public models owned by others. Over quota is\na 429 with nothing charged and no row created. Returns signed GET URLs\nvalid until `expires_at` (about one hour).\n\nWith an `Idempotency-Key`, replaying returns the original authorization\n(200) with fresh URLs and does NOT charge again; without one, EVERY\ncall charges. The key is scoped to the caller's account; reusing it for\na different target is a 409.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.",
         "operationId": "create_download_authorization",
         "parameters": [
           {

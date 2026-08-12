@@ -2529,6 +2529,8 @@ type ClientInterface interface {
 	//
 	// Start an upload session. Returns presigned PUT URLs for each requested file.
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
+	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
 	// Takes any type of body and a specified content type.
@@ -2541,6 +2543,8 @@ type ClientInterface interface {
 	// ZeticPublicUploadsCreateUpload Create Upload
 	//
 	// Start an upload session. Returns presigned PUT URLs for each requested file.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -2581,6 +2585,8 @@ type ClientInterface interface {
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
 	// Takes any type of body and a specified content type.
@@ -2593,6 +2599,8 @@ type ClientInterface interface {
 	// ZeticPublicUploadsCompleteUpload Complete Upload
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -2701,6 +2709,8 @@ type ClientInterface interface {
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
@@ -2713,6 +2723,8 @@ type ClientInterface interface {
 	// Returns 201 with server-assigned canonical paths and resumable upload
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -2728,6 +2740,8 @@ type ClientInterface interface {
 	// the same body returns the original model with 200. The repository must
 	// have `model_type` "llm".
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/import (the `ImportModel` operationId).
@@ -2741,6 +2755,8 @@ type ClientInterface interface {
 	// asynchronously (poll `get_model_status`). An `Idempotency-Key` replay of
 	// the same body returns the original model with 200. The repository must
 	// have `model_type` "llm".
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -2805,6 +2821,8 @@ type ClientInterface interface {
 	// standard 429 `rate_limit_error`: the conversion has NOT started and the
 	// session stays DISPATCH_PENDING — complete again after resolving the
 	// quota to retry the dispatch.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
 	CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, params *CompleteModelUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2923,6 +2941,8 @@ type ClientInterface interface {
 	// (200) with fresh URLs and does NOT charge again; without one, EVERY
 	// call charges. The key is scoped to the caller's account; reusing it for
 	// a different target is a 409.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations (the `CreateDownloadAuthorization` operationId).
 	CreateDownloadAuthorization(ctx context.Context, accountName string, repoName string, modelKey string, targetId string, params *CreateDownloadAuthorizationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3158,6 +3178,8 @@ func (c *Client) ZeticPublicUploadsListActiveUploads(ctx context.Context, projec
 //
 // Start an upload session. Returns presigned PUT URLs for each requested file.
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
+//
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
 // Takes any type of body and a specified content type.
@@ -3179,6 +3201,8 @@ func (c *Client) ZeticPublicUploadsCreateUploadWithBody(ctx context.Context, pro
 // ZeticPublicUploadsCreateUpload Create Upload
 //
 // Start an upload session. Returns presigned PUT URLs for each requested file.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -3246,6 +3270,8 @@ func (c *Client) ZeticPublicUploadsGetUpload(ctx context.Context, projectName st
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+//
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
 // Takes any type of body and a specified content type.
@@ -3267,6 +3293,8 @@ func (c *Client) ZeticPublicUploadsCompleteUploadWithBody(ctx context.Context, p
 // ZeticPublicUploadsCompleteUpload Complete Upload
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -3482,6 +3510,8 @@ func (c *Client) ListModels(ctx context.Context, accountName string, repoName st
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
@@ -3504,6 +3534,8 @@ func (c *Client) CreateModelUploadWithBody(ctx context.Context, accountName stri
 // Returns 201 with server-assigned canonical paths and resumable upload
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -3529,6 +3561,8 @@ func (c *Client) CreateModelUpload(ctx context.Context, accountName string, repo
 // the same body returns the original model with 200. The repository must
 // have `model_type` "llm".
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/import (the `ImportModel` operationId).
@@ -3552,6 +3586,8 @@ func (c *Client) ImportModelWithBody(ctx context.Context, accountName string, re
 // asynchronously (poll `get_model_status`). An `Idempotency-Key` replay of
 // the same body returns the original model with 200. The repository must
 // have `model_type` "llm".
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -3656,6 +3692,8 @@ func (c *Client) GetModelUpload(ctx context.Context, accountName string, repoNam
 // standard 429 `rate_limit_error`: the conversion has NOT started and the
 // session stays DISPATCH_PENDING — complete again after resolving the
 // quota to retry the dispatch.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
 func (c *Client) CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, params *CompleteModelUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3884,6 +3922,8 @@ func (c *Client) ListModelTargets(ctx context.Context, accountName string, repoN
 // (200) with fresh URLs and does NOT charge again; without one, EVERY
 // call charges. The key is scoped to the caller's account; reusing it for
 // a different target is a 409.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations (the `CreateDownloadAuthorization` operationId).
 func (c *Client) CreateDownloadAuthorization(ctx context.Context, accountName string, repoName string, modelKey string, targetId string, params *CreateDownloadAuthorizationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -6003,6 +6043,8 @@ type ClientWithResponsesInterface interface {
 	//
 	// Start an upload session. Returns presigned PUT URLs for each requested file.
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
+	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -6015,6 +6057,8 @@ type ClientWithResponsesInterface interface {
 	// ZeticPublicUploadsCreateUploadWithResponse Create Upload
 	//
 	// Start an upload session. Returns presigned PUT URLs for each requested file.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -6059,6 +6103,8 @@ type ClientWithResponsesInterface interface {
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -6071,6 +6117,8 @@ type ClientWithResponsesInterface interface {
 	// ZeticPublicUploadsCompleteUploadWithResponse Complete Upload
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -6187,6 +6235,8 @@ type ClientWithResponsesInterface interface {
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
@@ -6199,6 +6249,8 @@ type ClientWithResponsesInterface interface {
 	// Returns 201 with server-assigned canonical paths and resumable upload
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -6214,6 +6266,8 @@ type ClientWithResponsesInterface interface {
 	// the same body returns the original model with 200. The repository must
 	// have `model_type` "llm".
 	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/import (the `ImportModel` operationId).
@@ -6227,6 +6281,8 @@ type ClientWithResponsesInterface interface {
 	// asynchronously (poll `get_model_status`). An `Idempotency-Key` replay of
 	// the same body returns the original model with 200. The repository must
 	// have `model_type` "llm".
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -6297,6 +6353,8 @@ type ClientWithResponsesInterface interface {
 	// standard 429 `rate_limit_error`: the conversion has NOT started and the
 	// session stays DISPATCH_PENDING — complete again after resolving the
 	// quota to retry the dispatch.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -6433,6 +6491,8 @@ type ClientWithResponsesInterface interface {
 	// (200) with fresh URLs and does NOT charge again; without one, EVERY
 	// call charges. The key is scoped to the caller's account; reusing it for
 	// a different target is a 409.
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -11255,6 +11315,8 @@ func (c *ClientWithResponses) ZeticPublicUploadsListActiveUploadsWithResponse(ct
 //
 // Start an upload session. Returns presigned PUT URLs for each requested file.
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
+//
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -11273,6 +11335,8 @@ func (c *ClientWithResponses) ZeticPublicUploadsCreateUploadWithBodyWithResponse
 // ZeticPublicUploadsCreateUploadWithResponse Create Upload
 //
 // Start an upload session. Returns presigned PUT URLs for each requested file.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -11334,6 +11398,8 @@ func (c *ClientWithResponses) ZeticPublicUploadsGetUploadWithResponse(ctx contex
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+//
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -11352,6 +11418,8 @@ func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithBodyWithRespon
 // ZeticPublicUploadsCompleteUploadWithResponse Complete Upload
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -11532,6 +11600,8 @@ func (c *ClientWithResponses) ListModelsWithResponse(ctx context.Context, accoun
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models (the `CreateModelUpload` operationId).
@@ -11550,6 +11620,8 @@ func (c *ClientWithResponses) CreateModelUploadWithBodyWithResponse(ctx context.
 // Returns 201 with server-assigned canonical paths and resumable upload
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -11571,6 +11643,8 @@ func (c *ClientWithResponses) CreateModelUploadWithResponse(ctx context.Context,
 // the same body returns the original model with 200. The repository must
 // have `model_type` "llm".
 //
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/import (the `ImportModel` operationId).
@@ -11590,6 +11664,8 @@ func (c *ClientWithResponses) ImportModelWithBodyWithResponse(ctx context.Contex
 // asynchronously (poll `get_model_status`). An `Idempotency-Key` replay of
 // the same body returns the original model with 200. The repository must
 // have `model_type` "llm".
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -11684,6 +11760,8 @@ func (c *ClientWithResponses) GetModelUploadWithResponse(ctx context.Context, ac
 // standard 429 `rate_limit_error`: the conversion has NOT started and the
 // session stays DISPATCH_PENDING — complete again after resolving the
 // quota to retry the dispatch.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -11886,6 +11964,8 @@ func (c *ClientWithResponses) ListModelTargetsWithResponse(ctx context.Context, 
 // (200) with fresh URLs and does NOT charge again; without one, EVERY
 // call charges. The key is scoped to the caller's account; reusing it for
 // a different target is a 409.
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
