@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
@@ -72,6 +74,53 @@ func (c *Client) GetBillingPlan(ctx context.Context) (*gen.BillingPlanResponse, 
 		}
 	}
 	return plan, nil
+}
+
+// ztcPackageRequest is the body for the ztc-package (non-llama.cpp) LLM import:
+// a public HuggingFace repo id the server composes prefill+decode from into an
+// encrypted .ztc, rather than the default llama.cpp GGUF path. The field name
+// mirrors the web UI's staff-only endpoint contract ({"uri": "<hf_repo>"}).
+type ztcPackageRequest struct {
+	URI string `json:"uri"`
+}
+
+// ImportModelZtcPackage triggers the non-llama.cpp ZTC package conversion path
+// for a HuggingFace repo, mirroring the web UI's staff-only endpoint. It rides
+// this client's transport chain (auth -> retry -> debug) exactly like the
+// generated ImportModel call, and carries an Idempotency-Key so the retry
+// transport may safely replay it. It returns the decoded response, the raw
+// response bytes (for --json/--jq output), and a GenError-converted error.
+//
+// BACKEND: the public route is assumed to be
+// POST /v1/repos/{account_name}/{repo_name}/models/ztc-package with body
+// {"uri": "<hf_repo>"}, aligned to the existing import route. The path lives
+// here alone, so adjust this one line if the backend exposes a different route.
+func (c *Client) ImportModelZtcPackage(ctx context.Context, accountName, repoName, hfRepo, idempotencyKey string) (*gen.ImportModelResponse, []byte, error) {
+	reqBody, err := json.Marshal(ztcPackageRequest{URI: hfRepo})
+	if err != nil {
+		return nil, nil, err
+	}
+	path := fmt.Sprintf("/v1/repos/%s/%s/models/ztc-package", accountName, repoName)
+	resp, err := c.Do(ctx, http.MethodPost, path, bytes.NewReader(reqBody), map[string]string{
+		"Content-Type":    "application/json",
+		"Idempotency-Key": idempotencyKey,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading ztc-package response: %w", err)
+	}
+	if err := ErrorFrom(resp.StatusCode, resp.Header, raw); err != nil {
+		return nil, nil, err
+	}
+	var imported gen.ImportModelResponse
+	if err := json.Unmarshal(raw, &imported); err != nil {
+		return nil, nil, fmt.Errorf("decoding ztc-package response: %w", err)
+	}
+	return &imported, raw, nil
 }
 
 // GenError converts a generated-client response into an error: nil for 2xx,
