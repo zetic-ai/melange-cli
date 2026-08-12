@@ -639,3 +639,36 @@ func TestModelImportZtcPackageStaffOnlySurfaces403(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ztc-package import is staff only")
 }
+
+// A 502 on the ztc-package route must NOT be replayed. The route reads no
+// idempotency key and disables its own HF dedup, so a second POST would
+// register a second model and reserve its credits again. Exactly one request
+// must leave the CLI, and the failure must surface for the caller to inspect.
+func TestModelImportZtcPackageDoesNotRetryTransientFailure(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", ztcPackagePath), jsonStub(502, `{}`))
+
+	err := run(t, e, "model", "import", "meta-llama/Llama-3.2-1B",
+		"-R", "zetic/whisper", "--ztc-package")
+	require.Error(t, err)
+
+	assert.Len(t, e.reg.Requests, 1,
+		"a 502 must not be replayed: the route cannot dedupe a second import")
+}
+
+// The same pricing refusals the route documents must carry the same
+// remediation the generic import gives, instead of a bare envelope error.
+func TestModelImportZtcPackageRefusalCarriesBillingHint(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", ztcPackagePath), jsonStub(402,
+		`{"type":"error","error":{"type":"billing_error","message":"no credits","code":"credit_balance_exhausted"},"request_id":"r1"}`))
+
+	err := run(t, e, "model", "import", "meta-llama/Llama-3.2-1B",
+		"-R", "zetic/whisper", "--ztc-package")
+	require.Error(t, err)
+
+	assert.Len(t, e.reg.Requests, 1, "a 402 is terminal, not retryable")
+	assert.Contains(t, err.Error(), "credit_balance_exhausted")
+	assert.Contains(t, err.Error(), "usage quotas",
+		"a credit refusal must point at the remediation, like the generic import does")
+}
