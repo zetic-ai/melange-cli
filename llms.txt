@@ -352,10 +352,14 @@ melange usage quotas [--json|--jq|--template]
   Credits are ADVISORY: model_uploads.remaining > 0 and credits.available > 0
   are necessary but not sufficient for the next conversion —
   credits.outstanding_debt must be 0, and the per-conversion charge grows with
-  model size. A refusal is HTTP 402 error.type billing_error with a machine
-  error.code: credit_balance_exhausted (top up; nothing was charged),
-  credit_debt_outstanding (settle the debt), subscription_past_due (fix the
-  payment method). A 402'd upload completion parks the session resumable —
+  model size. Branch on the machine error.code, not the status: 402
+  billing_error is credit_balance_exhausted (top up; nothing was charged) or
+  subscription_past_due (fix the payment method); 409 conflict_error is
+  credit_debt_outstanding (settle the debt); 413 request_too_large is
+  custom_model_too_large (over the plan's own entitlement — see melange plan)
+  or credit_model_too_large (over the self-service size ceiling, which no
+  credit balance buys — contact support). A refused upload completion parks
+  the session resumable —
   replay it after remediation: melange model upload --resume SESSION_ID -R
   ACCOUNT/REPO. The CLI prints these hints on stderr for upload completion and
   import refusals; exit code stays 1.
@@ -380,7 +384,10 @@ melange plan [--json|--jq|--template]
   (the current pricing identity: free|pro|team|enterprise; null on accounts
   still on legacy billing), and max_model_bytes (the plan's own model-size
   entitlement; preflights only that cap — credits/debt are enforced separately
-  at conversion time). TTY: human block; non-TTY: TSV key/value with
+  at conversion time; null means a custom contract, NOT unlimited — the credit
+  ledger still refuses runs above the self-service size ceiling). TTY: human
+  block, every field always shown with "-" for one the account lacks; non-TTY:
+  TSV key/value with
   billing_generation, tier, max_model_bytes appended after the historical
   three lines (tier and max_model_bytes empty when null). plan reflects what
   the server enforces: an account that bypasses quota limits reports pro_plus

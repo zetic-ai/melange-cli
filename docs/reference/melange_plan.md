@@ -19,7 +19,9 @@ which system governs the account (legacy or v3).
 
 "max_model_bytes" is the plan's own cap on a custom model's total bytes.
 It preflights only that size entitlement — other billing checks (credits,
-debt, subscription state) are enforced separately at conversion time.
+debt, subscription state) are enforced separately at conversion time. A
+null cap means a custom contract, NOT an unlimited one: the credit ledger
+still refuses runs above the self-service size ceiling.
 
 On a terminal this prints a human-readable block; every field is always
 shown, and one the account does not carry renders as "-". When stdout is

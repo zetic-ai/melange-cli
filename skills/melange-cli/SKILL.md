@@ -390,7 +390,10 @@ matching the dashboard; an account that bypasses quota limits reports
 (`free|pro|team|enterprise`), null on accounts still on legacy billing;
 `billing_generation` (`legacy|v3`) says which system governs.
 `max_model_bytes` preflights only the plan's own model-size entitlement —
-credits and debt are checked separately at conversion time.
+credits and debt are checked separately at conversion time. A null
+`max_model_bytes` means a custom contract, **not** an unlimited one (unlike a
+null quota limit): the credit ledger still refuses runs above the self-service
+size ceiling.
 
 ### Entitlement disclosure (required)
 
@@ -413,12 +416,16 @@ Credits gate conversions and are ADVISORY: preflight with
 `melange usage quotas --jq '{credits: .credits.available, debt: .credits.outstanding_debt}'`.
 `.credits.available > 0` AND `.credits.outstanding_debt == 0` are necessary
 but not sufficient — the per-conversion charge grows with model size, so a
-positive balance can still refuse a large model. A refusal is HTTP 402 with
-`error.type` `billing_error` and a machine `error.code`:
-`credit_balance_exhausted` (top up, nothing was charged),
-`credit_debt_outstanding` (settle the debt on the dashboard),
-`subscription_past_due` (fix the payment method). A 402'd upload completion
-leaves the session parked and resumable — after topping up, replay it:
+positive balance can still refuse a large model. Branch on the machine
+`error.code`, not on the status: HTTP 402 `billing_error` is
+`credit_balance_exhausted` (top up, nothing was charged) or
+`subscription_past_due` (fix the payment method); HTTP 409 `conflict_error` is
+`credit_debt_outstanding` (settle the debt on the dashboard); HTTP 413
+`request_too_large` is `custom_model_too_large` (over the plan's own
+model-size entitlement — check `melange plan`) or `credit_model_too_large`
+(over the self-service size ceiling, which no credit balance buys — contact
+support). A refused upload completion leaves the session parked and resumable
+— after remediation, replay it:
 `melange model upload --resume SESSION_ID -R ACCOUNT/REPO`.
 
 Library `ACCOUNT/NAME` values identify public repositories, not converted model

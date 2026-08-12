@@ -61,10 +61,13 @@ billing).
 
 Credits are an advisory conversion preflight: require `.credits.available > 0`
 AND `.credits.outstanding_debt == 0`, and expect the charge to grow with model
-size. A refusal is HTTP 402 `billing_error` with an `error.code`
-(`credit_balance_exhausted`, `credit_debt_outstanding`,
-`subscription_past_due`). A 402'd upload completion parks the session
-resumable — top up, then
+size. Branch on the machine `error.code`, not on the status: 402
+`billing_error` is `credit_balance_exhausted` or `subscription_past_due`; 409
+`conflict_error` is `credit_debt_outstanding`; 413 `request_too_large` is
+`custom_model_too_large` (over the plan's entitlement — check
+`melange-qcom plan`) or `credit_model_too_large` (over the self-service size
+ceiling, which no credit balance buys). A refused upload completion parks the
+session resumable — remediate, then
 `melange-qcom model upload --resume SESSION_ID -R ACCOUNT/REPO`.
 
 Create a repository, validate the local manifest, then start conversion without
