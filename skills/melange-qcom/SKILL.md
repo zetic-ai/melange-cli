@@ -57,7 +57,12 @@ If `.model_uploads.remaining == 0`, stop. Attribute the restriction to the Free
 or Lite plan only after reading `plan`; otherwise call it an exhausted monthly
 quota. `plan` is the legacy tier (`free|lite|pro|pro_plus|enterprise`); `tier`
 is the current pricing identity (`free|pro|team|enterprise`, null on legacy
-billing).
+billing) and `billing_generation` (`legacy|v3`) says which system governs.
+`tier` reports what the server enforces now, so a lapsed paid subscription
+reads `free` while `billing_generation` stays `v3`. Preflight model size
+against `max_model_bytes`; a null there means a custom contract, **not** an
+unlimited one — the credit ledger still refuses runs above the self-service
+size ceiling.
 
 Credits are an advisory conversion preflight: require `.credits.available > 0`
 AND `.credits.outstanding_debt == 0`, and expect the charge to grow with model

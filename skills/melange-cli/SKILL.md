@@ -393,7 +393,10 @@ matching the dashboard; an account that bypasses quota limits reports
 credits and debt are checked separately at conversion time. A null
 `max_model_bytes` means a custom contract, **not** an unlimited one (unlike a
 null quota limit): the credit ledger still refuses runs above the self-service
-size ceiling.
+size ceiling. `tier` reports what the server enforces right now, so a lapsed
+paid subscription reads `free` while `billing_generation` stays `v3` — that is
+the pairing behind a `free` tier that still refuses with
+`subscription_past_due`.
 
 ### Entitlement disclosure (required)
 
