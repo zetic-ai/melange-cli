@@ -183,11 +183,12 @@ func TestQualcommReportRejectsUnsupportedKind(t *testing.T) {
 	assert.False(t, errors.Is(err, edition.ErrNoQualcommMeasurements))
 }
 
-// TestQualcommPackageQualityEqualsServedSummary is the backend-vs-qcom
-// equality gate: feeding the real shared fixture through FilterReport with a
-// fleet that keeps ALL of its devices must reproduce the served
-// pooled_vision_accuracy, scored_images, and best_perplexity byte-for-byte.
-func TestQualcommPackageQualityEqualsServedSummary(t *testing.T) {
+// TestQualcommPackageQualityCopiesThroughWhenNothingFiltered proves the
+// copy-through path: the filter only ever REMOVES records, so a fleet that
+// keeps every device of the real shared fixture drops no quality record, and
+// the served pooled_vision_accuracy, scored_images and best_perplexity must
+// survive byte-for-byte rather than be re-derived.
+func TestQualcommPackageQualityCopiesThroughWhenNothingFiltered(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "openapi", "fixtures", "get_package_report.json"))
 	require.NoError(t, err)
 	var fixture struct {
@@ -231,6 +232,73 @@ func summaryQualityLiterals(t *testing.T, body []byte) map[string]string {
 		out[field] = string(doc.Summary[field])
 	}
 	return out
+}
+
+// TestQualcommPackageRepoolsVisionAccuracyOverTheVisibleFleet exercises the
+// drop path: once a quality record is filtered out the served summary
+// describes devices this edition hides, so the fields are re-derived over the
+// kept runs only. The kept pair (15.4 / 160) is precision-sensitive — pooling
+// it from the float32 record values and rounding with math.Round(x*1e4)/1e4
+// answers 0.0962 instead of the backend's 0.0963.
+func TestQualcommPackageRepoolsVisionAccuracyOverTheVisibleFleet(t *testing.T) {
+	body := []byte(`{
+  "derivation_version":4,
+  "model":{"key":"p1","version":1},
+  "records":[
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"tps","value":30,"unit":"tokens_per_s"},
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"perplexity","value":12.5,"unit":"ppl"},
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"vision_expected_correct","value":15.4,"unit":"count"},
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"scored_images","value":160,"unit":"count"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"perplexity","value":9.5,"unit":"ppl"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"vision_expected_correct","value":29.36,"unit":"count"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"scored_images","value":45,"unit":"count"}
+  ],
+  "summary":{"auto":null,"speed":null,"best_perplexity":9.5,"pooled_vision_accuracy":0.2183,"scored_images":205,"has_perplexity_attempt":true,"has_vision_accuracy_attempt":true,"ppl_min_scored_tokens":201}
+}`)
+
+	got, err := edition.Qualcomm().FilterReport("package", body)
+
+	require.NoError(t, err)
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(got, &envelope))
+	summary := envelope["summary"].(map[string]any)
+	// Σnumerator / Σimages over the KEPT run only: 15.4 / 160.
+	assert.Equal(t, 0.0963, summary["pooled_vision_accuracy"])
+	assert.Equal(t, float64(160), summary["scored_images"])
+	assert.Equal(t, 12.5, summary["best_perplexity"], "the hidden device's lower perplexity must not leak")
+	assert.Equal(t, true, summary["has_vision_accuracy_attempt"], "report-global facts still copy through")
+}
+
+// TestQualcommPackageSumsRunsThatShareOnePublicIdentity covers the key
+// collision the public record cannot rule out: the backend separates runs by
+// the device primary key, which no record publishes, so two distinct runs can
+// land on one public (device, package, run_configuration) key. Both pairs must
+// be pooled — overwriting a metric map would silently drop one run.
+func TestQualcommPackageSumsRunsThatShareOnePublicIdentity(t *testing.T) {
+	body := []byte(`{
+  "derivation_version":4,
+  "model":{"key":"p1","version":1},
+  "records":[
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"tps","value":30,"unit":"tokens_per_s"},
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"vision_expected_correct","value":15.4,"unit":"count"},
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"scored_images","value":160,"unit":"count"},
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"vision_expected_correct","value":4.1,"unit":"count"},
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"scored_images","value":16,"unit":"count"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"vision_expected_correct","value":29.36,"unit":"count"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"scored_images","value":45,"unit":"count"}
+  ],
+  "summary":{"auto":null,"speed":null,"best_perplexity":null,"pooled_vision_accuracy":0.2183,"scored_images":221,"has_perplexity_attempt":false,"has_vision_accuracy_attempt":true,"ppl_min_scored_tokens":201}
+}`)
+
+	got, err := edition.Qualcomm().FilterReport("package", body)
+
+	require.NoError(t, err)
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(got, &envelope))
+	summary := envelope["summary"].(map[string]any)
+	// (15.4 + 4.1) / (160 + 16) — both colliding runs, not just the last one.
+	assert.Equal(t, 0.1108, summary["pooled_vision_accuracy"])
+	assert.Equal(t, float64(176), summary["scored_images"])
 }
 
 func TestQualcommPackageCopiesPolicyFactsWhenFilterDropsAllQualityRecords(t *testing.T) {
