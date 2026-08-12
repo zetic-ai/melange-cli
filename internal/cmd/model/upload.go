@@ -628,8 +628,12 @@ func completionTimeout(opts *uploadOptions, sessionID string) error {
 }
 
 func completionRecoveryError(opts *uploadOptions, sessionID string, err error) error {
-	return fmt.Errorf("%w\nThe session is preserved; resume with: %s model upload --resume %s -R %s",
+	recovery := fmt.Errorf("%w\nThe session is preserved; resume with: %s model upload --resume %s -R %s",
 		err, opts.f.Edition.ProgramName(), text.SanitizeTerminalInline(sessionID), text.SanitizeTerminalInline(opts.repo))
+	// A billing refusal (e.g. a 402 credit_balance_exhausted) parks the
+	// session rather than consuming it: replaying complete after remediation
+	// resumes it, so the hint APPENDS to the resume guidance.
+	return withBillingHint(opts.f.Edition.ProgramName(), recovery)
 }
 
 func printCompletionResumeHint(opts *uploadOptions, sessionID string) {

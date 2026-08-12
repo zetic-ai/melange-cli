@@ -113,10 +113,20 @@ func TestUsageForbiddenExits1(t *testing.T) {
 // quotasBody: prompts has a limit (50% used), active_devices is unlimited
 // (null limit + remaining), model_uploads is a zero-limit edge (renders 0%).
 // remaining rides along in --json but the human/non-TTY forms ignore it.
+// credits is the zero-balance ledger shape (nothing expiring, no debt).
 const quotasBody = `{"active_devices":{"used":3,"limit":null,"remaining":null},` +
 	`"bandwidth":{"used":500,"limit":1000,"remaining":500},` +
 	`"model_uploads":{"used":0,"limit":0,"remaining":0},` +
-	`"prompts":{"used":25,"limit":50,"remaining":25}}`
+	`"prompts":{"used":25,"limit":50,"remaining":25},` +
+	`"credits":{"available":0,"reserved":0,"outstanding_debt":0,"monthly_credits":0,"expiring_credits":0,"expiring_at":null}}`
+
+// creditsBody carries a funded ledger: credits expiring on a known date and
+// outstanding debt, exercising every optional clause of the credits row.
+const creditsBody = `{"active_devices":{"used":3,"limit":null,"remaining":null},` +
+	`"bandwidth":{"used":500,"limit":1000,"remaining":500},` +
+	`"model_uploads":{"used":0,"limit":1,"remaining":1},` +
+	`"prompts":{"used":25,"limit":50,"remaining":25},` +
+	`"credits":{"available":12,"reserved":2,"outstanding_debt":3,"monthly_credits":null,"expiring_credits":5,"expiring_at":"2026-09-01T00:00:00Z"}}`
 
 func TestUsageQuotasTTYUnlimitedAndPct(t *testing.T) {
 	e := setup(t)
@@ -129,6 +139,18 @@ func TestUsageQuotasTTYUnlimitedAndPct(t *testing.T) {
 	assert.Contains(t, out, "Bandwidth:       500/1000 (50%)")
 	assert.Contains(t, out, "Model uploads:   0/0 (0%)", "zero limit does not divide by zero")
 	assert.Contains(t, out, "Prompts:         25/50 (50%)")
+	assert.Contains(t, out, "Credits:         0 available (0 reserved)",
+		"the credits row follows the four quota rows")
+}
+
+func TestUsageQuotasTTYCreditsExpiryAndDebt(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	e.reg.Register(httpmock.REST("GET", quotasPath), jsonStub(200, creditsBody))
+
+	require.NoError(t, run(t, e, "--no-color", "usage", "quotas"))
+	assert.Contains(t, e.out.String(),
+		"Credits:         12 available (2 reserved, 5 expiring 2026-09-01, 3 debt outstanding)")
 }
 
 func TestUsageQuotasNonTTYTabSeparated(t *testing.T) {
@@ -136,10 +158,36 @@ func TestUsageQuotasNonTTYTabSeparated(t *testing.T) {
 	e.reg.Register(httpmock.REST("GET", quotasPath), jsonStub(200, quotasBody))
 
 	require.NoError(t, run(t, e, "usage", "quotas"))
+	// The credits_* lines are APPENDED after the historical four, named after
+	// the JSON fields; nullable values render empty when null.
 	want := "active_devices\tunlimited\n" +
 		"bandwidth\t500/1000 (50%)\n" +
 		"model_uploads\t0/0 (0%)\n" +
-		"prompts\t25/50 (50%)\n"
+		"prompts\t25/50 (50%)\n" +
+		"credits_available\t0\n" +
+		"credits_reserved\t0\n" +
+		"credits_outstanding_debt\t0\n" +
+		"credits_monthly_credits\t0\n" +
+		"credits_expiring_credits\t0\n" +
+		"credits_expiring_at\t\n"
+	assert.Equal(t, want, e.out.String())
+}
+
+func TestUsageQuotasNonTTYCreditsValues(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", quotasPath), jsonStub(200, creditsBody))
+
+	require.NoError(t, run(t, e, "usage", "quotas"))
+	want := "active_devices\tunlimited\n" +
+		"bandwidth\t500/1000 (50%)\n" +
+		"model_uploads\t0/1 (0%)\n" +
+		"prompts\t25/50 (50%)\n" +
+		"credits_available\t12\n" +
+		"credits_reserved\t2\n" +
+		"credits_outstanding_debt\t3\n" +
+		"credits_monthly_credits\t\n" +
+		"credits_expiring_credits\t5\n" +
+		"credits_expiring_at\t2026-09-01T00:00:00Z\n"
 	assert.Equal(t, want, e.out.String())
 }
 

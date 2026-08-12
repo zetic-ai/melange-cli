@@ -55,7 +55,17 @@ melange-qcom usage quotas --json
 
 If `.model_uploads.remaining == 0`, stop. Attribute the restriction to the Free
 or Lite plan only after reading `plan`; otherwise call it an exhausted monthly
-quota.
+quota. `plan` is the legacy tier (`free|lite|pro|pro_plus|enterprise`); `tier`
+is the current pricing identity (`free|pro|team|enterprise`, null on legacy
+billing).
+
+Credits are an advisory conversion preflight: require `.credits.available > 0`
+AND `.credits.outstanding_debt == 0`, and expect the charge to grow with model
+size. A refusal is HTTP 402 `billing_error` with an `error.code`
+(`credit_balance_exhausted`, `credit_debt_outstanding`,
+`subscription_past_due`). A 402'd upload completion parks the session
+resumable — top up, then
+`melange-qcom model upload --resume SESSION_ID -R ACCOUNT/REPO`.
 
 Create a repository, validate the local manifest, then start conversion without
 blocking the user:
@@ -128,6 +138,13 @@ non-Qualcomm and unclassified device records, recomputes summaries, and returns:
 Treat the matched set as the reviewed Qualcomm fleet, not every Qualcomm device
 in existence. If the command exits 1 with no Qualcomm measurements, do not fall
 back to general `melange report` output.
+
+Device-less records (model-level accuracy, model size) are retained — they are
+not device benchmarks and are never fleet-filtered. Quality summaries are
+recomputed from the retained records (`best_perplexity`,
+`pooled_vision_accuracy`, `scored_images`), while the report-global facts
+(`has_perplexity_attempt`, `has_vision_accuracy_attempt`,
+`ppl_min_scored_tokens`) pass through from the server unchanged.
 
 Read and fill the matching template before answering:
 

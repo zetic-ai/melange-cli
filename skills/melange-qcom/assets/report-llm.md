@@ -20,8 +20,8 @@ Key {model_key} · v{version} · {state}
 ## Qualcomm coverage
 
 State `.qualcomm_filter.matched_devices`, hidden non-Qualcomm record count, and
-hidden unclassified record count. Device-less accuracy records are model-level
-and remain present; do not count them as Qualcomm device measurements.
+hidden unclassified record count. Device-less records (model-level accuracy,
+model size) remain present; do not count them as Qualcomm device measurements.
 
 ## Summary
 
@@ -36,11 +36,25 @@ Use recomputed `.summary.quants`. Render missing values as `N/A`.
 
 ## Per-quantization summary
 
-| Quant | Throughput | First token | Peak memory | Accuracy |
-|-------|-----------:|------------:|------------:|---------:|
+| Quant | Throughput | First token | Peak memory | Accuracy | Perplexity |
+|-------|-----------:|------------:|------------:|---------:|-----------:|
 
 Sort by retained Qualcomm throughput. Accuracy may come from device-less
 model-level records; label it accordingly.
+
+## Perplexity
+
+Lower is better. `best_perplexity` per quant is recomputed from retained
+records:
+
+```sh
+printf '%s\n' "$report" | jq '.summary.quants | to_entries[]
+  | {quant: .key, best_ppl: .value.best_perplexity}'
+```
+
+Perplexity below `.summary.ppl_min_scored_tokens` scored tokens is never
+published. A report without perplexity keeps the column: `-` in tables, `N/A`
+in cards (`.summary.has_perplexity_attempt` says whether it was attempted).
 
 ## Qualcomm device benchmark
 

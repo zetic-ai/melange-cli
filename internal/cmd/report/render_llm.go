@@ -11,7 +11,10 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/tableprinter"
 )
 
-const metricTps = "tps"
+const (
+	metricTps        = "tps"
+	metricPerplexity = "perplexity"
+)
 
 // renderLLM prints the LLM report: rows=devices, columns=quant_types, cells=tps
 // on a TTY, plus a per-dataset accuracy section; flat TSV otherwise.
@@ -96,7 +99,10 @@ func llmTable(ios *iostreams.IOStreams, resp *gen.LlmReportResponse) error {
 	if err := tp.Render(); err != nil {
 		return err
 	}
-	return llmAccuracy(ios, resp.Summary.Accuracy)
+	if err := llmAccuracy(ios, resp.Summary.Accuracy); err != nil {
+		return err
+	}
+	return llmPerplexity(ios, resp)
 }
 
 // quantOrder returns the union of summary quant types and quant types seen
@@ -129,6 +135,53 @@ func llmDeviceKey(d gen.ReportDevice) string {
 		return *d.Name
 	}
 	return ""
+}
+
+// llmPerplexity prints the device × quant perplexity matrix: the same
+// mechanics as the tps table, but each cell is the LOWEST perplexity record
+// for that (device, quant). Reports without perplexity records render
+// nothing here, keeping legacy output byte-identical.
+func llmPerplexity(ios *iostreams.IOStreams, resp *gen.LlmReportResponse) error {
+	type cellKey struct{ device, quant string }
+	best := map[cellKey]float32{}
+	devices := map[string]bool{}
+	for _, r := range resp.Records {
+		quant := deref(r.QuantType)
+		if string(r.Metric) != metricPerplexity || quant == "" || r.Device == nil {
+			continue
+		}
+		dev := llmDeviceKey(*r.Device)
+		devices[dev] = true
+		k := cellKey{device: dev, quant: quant}
+		if cur, ok := best[k]; !ok || r.Value < cur {
+			best[k] = r.Value
+		}
+	}
+	if len(best) == 0 {
+		return nil
+	}
+
+	recordQuants := map[string]bool{}
+	for k := range best {
+		recordQuants[k.quant] = true
+	}
+	quants := quantOrder(resp.Summary.Quants, recordQuants)
+
+	tp := tableprinter.New(ios)
+	tp.Heading("Perplexity (lower is better):")
+	tp.HeaderRow(append([]string{"device"}, quants...)...)
+	for _, dev := range sortedKeys(devices) {
+		tp.AddField(displayDevice(dev))
+		for _, q := range quants {
+			if v, ok := best[cellKey{device: dev, quant: q}]; ok {
+				tp.AddField(formatRawFloat(v))
+			} else {
+				tp.AddField("-")
+			}
+		}
+		tp.EndRow()
+	}
+	return tp.Render()
 }
 
 // llmAccuracy prints the per-dataset accuracy section from the summary.

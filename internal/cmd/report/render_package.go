@@ -64,6 +64,35 @@ func packageTable(ios *iostreams.IOStreams, s *gen.PackageReportSummary) error {
 		tp.AddField(statMedian(m.agg.MemoryInferencePeakMb))
 		tp.EndRow()
 	}
+	if err := tp.Render(); err != nil {
+		return err
+	}
+	return packageQuality(ios, s)
+}
+
+// packageQuality appends the mode-independent quality aggregates. Reports
+// without a published perplexity or vision-accuracy value render nothing
+// here, keeping legacy output byte-identical.
+func packageQuality(ios *iostreams.IOStreams, s *gen.PackageReportSummary) error {
+	if s.BestPerplexity == nil && s.PooledVisionAccuracy == nil {
+		return nil
+	}
+	tp := tableprinter.New(ios)
+	tp.Heading("Quality:")
+	if s.BestPerplexity != nil {
+		tp.AddField("Perplexity (best)")
+		tp.AddField(formatRawFloat(*s.BestPerplexity))
+		tp.EndRow()
+	}
+	if s.PooledVisionAccuracy != nil {
+		tp.AddField("Vision accuracy")
+		value := formatRawFloat(*s.PooledVisionAccuracy)
+		if s.ScoredImages != nil {
+			value += fmt.Sprintf(" (%d images)", *s.ScoredImages)
+		}
+		tp.AddField(value)
+		tp.EndRow()
+	}
 	return tp.Render()
 }
 

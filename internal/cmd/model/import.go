@@ -101,7 +101,7 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
 				return err
 			}
 			if aerr := api.GenError(resp.StatusCode(), resp.HTTPResponse, resp.Body); aerr != nil {
-				return aerr
+				return withBillingHint(f.Edition.ProgramName(), aerr)
 			}
 			imported := resp.JSON201
 			if imported == nil {

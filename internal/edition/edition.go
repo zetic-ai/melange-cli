@@ -241,14 +241,16 @@ func filterLLMReport(body []byte) ([]byte, error) {
 	filtered := make([]gen.LlmReportRecord, 0, len(response.Records))
 	meta, matched := filterDevices(response.Records,
 		func(r gen.LlmReportRecord) *gen.ReportDevice { return r.Device },
-		func(r gen.LlmReportRecord) bool { return string(r.Metric) == "accuracy_score" },
+		// Device-less records (accuracy, model size) are model-level, not
+		// device benchmarks: they are retained, never fleet-filtered.
+		func(r gen.LlmReportRecord) bool { return true },
 		func(r gen.LlmReportRecord) { filtered = append(filtered, r) },
 	)
 	if len(matched) == 0 {
 		return nil, noMeasurementsError(meta)
 	}
 	response.Records = filtered
-	response.Summary = summarizeLLM(filtered)
+	response.Summary = summarizeLLM(filtered, response.Summary)
 	meta.MatchedDevices = len(matched)
 	return json.Marshal(struct {
 		gen.LlmReportResponse
@@ -267,7 +269,7 @@ func filterPackageReport(body []byte) ([]byte, error) {
 		return nil, noMeasurementsError(meta)
 	}
 	response.Records = filtered
-	response.Summary = summarizePackage(filtered)
+	response.Summary = summarizePackage(filtered, response.Summary)
 	meta.MatchedDevices = len(matched)
 	return json.Marshal(struct {
 		gen.PackageReportResponse
@@ -424,7 +426,11 @@ func memoryBounds(records []gen.GeneralReportRecord) *gen.ReportMemoryBounds {
 	return result
 }
 
-func summarizeLLM(records []gen.LlmReportRecord) gen.LlmReportSummary {
+// summarizeLLM recomputes per-quant aggregates from the filtered records.
+// The attempt flag and reliability threshold are report-global policy facts:
+// they COPY through from the served summary, never recomputed from the
+// filtered slice.
+func summarizeLLM(records []gen.LlmReportRecord, served gen.LlmReportSummary) gen.LlmReportSummary {
 	byQuant := map[string][]gen.LlmReportRecord{}
 	accuracy := []gen.LlmAccuracyEntry{}
 	for _, record := range records {
@@ -438,13 +444,19 @@ func summarizeLLM(records []gen.LlmReportRecord) gen.LlmReportSummary {
 	quants := map[string]gen.LlmQuantAggregates{}
 	for quant, rows := range byQuant {
 		quants[quant] = gen.LlmQuantAggregates{
-			BestTps:      maxValue(llmValues(rows, "tps")),
-			BestTtftMs:   minValue(llmValues(rows, "ttft_ms")),
-			BestMemoryMb: minValue(llmValues(rows, "memory_inference_peak_mb")),
-			BestAccuracy: maxValue(llmValues(rows, "accuracy_score")),
+			BestTps:        maxValue(llmValues(rows, "tps")),
+			BestTtftMs:     minValue(llmValues(rows, "ttft_ms")),
+			BestMemoryMb:   minValue(llmValues(rows, "memory_inference_peak_mb")),
+			BestAccuracy:   maxValue(llmValues(rows, "accuracy_score")),
+			BestPerplexity: minValueExact(llmValues(rows, "perplexity")),
 		}
 	}
-	return gen.LlmReportSummary{Quants: quants, Accuracy: accuracy}
+	return gen.LlmReportSummary{
+		Quants:               quants,
+		Accuracy:             accuracy,
+		HasPerplexityAttempt: served.HasPerplexityAttempt,
+		PplMinScoredTokens:   served.PplMinScoredTokens,
+	}
 }
 
 func llmValues(records []gen.LlmReportRecord, metric string) []float32 {
@@ -461,13 +473,23 @@ func minValue(values []float32) *float32 {
 	if len(values) == 0 {
 		return nil
 	}
+	value := minValueExact(values)
+	rounded := round2(*value)
+	return &rounded
+}
+
+// minValueExact keeps the exact published value: perplexity minima must match
+// the server's summary byte-for-byte, so no display rounding is applied.
+func minValueExact(values []float32) *float32 {
+	if len(values) == 0 {
+		return nil
+	}
 	value := values[0]
 	for _, candidate := range values[1:] {
 		if candidate < value {
 			value = candidate
 		}
 	}
-	value = round2(value)
 	return &value
 }
 
@@ -485,7 +507,14 @@ func maxValue(values []float32) *float32 {
 	return &value
 }
 
-func summarizePackage(records []gen.PackageReportRecord) gen.PackageReportSummary {
+// summarizePackage recomputes the mode aggregates and the mode-independent
+// quality fields from the filtered records. Pooled vision accuracy is
+// Σ(vision_expected_correct)/Σ(scored_images), pairing both metrics within
+// the same run group (device + run configuration) exactly as the server pools
+// published runs; the rate is rounded to 4 decimals to match it. The attempt
+// flags and reliability threshold are report-global policy facts: they COPY
+// through from the served summary, never recomputed from the filtered slice.
+func summarizePackage(records []gen.PackageReportRecord, served gen.PackageReportSummary) gen.PackageReportSummary {
 	type runKey struct {
 		device, pkg string
 		id          int
@@ -498,6 +527,30 @@ func summarizePackage(records []gen.PackageReportRecord) gen.PackageReportSummar
 		}
 		runs[key][string(record.Metric)] = record.Value
 	}
+
+	summary := gen.PackageReportSummary{
+		BestPerplexity:           minValueExact(packageValues(records, "perplexity")),
+		HasPerplexityAttempt:     served.HasPerplexityAttempt,
+		HasVisionAccuracyAttempt: served.HasVisionAccuracyAttempt,
+		PplMinScoredTokens:       served.PplMinScoredTokens,
+	}
+	var expectedCorrect, scoredImages float64
+	for _, metrics := range runs {
+		correct, okCorrect := metrics["vision_expected_correct"]
+		images, okImages := metrics["scored_images"]
+		if !okCorrect || !okImages {
+			continue
+		}
+		expectedCorrect += float64(correct)
+		scoredImages += float64(images)
+	}
+	if scoredImages > 0 {
+		pooled := float32(math.Round(expectedCorrect/scoredImages*10000) / 10000)
+		total := int(scoredImages)
+		summary.PooledVisionAccuracy = &pooled
+		summary.ScoredImages = &total
+	}
+
 	winners := map[string]map[string]float32{}
 	for key, metrics := range runs {
 		tps, ok := metrics["tps"]
@@ -510,7 +563,7 @@ func summarizePackage(records []gen.PackageReportRecord) gen.PackageReportSummar
 		}
 	}
 	if len(winners) == 0 {
-		return gen.PackageReportSummary{}
+		return summary
 	}
 	values := func(metric string) []float32 {
 		out := []float32{}
@@ -526,7 +579,19 @@ func summarizePackage(records []gen.PackageReportRecord) gen.PackageReportSummar
 		MemoryInferencePeakMb: stats(values("memory_inference_peak_mb")),
 	}
 	copyMode := *mode
-	return gen.PackageReportSummary{Auto: mode, Speed: &copyMode}
+	summary.Auto, summary.Speed = mode, &copyMode
+	return summary
+}
+
+// packageValues collects one metric's values across the filtered records.
+func packageValues(records []gen.PackageReportRecord, metric string) []float32 {
+	values := []float32{}
+	for _, record := range records {
+		if string(record.Metric) == metric {
+			values = append(values, record.Value)
+		}
+	}
+	return values
 }
 
 func round2(value float32) float32 {

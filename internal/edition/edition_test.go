@@ -3,6 +3,8 @@ package edition_test
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -111,16 +113,16 @@ func TestQualcommFixedFleetIncludesEveryApprovedPairAndFailsClosed(t *testing.T)
 	assert.Equal(t, float64(2), meta["hidden_unclassified_records"])
 }
 
-func TestQualcommLLMReportRetainsAccuracyButRequiresDeviceMeasurements(t *testing.T) {
+func TestQualcommLLMReportRetainsDevicelessRecordsButRequiresDeviceMeasurements(t *testing.T) {
 	body := []byte(`{
   "derivation_version":3,
   "model":{"key":"llm1","version":2},
   "records":[
     {"device":{"marketing_name":"Samsung Galaxy S24 Ultra","name":"SM-S928U","soc":"SM8650","os":"14"},"ap_type":"npu","variant":"v1","quant_type":"q4","dataset":null,"run":0,"metric":"tps","value":20,"unit":"tokens_per_s"},
     {"device":null,"ap_type":null,"variant":null,"quant_type":"q4","dataset":"arc","run":0,"metric":"accuracy_score","value":0.75,"unit":"score"},
-    {"device":null,"ap_type":null,"variant":null,"quant_type":"q4","dataset":null,"run":0,"metric":"tps","value":999,"unit":"tokens_per_s"}
+    {"device":null,"ap_type":null,"variant":null,"quant_type":"q4","dataset":null,"run":0,"metric":"model_size_bytes","value":2000000000,"unit":"bytes"}
   ],
-  "summary":{"quants":{"q4":{"best_tps":20,"best_ttft_ms":null,"best_memory_mb":null,"best_accuracy":0.75}},"accuracy":[{"quant_type":"q4","dataset":"arc","score":0.75}]}
+  "summary":{"quants":{"q4":{"best_tps":20,"best_ttft_ms":null,"best_memory_mb":null,"best_accuracy":0.75,"best_perplexity":null}},"accuracy":[{"quant_type":"q4","dataset":"arc","score":0.75}],"has_perplexity_attempt":true,"ppl_min_scored_tokens":201}
 }`)
 
 	got, err := edition.Qualcomm().FilterReport("llm", body)
@@ -128,9 +130,16 @@ func TestQualcommLLMReportRetainsAccuracyButRequiresDeviceMeasurements(t *testin
 	require.NoError(t, err)
 	var envelope map[string]any
 	require.NoError(t, json.Unmarshal(got, &envelope))
-	assert.Len(t, envelope["records"].([]any), 2)
+	// ALL device-less records survive — model_size_bytes rows included, not
+	// only accuracy_score (the pre-fix filter dropped them).
+	assert.Len(t, envelope["records"].([]any), 3)
 	meta := envelope["qualcomm_filter"].(map[string]any)
-	assert.Equal(t, float64(1), meta["hidden_unclassified_records"])
+	assert.Equal(t, float64(0), meta["hidden_unclassified_records"])
+
+	// The report-global policy facts copy through from the served summary.
+	summary := envelope["summary"].(map[string]any)
+	assert.Equal(t, true, summary["has_perplexity_attempt"])
+	assert.Equal(t, float64(201), summary["ppl_min_scored_tokens"])
 
 	accuracyOnly := []byte(`{"derivation_version":3,"model":{"key":"llm1","version":2},"records":[{"device":null,"ap_type":null,"variant":null,"quant_type":"q4","dataset":"arc","run":0,"metric":"accuracy_score","value":0.75,"unit":"score"}],"summary":{"quants":{},"accuracy":[]}}`)
 	_, err = edition.Qualcomm().FilterReport("llm", accuracyOnly)
@@ -172,4 +181,84 @@ func TestQualcommReportRejectsUnsupportedKind(t *testing.T) {
 	_, err := edition.Qualcomm().FilterReport("unknown", []byte(`{}`))
 	assert.Error(t, err)
 	assert.False(t, errors.Is(err, edition.ErrNoQualcommMeasurements))
+}
+
+// TestQualcommPackageQualityEqualsServedSummary is the backend-vs-qcom
+// equality gate: feeding the real shared fixture through FilterReport with a
+// fleet that keeps ALL of its devices must reproduce the served
+// pooled_vision_accuracy, scored_images, and best_perplexity byte-for-byte.
+func TestQualcommPackageQualityEqualsServedSummary(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "openapi", "fixtures", "get_package_report.json"))
+	require.NoError(t, err)
+	var fixture struct {
+		Response struct {
+			Body json.RawMessage `json:"body"`
+		} `json:"response"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &fixture))
+
+	// The fixture's device carries the marketing SoC name, which the shipped
+	// reviewed fleet does not list; register the pair so every fixture device
+	// is kept and the recomputation covers the full served record set.
+	defer edition.AddQualcommFleetDeviceForTest("Samsung Galaxy S25", "Snapdragon 8 Elite")()
+
+	got, err := edition.Qualcomm().FilterReport("package", fixture.Response.Body)
+	require.NoError(t, err)
+
+	served := summaryQualityLiterals(t, fixture.Response.Body)
+	recomputed := summaryQualityLiterals(t, got)
+	for _, field := range []string{"pooled_vision_accuracy", "scored_images", "best_perplexity"} {
+		assert.Equal(t, served[field], recomputed[field], field)
+	}
+
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(got, &envelope))
+	meta := envelope["qualcomm_filter"].(map[string]any)
+	assert.Equal(t, float64(0), meta["hidden_non_qualcomm_records"], "the fleet keeps every fixture device")
+	assert.Equal(t, float64(0), meta["hidden_unclassified_records"])
+}
+
+// summaryQualityLiterals extracts summary quality fields as raw JSON literals
+// so the equality assertion is byte-for-byte, not float-tolerant.
+func summaryQualityLiterals(t *testing.T, body []byte) map[string]string {
+	t.Helper()
+	var doc struct {
+		Summary map[string]json.RawMessage `json:"summary"`
+	}
+	require.NoError(t, json.Unmarshal(body, &doc))
+	out := map[string]string{}
+	for _, field := range []string{"pooled_vision_accuracy", "scored_images", "best_perplexity"} {
+		out[field] = string(doc.Summary[field])
+	}
+	return out
+}
+
+func TestQualcommPackageCopiesPolicyFactsWhenFilterDropsAllQualityRecords(t *testing.T) {
+	// The only perplexity/vision records ride on a non-Qualcomm device; a
+	// Qualcomm tps record keeps the report alive. The recomputed values go
+	// null, but the report-global attempt flags and threshold COPY through.
+	body := []byte(`{
+  "derivation_version":4,
+  "model":{"key":"p1","version":1},
+  "records":[
+    {"device":{"marketing_name":"Samsung Galaxy S25","name":"SM-S931U1","soc":"SM8750","os":"15"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"tps","value":30,"unit":"tokens_per_s"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"perplexity","value":11.03,"unit":"perplexity"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"vision_expected_correct","value":29.36,"unit":"count"},
+    {"device":{"marketing_name":"Google Pixel 10","name":"Pixel 10","soc":"Tensor G5","os":"16"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"scored_images","value":45,"unit":"count"}
+  ],
+  "summary":{"auto":null,"speed":null,"best_perplexity":11.03,"pooled_vision_accuracy":0.6524,"scored_images":45,"has_perplexity_attempt":true,"has_vision_accuracy_attempt":true,"ppl_min_scored_tokens":201}
+}`)
+
+	got, err := edition.Qualcomm().FilterReport("package", body)
+
+	require.NoError(t, err)
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(got, &envelope))
+	summary := envelope["summary"].(map[string]any)
+	assert.Nil(t, summary["best_perplexity"], "no retained perplexity record")
+	assert.Nil(t, summary["pooled_vision_accuracy"], "no retained vision pair")
+	assert.Nil(t, summary["scored_images"])
+	assert.Equal(t, true, summary["has_perplexity_attempt"], "attempt facts never recomputed from filtered records")
+	assert.Equal(t, true, summary["has_vision_accuracy_attempt"])
+	assert.Equal(t, float64(201), summary["ppl_min_scored_tokens"])
 }

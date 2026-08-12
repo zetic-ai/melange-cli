@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zetic-ai/melange-cli/internal/api"
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 )
@@ -74,4 +75,37 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// billingHint maps a billing refusal's error.code to remediation guidance, or
+// "" when err carries no recognized code. program is the edition's executable
+// name for embedded commands.
+func billingHint(program string, err error) string {
+	var apiErr *api.Error
+	if !errors.As(err, &apiErr) {
+		return ""
+	}
+	switch apiErr.Code {
+	case "credit_balance_exhausted":
+		return fmt.Sprintf("No credits available — the conversion has not started and nothing was charged. "+
+			"Check `%s usage quotas` and top up on the dashboard, then re-run.", program)
+	case "credit_debt_outstanding":
+		return "Outstanding credit debt blocks new conversions — settle it on the dashboard."
+	case "subscription_past_due":
+		return "Billing is past due — fix the payment method on the dashboard."
+	case "custom_model_too_large":
+		return fmt.Sprintf("The model exceeds your plan's model-size entitlement — see `%s plan`.", program)
+	case "credit_model_too_large":
+		return "The model exceeds the self-service size limit — contact support."
+	}
+	return ""
+}
+
+// withBillingHint appends the billing remediation hint to err when it carries
+// a recognized billing refusal code; other errors pass through unchanged.
+func withBillingHint(program string, err error) error {
+	if hint := billingHint(program, err); hint != "" {
+		return fmt.Errorf("%w\n%s", err, hint)
+	}
+	return err
 }

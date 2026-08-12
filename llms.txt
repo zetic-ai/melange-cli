@@ -59,10 +59,14 @@ templates these rules refer to.
   records[] by device.marketing_name only when the user names a device, and say
   it is a slice. Keep rows with null cells (print an em dash); if a device table
   is too long, sort it and state how many rows were left out.
-- Headline metrics — LLM: best_tps, best_ttft_ms, best_memory_mb, and ORG vs
-  smallest quantized size (model_size_bytes records, else model targets
-  download_size). General: latency_ms.all.min, per-device min(cpu latency)/
-  min(npu latency), min memory_inference_peak_mb, snr_db.all.max.
+- Headline metrics — LLM: best_tps, best_ttft_ms, best_memory_mb,
+  best_perplexity (lower is better; published only for runs scoring at least
+  summary.ppl_min_scored_tokens tokens), and ORG vs smallest quantized size
+  (model_size_bytes records, else model targets download_size). General:
+  latency_ms.all.min, per-device min(cpu latency)/min(npu latency), min
+  memory_inference_peak_mb, snr_db.all.max. Package quality:
+  summary.best_perplexity and summary.pooled_vision_accuracy (with
+  summary.scored_images as the sample size).
 - Never estimate a metric the response did not carry; render - in a table and N/A
   in a card so the gap stays visible, keeping the row, column and card.
   Never divide values measured on different accelerators. "Deployability" is a
@@ -279,7 +283,13 @@ melange report view MODEL_KEY -R ACCOUNT/REPO [--type general|llm|package]
   records (speed=lowest latency; accuracy=highest SNR, ties to lower latency;
   auto=fastest run whose SNR exceeds 20 dB, else speed). --mode fills the cells;
   a per-precision summary block follows. LLM: rows=devices, columns=quant_types,
-  cells=tps, plus a per-dataset accuracy section. Package: a mode x metric table.
+  cells=tps, plus a per-dataset accuracy section and — when perplexity records
+  exist — a "Perplexity (lower is better)" device x quant matrix (cell = min
+  perplexity). Package: a mode x metric table, plus a "Quality" section when
+  the summary publishes best_perplexity or pooled_vision_accuracy. LLM records
+  also carry perplexity/scored_tokens; package records add
+  perplexity/scored_tokens/vision_accuracy/vision_expected_correct/
+  scored_images.
   Non-TTY: one raw record per line (flat measurement fields) — scripts get the
   measurements, not the derived table. Records carry `variant`, an OPAQUE
   per-response token that replaced the engine name in v0.3.0 — never parse it,
@@ -330,10 +340,25 @@ melange usage [--json|--jq|--template]
 
 melange usage quotas [--json|--jq|--template]
   Show each counter against its plan limit as "used/limit (pct%)", or "unlimited"
-  when the limit is null. TTY: human block; non-TTY: TSV key/value. --json/--jq
+  when the limit is null, plus the account's benchmark-credit balance. TTY:
+  human block (a Credits row follows the four quota rows); non-TTY: TSV
+  key/value with credits_available, credits_reserved, credits_outstanding_debt,
+  credits_monthly_credits, credits_expiring_credits, credits_expiring_at lines
+  appended (nullable values empty when null). --json/--jq
   also carry "remaining" per counter — what the server will actually allow now
   (spike headroom included, floored at 0; null = unlimited).
   Example: melange usage quotas --jq .model_uploads.remaining
+
+  Credits are ADVISORY: model_uploads.remaining > 0 and credits.available > 0
+  are necessary but not sufficient for the next conversion —
+  credits.outstanding_debt must be 0, and the per-conversion charge grows with
+  model size. A refusal is HTTP 402 error.type billing_error with a machine
+  error.code: credit_balance_exhausted (top up; nothing was charged),
+  credit_debt_outstanding (settle the debt), subscription_past_due (fix the
+  payment method). A 402'd upload completion parks the session resumable —
+  replay it after remediation: melange model upload --resume SESSION_ID -R
+  ACCOUNT/REPO. The CLI prints these hints on stderr for upload completion and
+  import refusals; exit code stays 1.
 
   Agent disclosure rule: inspect quotas before uploading or claiming benchmark
   coverage is complete. model_uploads.remaining == 0 means do not attempt/retry
@@ -347,14 +372,22 @@ melange usage quotas [--json|--jq|--template]
 
 ## melange plan
 
-Effective billing plan for the token's account.
+Effective billing identity for the token's account.
 
 melange plan [--json|--jq|--template]
-  Show plan (free|lite|pro|pro_plus|enterprise), is_trial, trial_ends_at. TTY:
-  human block; non-TTY: TSV key/value. Reflects what the server enforces: an
-  account that bypasses quota limits reports pro_plus with unlimited quotas,
-  matching the dashboard. Exit 0 success, 1 API error, 2 usage error, 4 not
-  authenticated. Example: melange plan --jq .plan
+  Show plan (the legacy tier quotas derive from: free|lite|pro|pro_plus|
+  enterprise), is_trial, trial_ends_at, billing_generation (legacy|v3), tier
+  (the current pricing identity: free|pro|team|enterprise; null on accounts
+  still on legacy billing), and max_model_bytes (the plan's own model-size
+  entitlement; preflights only that cap — credits/debt are enforced separately
+  at conversion time). TTY: human block; non-TTY: TSV key/value with
+  billing_generation, tier, max_model_bytes appended after the historical
+  three lines (tier and max_model_bytes empty when null). plan reflects what
+  the server enforces: an account that bypasses quota limits reports pro_plus
+  with unlimited quotas, matching the dashboard. Exit 0 success, 1 API error,
+  2 usage error, 4 not authenticated.
+  Example: melange plan --jq .plan   # legacy tier
+  Example: melange plan --jq .tier   # pricing identity; null = legacy billing
 
 ## melange api
 

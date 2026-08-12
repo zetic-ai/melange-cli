@@ -58,6 +58,29 @@ func TestHandleResponseFullEnvelope(t *testing.T) {
 	assert.Equal(t, "req_123", apiErr.RequestID)
 }
 
+func TestHandleResponseBillingCode(t *testing.T) {
+	body := `{
+		"type": "error",
+		"error": {
+			"type": "billing_error",
+			"code": "credit_balance_exhausted",
+			"message": "credit_balance_exhausted"
+		},
+		"request_id": "req_402"
+	}`
+	err := api.HandleResponse(makeResponse(402, body, nil))
+	require.Error(t, err)
+
+	var apiErr *api.Error
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, 402, apiErr.StatusCode)
+	assert.Equal(t, "billing_error", apiErr.Type)
+	assert.Equal(t, "credit_balance_exhausted", apiErr.Code)
+	assert.Equal(t,
+		"melange API: credit_balance_exhausted (billing_error/credit_balance_exhausted, HTTP 402, request req_402)",
+		apiErr.Error())
+}
+
 func TestHandleResponseRequestIDHeaderFallback(t *testing.T) {
 	header := http.Header{}
 	header.Set("X-Request-ID", "req_hdr")
@@ -163,6 +186,16 @@ func TestErrorString(t *testing.T) {
 				Message:    "boom",
 			},
 			want: "melange API: boom (api_error, HTTP 500)",
+		},
+		{
+			name: "with refusal code",
+			err: &api.Error{
+				StatusCode: 402,
+				Type:       "billing_error",
+				Code:       "subscription_past_due",
+				Message:    "subscription past due",
+			},
+			want: "melange API: subscription past due (billing_error/subscription_past_due, HTTP 402)",
 		},
 	}
 	for _, tt := range tests {

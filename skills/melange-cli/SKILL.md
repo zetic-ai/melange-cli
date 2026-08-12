@@ -369,7 +369,9 @@ melange library providers --jq '.results[] | select(.model_count>=10) | .name'
 
 melange usage --jq .prompts                        # this period's counters
 melange usage quotas --jq .model_uploads.remaining # headroom now; null = unlimited
-melange plan --jq .plan                            # free|lite|pro|pro_plus|enterprise
+melange usage quotas --jq .credits                 # advisory credit balance
+melange plan --jq .plan                            # legacy tier: free|lite|pro|pro_plus|enterprise
+melange plan --jq .tier                            # pricing identity: free|pro|team|enterprise; null = legacy billing
 ```
 
 `library list` filters map to query params (`--task` repeats; a model
@@ -381,9 +383,14 @@ quota as `used/limit (pct%)`, or `unlimited` when the limit is null; its
 server will actually allow now (spike headroom included, floored at 0; null =
 unlimited). Prefer `remaining` over `limit - used` for preflight.
 
-`melange plan` reports the effective plan (`plan`, `is_trial`, `trial_ends_at`) —
-what the server enforces, matching the dashboard. An account that bypasses quota
-limits reports `pro_plus` with unlimited quotas.
+`melange plan` reports two vocabularies. `plan` is the legacy tier quotas
+derive from (`free|lite|pro|pro_plus|enterprise`) — what the server enforces,
+matching the dashboard; an account that bypasses quota limits reports
+`pro_plus` with unlimited quotas. `tier` is the current pricing identity
+(`free|pro|team|enterprise`), null on accounts still on legacy billing;
+`billing_generation` (`legacy|v3`) says which system governs.
+`max_model_bytes` preflights only the plan's own model-size entitlement —
+credits and debt are checked separately at conversion time.
 
 ### Entitlement disclosure (required)
 
@@ -394,12 +401,25 @@ current plan, not that the CLI is broken. Report records contain only devices
 visible to the authenticated account; never call them the full benchmark unless
 completeness is established.
 
-Plan identity is knowable — read it from `melange plan --jq .plan`. When
+Plan identity is knowable — read it from `melange plan --jq .plan` (and
+`.tier` for the pricing identity; null there means legacy billing). When
 `model_uploads.remaining == 0` and the plan is **Free** (or **Lite**), say that
 the plan is why model upload is locked; on other plans say the monthly upload
 quota is exhausted. Do not attribute a zero to the wrong cause: check `melange
 plan` rather than inferring Free from a zero limit, a filtered report, or an
 HTTP error.
+
+Credits gate conversions and are ADVISORY: preflight with
+`melange usage quotas --jq '{credits: .credits.available, debt: .credits.outstanding_debt}'`.
+`.credits.available > 0` AND `.credits.outstanding_debt == 0` are necessary
+but not sufficient — the per-conversion charge grows with model size, so a
+positive balance can still refuse a large model. A refusal is HTTP 402 with
+`error.type` `billing_error` and a machine `error.code`:
+`credit_balance_exhausted` (top up, nothing was charged),
+`credit_debt_outstanding` (settle the debt on the dashboard),
+`subscription_past_due` (fix the payment method). A 402'd upload completion
+leaves the session parked and resumable — after topping up, replay it:
+`melange model upload --resume SESSION_ID -R ACCOUNT/REPO`.
 
 Library `ACCOUNT/NAME` values identify public repositories, not converted model
 keys. Inspect their existing models and reports directly; this is a read-only
