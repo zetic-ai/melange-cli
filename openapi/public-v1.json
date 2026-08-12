@@ -1530,6 +1530,22 @@
         "title": "ImportModelResponse",
         "type": "object"
       },
+      "ImportZtcPackageRequest": {
+        "description": "POST .../models/ztc-package body \u2014 a PUBLIC HuggingFace model repo id\nfor the non-llama.cpp (ZTC package) conversion path, which composes\nprefill+decode into a single wearable `.ztc` via the mentat_hf pipeline.\n\nStaff only. `uri` accepts the same canonical HuggingFace forms as\n`hf_repo` on the import route (e.g. \"org/name\").",
+        "properties": {
+          "uri": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "title": "ImportZtcPackageRequest",
+        "type": "object"
+      },
       "IssuedSessionFile": {
         "properties": {
           "canonical_path": {
@@ -5819,6 +5835,93 @@
           }
         ],
         "summary": "Reissue Upload Files",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/ztc-package": {
+      "post": {
+        "description": "Register a ZTC-package (non-llama.cpp) LLM conversion from a public\nHuggingFace repo.\n\nThe ZTC-package path composes the prefill and decode graphs into a single\nchip-targeted `.ztc` via the mentat_hf pipeline \u2014 the wearable/NPU package,\nas opposed to the default llama.cpp (GGUF) import. This is the PAT-auth\npublic twin of the internal `/p/{project}/models/ztc-package` route the web\nUI's \"Enable non llamacpp conversion\" toggle calls, and it enforces the same\nstaff-only entitlement.\n\nReturns 201 with the created model reference; conversion continues\nasynchronously (poll `get_model_status`). The repository must have\n`model_type` \"llm\".\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.",
+        "operationId": "import_ztc_package_model",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportZtcPackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportModelResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Import Ztc Package Model",
         "tags": [
           "models"
         ]

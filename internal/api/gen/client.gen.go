@@ -1556,6 +1556,16 @@ type ImportModelResponse struct {
 // ImportModelResponseState defines model for ImportModelResponse.State.
 type ImportModelResponseState string
 
+// ImportZtcPackageRequest POST .../models/ztc-package body — a PUBLIC HuggingFace model repo id
+// for the non-llama.cpp (ZTC package) conversion path, which composes
+// prefill+decode into a single wearable `.ztc` via the mentat_hf pipeline.
+//
+// Staff only. `uri` accepts the same canonical HuggingFace forms as
+// `hf_repo` on the import route (e.g. "org/name").
+type ImportZtcPackageRequest struct {
+	Uri string `json:"uri"`
+}
+
 // IssuedSessionFile defines model for IssuedSessionFile.
 type IssuedSessionFile struct {
 	CanonicalPath string  `json:"canonical_path"`
@@ -2349,6 +2359,9 @@ type ImportModelJSONRequestBody = ImportModelRequest
 // ReissueUploadFilesJSONRequestBody defines body for ReissueUploadFiles for application/json ContentType.
 type ReissueUploadFilesJSONRequestBody = ReissueUploadFilesRequest
 
+// ImportZtcPackageModelJSONRequestBody defines body for ImportZtcPackageModel for application/json ContentType.
+type ImportZtcPackageModelJSONRequestBody = ImportZtcPackageRequest
+
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -2850,6 +2863,52 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
 	ReissueUploadFiles(ctx context.Context, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportZtcPackageModelWithBody Import Ztc Package Model
+	//
+	// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+	// HuggingFace repo.
+	//
+	// The ZTC-package path composes the prefill and decode graphs into a single
+	// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+	// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+	// public twin of the internal `/p/{project}/models/ztc-package` route the web
+	// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+	// staff-only entitlement.
+	//
+	// Returns 201 with the created model reference; conversion continues
+	// asynchronously (poll `get_model_status`). The repository must have
+	// `model_type` "llm".
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+	ImportZtcPackageModelWithBody(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportZtcPackageModel Import Ztc Package Model
+	//
+	// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+	// HuggingFace repo.
+	//
+	// The ZTC-package path composes the prefill and decode graphs into a single
+	// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+	// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+	// public twin of the internal `/p/{project}/models/ztc-package` route the web
+	// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+	// staff-only entitlement.
+	//
+	// Returns 201 with the created model reference; conversion continues
+	// asynchronously (poll `get_model_status`). The repository must have
+	// `model_type` "llm".
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+	ImportZtcPackageModel(ctx context.Context, accountName string, repoName string, body ImportZtcPackageModelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetModel Get Model
 	//
@@ -3742,6 +3801,72 @@ func (c *Client) ReissueUploadFilesWithBody(ctx context.Context, accountName str
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
 func (c *Client) ReissueUploadFiles(ctx context.Context, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReissueUploadFilesRequest(c.Server, accountName, repoName, uploadId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportZtcPackageModelWithBody Import Ztc Package Model
+//
+// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+// HuggingFace repo.
+//
+// The ZTC-package path composes the prefill and decode graphs into a single
+// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+// public twin of the internal `/p/{project}/models/ztc-package` route the web
+// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+// staff-only entitlement.
+//
+// Returns 201 with the created model reference; conversion continues
+// asynchronously (poll `get_model_status`). The repository must have
+// `model_type` "llm".
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+func (c *Client) ImportZtcPackageModelWithBody(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportZtcPackageModelRequestWithBody(c.Server, accountName, repoName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportZtcPackageModel Import Ztc Package Model
+//
+// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+// HuggingFace repo.
+//
+// The ZTC-package path composes the prefill and decode graphs into a single
+// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+// public twin of the internal `/p/{project}/models/ztc-package` route the web
+// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+// staff-only entitlement.
+//
+// Returns 201 with the created model reference; conversion continues
+// asynchronously (poll `get_model_status`). The repository must have
+// `model_type` "llm".
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+func (c *Client) ImportZtcPackageModel(ctx context.Context, accountName string, repoName string, body ImportZtcPackageModelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportZtcPackageModelRequest(c.Server, accountName, repoName, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5330,6 +5455,60 @@ func NewReissueUploadFilesRequestWithBody(server string, accountName string, rep
 	return req, nil
 }
 
+// NewImportZtcPackageModelRequest calls the generic ImportZtcPackageModel builder with application/json body
+func NewImportZtcPackageModelRequest(server string, accountName string, repoName string, body ImportZtcPackageModelJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewImportZtcPackageModelRequestWithBody(server, accountName, repoName, "application/json", bodyReader)
+}
+
+// NewImportZtcPackageModelRequestWithBody constructs an http.Request for the ImportZtcPackageModel method, with any body, and a specified content type
+func NewImportZtcPackageModelRequestWithBody(server string, accountName string, repoName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_name", accountName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo_name", repoName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/repos/%s/%s/models/ztc-package", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetModelRequest constructs an http.Request for the GetModel method
 func NewGetModelRequest(server string, accountName string, repoName string, modelKey string) (*http.Request, error) {
 	var err error
@@ -6384,6 +6563,52 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/files (the `ReissueUploadFiles` operationId).
 	ReissueUploadFilesWithResponse(ctx context.Context, accountName string, repoName string, uploadId string, body ReissueUploadFilesJSONRequestBody, reqEditors ...RequestEditorFn) (*ReissueUploadFilesResult, error)
+
+	// ImportZtcPackageModelWithBodyWithResponse Import Ztc Package Model
+	//
+	// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+	// HuggingFace repo.
+	//
+	// The ZTC-package path composes the prefill and decode graphs into a single
+	// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+	// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+	// public twin of the internal `/p/{project}/models/ztc-package` route the web
+	// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+	// staff-only entitlement.
+	//
+	// Returns 201 with the created model reference; conversion continues
+	// asynchronously (poll `get_model_status`). The repository must have
+	// `model_type` "llm".
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+	ImportZtcPackageModelWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportZtcPackageModelResult, error)
+
+	// ImportZtcPackageModelWithResponse Import Ztc Package Model
+	//
+	// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+	// HuggingFace repo.
+	//
+	// The ZTC-package path composes the prefill and decode graphs into a single
+	// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+	// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+	// public twin of the internal `/p/{project}/models/ztc-package` route the web
+	// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+	// staff-only entitlement.
+	//
+	// Returns 201 with the created model reference; conversion continues
+	// asynchronously (poll `get_model_status`). The repository must have
+	// `model_type` "llm".
+	//
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+	ImportZtcPackageModelWithResponse(ctx context.Context, accountName string, repoName string, body ImportZtcPackageModelJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportZtcPackageModelResult, error)
 
 	// GetModelWithResponse Get Model
 	//
@@ -9872,6 +10097,189 @@ func (r ReissueUploadFilesResult) ContentType() string {
 	return ""
 }
 
+// ImportZtcPackageModelResult401Headers the declared response headers of an HTTP 401 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult401Headers struct {
+	WWWAuthenticate *string
+	XRequestID      *string
+}
+
+// ImportZtcPackageModelResult402Headers the declared response headers of an HTTP 402 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult402Headers struct {
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult403Headers the declared response headers of an HTTP 403 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult403Headers struct {
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult404Headers the declared response headers of an HTTP 404 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult404Headers struct {
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult409Headers the declared response headers of an HTTP 409 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult409Headers struct {
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult413Headers the declared response headers of an HTTP 413 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult413Headers struct {
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult422Headers the declared response headers of an HTTP 422 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult422Headers struct {
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult429Headers the declared response headers of an HTTP 429 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult429Headers struct {
+	RetryAfter *int
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult500Headers the declared response headers of an HTTP 500 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult500Headers struct {
+	XRequestID *string
+}
+
+// ImportZtcPackageModelResult503Headers the declared response headers of an HTTP 503 response for ImportZtcPackageModel
+type ImportZtcPackageModelResult503Headers struct {
+	XRequestID *string
+}
+
+type ImportZtcPackageModelResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ImportModelResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *PaymentRequired
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *Conflict
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *RequestTooLarge
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ValidationError
+	// JSON429 the response for an HTTP 429 `application/json` response
+	JSON429 *RateLimited
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *ServerError
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *ImportZtcPackageModelResult401Headers
+	// Headers402 the parsed response headers for an HTTP 402 response
+	Headers402 *ImportZtcPackageModelResult402Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *ImportZtcPackageModelResult403Headers
+	// Headers404 the parsed response headers for an HTTP 404 response
+	Headers404 *ImportZtcPackageModelResult404Headers
+	// Headers409 the parsed response headers for an HTTP 409 response
+	Headers409 *ImportZtcPackageModelResult409Headers
+	// Headers413 the parsed response headers for an HTTP 413 response
+	Headers413 *ImportZtcPackageModelResult413Headers
+	// Headers422 the parsed response headers for an HTTP 422 response
+	Headers422 *ImportZtcPackageModelResult422Headers
+	// Headers429 the parsed response headers for an HTTP 429 response
+	Headers429 *ImportZtcPackageModelResult429Headers
+	// Headers500 the parsed response headers for an HTTP 500 response
+	Headers500 *ImportZtcPackageModelResult500Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *ImportZtcPackageModelResult503Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON201() *ImportModelResponse {
+	return r.JSON201
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON402() *PaymentRequired {
+	return r.JSON402
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON409() *Conflict {
+	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON413() *RequestTooLarge {
+	return r.JSON413
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON422() *ValidationError {
+	return r.JSON422
+}
+
+// GetJSON429 returns the response for an HTTP 429 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON429() *RateLimited {
+	return r.JSON429
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON500() *ServerError {
+	return r.JSON500
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ImportZtcPackageModelResult) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
+}
+
+// GetBody returns the raw response body bytes
+func (r ImportZtcPackageModelResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ImportZtcPackageModelResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ImportZtcPackageModelResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ImportZtcPackageModelResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetModelResult401Headers the declared response headers of an HTTP 401 response for GetModel
 type GetModelResult401Headers struct {
 	WWWAuthenticate *string
@@ -11808,6 +12216,64 @@ func (c *ClientWithResponses) ReissueUploadFilesWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseReissueUploadFilesResult(rsp)
+}
+
+// ImportZtcPackageModelWithBodyWithResponse Import Ztc Package Model
+//
+// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+// HuggingFace repo.
+//
+// The ZTC-package path composes the prefill and decode graphs into a single
+// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+// public twin of the internal `/p/{project}/models/ztc-package` route the web
+// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+// staff-only entitlement.
+//
+// Returns 201 with the created model reference; conversion continues
+// asynchronously (poll `get_model_status`). The repository must have
+// `model_type` "llm".
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+func (c *ClientWithResponses) ImportZtcPackageModelWithBodyWithResponse(ctx context.Context, accountName string, repoName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportZtcPackageModelResult, error) {
+	rsp, err := c.ImportZtcPackageModelWithBody(ctx, accountName, repoName, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportZtcPackageModelResult(rsp)
+}
+
+// ImportZtcPackageModelWithResponse Import Ztc Package Model
+//
+// Register a ZTC-package (non-llama.cpp) LLM conversion from a public
+// HuggingFace repo.
+//
+// The ZTC-package path composes the prefill and decode graphs into a single
+// chip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,
+// as opposed to the default llama.cpp (GGUF) import. This is the PAT-auth
+// public twin of the internal `/p/{project}/models/ztc-package` route the web
+// UI's "Enable non llamacpp conversion" toggle calls, and it enforces the same
+// staff-only entitlement.
+//
+// Returns 201 with the created model reference; conversion continues
+// asynchronously (poll `get_model_status`). The repository must have
+// `model_type` "llm".
+//
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/ztc-package (the `ImportZtcPackageModel` operationId).
+func (c *ClientWithResponses) ImportZtcPackageModelWithResponse(ctx context.Context, accountName string, repoName string, body ImportZtcPackageModelJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportZtcPackageModelResult, error) {
+	rsp, err := c.ImportZtcPackageModel(ctx, accountName, repoName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportZtcPackageModelResult(rsp)
 }
 
 // GetModelWithResponse Get Model
@@ -15768,6 +16234,219 @@ func ParseReissueUploadFilesResult(rsp *http.Response) (*ReissueUploadFilesResul
 			headers.XRequestID = &value
 		}
 		response.Headers500 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseImportZtcPackageModelResult parses an HTTP response from a ImportZtcPackageModelWithResponse call
+func ParseImportZtcPackageModelResult(rsp *http.Response) (*ImportZtcPackageModelResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ImportZtcPackageModelResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ImportModelResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest PaymentRequired
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest RequestTooLarge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest RateLimited
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ServerError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers ImportZtcPackageModelResult401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 402:
+		var headers ImportZtcPackageModelResult402Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers402 = &headers
+	case rsp.StatusCode == 403:
+		var headers ImportZtcPackageModelResult403Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers403 = &headers
+	case rsp.StatusCode == 404:
+		var headers ImportZtcPackageModelResult404Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers404 = &headers
+	case rsp.StatusCode == 409:
+		var headers ImportZtcPackageModelResult409Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers409 = &headers
+	case rsp.StatusCode == 413:
+		var headers ImportZtcPackageModelResult413Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers413 = &headers
+	case rsp.StatusCode == 422:
+		var headers ImportZtcPackageModelResult422Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers422 = &headers
+	case rsp.StatusCode == 429:
+		var headers ImportZtcPackageModelResult429Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers429 = &headers
+	case rsp.StatusCode == 500:
+		var headers ImportZtcPackageModelResult500Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers500 = &headers
+	case rsp.StatusCode == 503:
+		var headers ImportZtcPackageModelResult503Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
