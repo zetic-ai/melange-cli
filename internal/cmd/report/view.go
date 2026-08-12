@@ -31,6 +31,7 @@ func newCmdView(f *cmdutil.Factory) *cobra.Command {
 		repo     string
 		typ      string
 		modeFlag string
+		byDevice bool
 		exporter *cmdutil.Exporter
 	)
 
@@ -51,7 +52,8 @@ On a terminal:
     latency min/median/max, the SNR range, and the memory range.
   * llm — rows are devices, columns are quant types, cells are tokens/sec
     (1 decimal); an accuracy section follows, per dataset.
-  * package — a mode × metric table.
+  * package — a mode × metric table; --by-device instead renders one row
+    per device (DEVICE, SOC, TPS, TTFT_ms, MEM_MB — inference-peak memory).
 Missing cells render "-". Devices are sorted alphabetically.
 
 When stdout is not a terminal it prints one raw record per line as
@@ -88,6 +90,9 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 			if cmd.Flags().Changed("mode") && cmd.Flags().Changed("type") && reportKind(typ) != kindGeneral {
 				return modeKindError()
 			}
+			if cmd.Flags().Changed("by-device") && cmd.Flags().Changed("type") && reportKind(typ) != kindPackage {
+				return byDeviceKindError()
+			}
 			account, name, err := splitRepoFlag(repo)
 			if err != nil {
 				return err
@@ -110,6 +115,9 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 			if cmd.Flags().Changed("mode") && kind != kindGeneral {
 				return modeKindError()
 			}
+			if cmd.Flags().Changed("by-device") && kind != kindPackage {
+				return byDeviceKindError()
+			}
 
 			ios := f.IOStreams
 			if exporter != nil {
@@ -123,7 +131,7 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 			case kindLLM:
 				return renderLLM(ios, body, human)
 			case kindPackage:
-				return renderPackage(ios, body, human)
+				return renderPackage(ios, body, human, byDevice)
 			}
 			return fmt.Errorf("unexpected report kind %q", kind)
 		},
@@ -132,6 +140,7 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 	cmd.Flags().StringVarP(&repo, "repo", "R", "", "Repository as `ACCOUNT/REPO` (required)")
 	cmd.Flags().StringVar(&typ, "type", "", "Report `type`: general, llm, or package (default: probe)")
 	cmd.Flags().StringVar(&modeFlag, "mode", "auto", "Mode pick for general cells: auto, speed, or accuracy")
+	cmd.Flags().BoolVar(&byDevice, "by-device", false, "Package report: render one row per device instead of the mode × metric summary")
 	cmdutil.AddJSONFlags(cmd, &exporter)
 
 	return cmd
@@ -139,6 +148,10 @@ Exit codes: 0 success, 1 API error (including no report), 2 usage error,
 
 func modeKindError() error {
 	return cmdutil.FlagError{Err: errors.New("--mode only applies to general reports")}
+}
+
+func byDeviceKindError() error {
+	return cmdutil.FlagError{Err: errors.New("--by-device only applies to package reports")}
 }
 
 // parseMode validates the --mode flag.

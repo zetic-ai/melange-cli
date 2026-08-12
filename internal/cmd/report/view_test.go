@@ -399,6 +399,74 @@ func TestReportPackageTable(t *testing.T) {
 	assert.Contains(t, out, "200.0", "median memory")
 }
 
+// packageByDeviceFixture carries two devices' per-device records: a phone with
+// the full metric set and a wearable (SW6100) whose inference-peak memory is 0
+// (unmeasured on that SoC) and which has no ttft record at all.
+func packageByDeviceFixture() string {
+	recs := []string{
+		`{"device":{"marketing_name":"Galaxy S25","name":"SM-S931","soc":"SM8750"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"tps","value":50,"unit":"tokens_per_s"}`,
+		`{"device":{"marketing_name":"Galaxy S25","name":"SM-S931","soc":"SM8750"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"ttft_ms","value":12.5,"unit":"ms"}`,
+		`{"device":{"marketing_name":"Galaxy S25","name":"SM-S931","soc":"SM8750"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"memory_inference_peak_mb","value":200,"unit":"mb"}`,
+		`{"device":{"marketing_name":"SW6100","name":"SW6100","soc":"W5100"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"tps","value":8,"unit":"tokens_per_s"}`,
+		`{"device":{"marketing_name":"SW6100","name":"SW6100","soc":"W5100"},"run_configuration":{"package":"pkg","id":2,"configuration":null},"metric":"memory_inference_peak_mb","value":0,"unit":"mb"}`,
+	}
+	summary := `{"auto":{"tps":{"min":8,"max":50,"median":50,"avg":29},"ttft_ms":{"min":12.5,"max":12.5,"median":12.5,"avg":12.5},"memory_inference_peak_mb":{"min":200,"max":200,"median":200,"avg":200}},` +
+		`"speed":{"tps":{"min":8,"max":50,"median":50,"avg":29},"ttft_ms":{"min":12.5,"max":12.5,"median":12.5,"avg":12.5},"memory_inference_peak_mb":{"min":200,"max":200,"median":200,"avg":200}}}`
+	return fmt.Sprintf(`{"derivation_version":1,"model":{"key":"m_x","version":1},"records":[%s],"summary":%s}`,
+		strings.Join(recs, ","), summary)
+}
+
+func TestReportPackageByDeviceTable(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	e.reg.Register(httpmock.REST("GET", packagePath), jsonStub(200, packageByDeviceFixture()))
+
+	require.NoError(t, run(t, e, "--no-color", "report", "view", "m_x", "-R", "zetic/whisper", "--type", "package", "--by-device"))
+
+	out := e.out.String()
+	// Per-device header, not the mode × metric header.
+	assert.Contains(t, out, "DEVICE")
+	assert.Contains(t, out, "SOC")
+	assert.Contains(t, out, "TTFT_MS")
+	assert.Contains(t, out, "MEM_MB")
+	assert.NotContains(t, out, "MODE", "the by-device view replaces the mode × metric table")
+
+	// Galaxy S25 carries every metric.
+	galaxy := lineWith(t, out, "Galaxy S25")
+	assert.Contains(t, galaxy, "SM8750")
+	assert.Contains(t, galaxy, "50.0", "tps")
+	assert.Contains(t, galaxy, "12.5", "ttft_ms")
+	assert.Contains(t, galaxy, "200.0", "inference-peak memory")
+
+	// SW6100: tps present, no ttft record, memory 0 → both render "-".
+	wearable := lineWith(t, out, "SW6100")
+	assert.Contains(t, wearable, "8.0", "tps")
+	assert.Contains(t, wearable, "-", "absent ttft and 0-memory read as dash")
+
+	// Devices sort alphabetically.
+	assert.Less(t, strings.Index(out, "Galaxy S25"), strings.Index(out, "SW6100"))
+}
+
+func TestReportPackageByDeviceRejectedForNonPackage(t *testing.T) {
+	e := setup(t)
+	err := run(t, e, "report", "view", "m_x", "-R", "zetic/whisper",
+		"--type", "general", "--by-device")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "--by-device only applies to package reports")
+	assert.Empty(t, e.reg.Requests)
+}
+
+func TestReportPackageByDeviceNonTTYUnchanged(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("GET", packagePath), jsonStub(200, packageFixture()))
+
+	require.NoError(t, run(t, e, "report", "view", "m_x", "-R", "zetic/whisper", "--type", "package", "--by-device"))
+	lines := strings.Split(strings.TrimRight(e.out.String(), "\n"), "\n")
+	require.Len(t, lines, 1, "--by-device does not change the non-TTY record-per-line output")
+	assert.Equal(t, "Pixel\tPixel\t\t\tpkg\t1\ttps\t50.0\ttokens_per_s", lines[0])
+}
+
 func TestReportPackageNonTTYRecordPerLine(t *testing.T) {
 	e := setup(t)
 	e.reg.Register(httpmock.REST("GET", packagePath), jsonStub(200, packageFixture()))

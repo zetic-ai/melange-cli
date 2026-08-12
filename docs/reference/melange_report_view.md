@@ -18,7 +18,8 @@ On a terminal:
     latency min/median/max, the SNR range, and the memory range.
   * llm — rows are devices, columns are quant types, cells are tokens/sec
     (1 decimal); an accuracy section follows, per dataset.
-  * package — a mode × metric table.
+  * package — a mode × metric table; --by-device instead renders one row
+    per device (DEVICE, SOC, TPS, TTFT_ms, MEM_MB — inference-peak memory).
 Missing cells render "-". Devices are sorted alphabetically.
 
 When stdout is not a terminal it prints one raw record per line as
@@ -55,6 +56,7 @@ melange report view MODEL_KEY [flags]
 ### Options
 
 ```
+      --by-device           Package report: render one row per device instead of the mode × metric summary
   -h, --help                help for view
       --jq expression       Filter JSON output using a jq expression (implies --json)
       --json                Output the full result as JSON
