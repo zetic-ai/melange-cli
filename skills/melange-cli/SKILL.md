@@ -1,6 +1,6 @@
 ---
 name: melange-cli
-description: "Use when running the zetic.ai `melange` CLI: uploading/importing on-device AI models, monitoring conversion status, reporting Melange benchmarks, generating deployment guides, browsing repos and the public library. Covers auth, JSON output contract, exit-code branching, upload/resume, non-blocking conversion monitoring, model report templates, and the raw API escape hatch. Also points at the `melange mcp` MCP server alternative and when to prefer its tools over shelling out. Do NOT trigger for general ML work — training, local inference, or other model registries — unless the `melange` CLI is involved."
+description: "Use when running the zetic.ai `melange` CLI: uploading/importing on-device AI models, monitoring conversion status, reporting Melange benchmarks, generating deployment guides, browsing repos and the public library. Covers auth, choosing between importing a Hugging Face repo id and uploading exported artifacts, JSON output contract, exit-code branching, upload/resume, non-blocking conversion monitoring, model report templates, and the raw API escape hatch. Also points at the `melange mcp` MCP server alternative and when to prefer its tools over shelling out. Do NOT trigger for general ML work — training, local inference, or other model registries — unless the `melange` CLI is involved."
 ---
 
 # Melange CLI
@@ -96,6 +96,36 @@ They chain in that order: repo → model key → target id. `ACCOUNT/NAME` in
 `melange library view` addresses a **public library** model and is not a
 `MODEL_KEY`. Never substitute a repository name, a display name, or a Hugging
 Face id for `MODEL_KEY` or `TARGET_ID`, and never parse a `TARGET_ID`.
+
+## Hugging Face models: import or artifacts
+
+LLMs import straight from the repo id. General models ship as exported
+artifacts. Model type is fixed at `repo create`, so classify before creating
+the repository:
+
+```sh
+curl -fsSL "https://huggingface.co/api/models/OWNER/NAME" | jq -r .pipeline_tag
+```
+
+`text-generation` → import. Everything else (vision, speech, embeddings,
+detection) → artifacts. Ask the user when the tag is missing or ambiguous.
+
+```sh
+# LLM — import the repo id into an llm repository
+llm_repo="$(melange repo create llama-1b --private --model-type llm --jq .full_name)"
+melange model import meta-llama/Llama-3.2-1B -R "$llm_repo" --json
+
+# General — export locally, then upload the artifacts to a general repository
+gen_repo="$(melange repo create vit-base --private --jq .full_name)"
+python export.py   # torch.export.save -> model.pt2; np.save -> input_0.npy
+melange model upload -R "$gen_repo" model.pt2 --input input_0.npy --dry-run --json
+```
+
+Before the first export step, tell the user what the artifact path involves: a
+local export to `.pt2` plus `.npy` sample inputs, which downloads the weights,
+needs PyTorch >= 2.9, and fixes the input shape the deployed model will accept.
+Then proceed. See <https://docs.zetic.ai/model-preparation/pytorch-export> for
+the export snippet and the graph constraints it has to satisfy.
 
 ## Core workflow: create repo → upload → wait → status
 

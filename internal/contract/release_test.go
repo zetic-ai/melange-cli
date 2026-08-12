@@ -260,6 +260,15 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 		`model_key="$(printf '%s\n' "$upload_json" | jq -er .model.key)"`)
 	assert.NotContains(t, skillWorkflow, "acme/")
 
+	// A Hugging Face repo id imports only into an llm repository, and model type
+	// is fixed at repo create. Both skills must route on that before creating a
+	// repository; the Qualcomm skill previously sent every HF model through
+	// import against the general repo it had just created, which always 422s.
+	assert.Contains(t, skill, "--model-type llm")
+	qcomSkill := readRepoFile(t, "skills/melange-qcom/SKILL.md")
+	assert.Contains(t, qcomSkill, "--model-type llm")
+	assert.NotContains(t, qcomSkill, `model import ORG/MODEL -R "$repo"`)
+
 	llms := readRepoFile(t, "llms.txt")
 	// No published doc may over-promise byte-exactness.
 	for name, contents := range map[string]string{
