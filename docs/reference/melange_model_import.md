@@ -55,6 +55,7 @@ melange model import HF_REPO [flags]
       --template string     Format JSON output using a Go template (implies --json)
       --timeout duration    Maximum time to wait with --wait (default 30m0s)
       --wait                After import, wait until conversion reaches a terminal state
+      --ztc-package         Use the non-llama.cpp ZTC package conversion path (staff only; --wait unsupported)
 ```
 
 ### Options inherited from parent commands

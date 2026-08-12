@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,10 +15,11 @@ import (
 
 func newCmdImport(f *cmdutil.Factory) *cobra.Command {
 	var (
-		repo     string
-		doWait   bool
-		timeout  time.Duration
-		exporter *cmdutil.Exporter
+		repo       string
+		doWait     bool
+		ztcPackage bool
+		timeout    time.Duration
+		exporter   *cmdutil.Exporter
 	)
 
 	cmd := &cobra.Command{
@@ -59,9 +61,32 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
 			if err := validateWaitOptions(doWait, timeout, cmd.Flags().Changed("timeout")); err != nil {
 				return err
 			}
+			if ztcPackage && doWait {
+				return cmdutil.FlagError{Err: errors.New(
+					"--wait is not supported with --ztc-package; poll with \"melange model status\" instead")}
+			}
 			account, name, err := splitRepoFlag(repo)
 			if err != nil {
 				return err
+			}
+			if ztcPackage {
+				client, err := f.ApiClient()
+				if err != nil {
+					return err
+				}
+				imported, raw, err := client.ImportModelZtcPackage(cmd.Context(), account, name,
+					args[0], api.NewIdempotencyKey())
+				if err != nil {
+					return err
+				}
+				ios := f.IOStreams
+				fmt.Fprintf(ios.ErrOut, "✓ Import started: model %s version %d (state %s)\n",
+					text.SanitizeTerminalInline(imported.Key), imported.Version,
+					text.SanitizeTerminalInline(string(imported.State)))
+				if exporter != nil {
+					return exporter.Write(ios, json.RawMessage(raw))
+				}
+				return nil
 			}
 			g, err := genClient(f)
 			if err != nil {
@@ -104,6 +129,7 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
 
 	cmd.Flags().StringVarP(&repo, "repo", "R", "", "Target repository as `ACCOUNT/REPO` (required)")
 	cmd.Flags().BoolVar(&doWait, "wait", false, "After import, wait until conversion reaches a terminal state")
+	cmd.Flags().BoolVar(&ztcPackage, "ztc-package", false, "Use the non-llama.cpp ZTC package conversion path (staff only; --wait unsupported)")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Minute, "Maximum time to wait with --wait")
 	cmdutil.AddJSONFlags(cmd, &exporter)
 

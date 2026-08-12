@@ -568,3 +568,70 @@ func TestModelImportUnauthenticatedExits4(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 4, cmdutil.ExitCode(err))
 }
+
+// model import --ztc-package (non-llama.cpp conversion path)
+// ---------------------------------------------------------------------------
+
+const ztcPackagePath = "/v1/repos/zetic/whisper/models/ztc-package"
+
+// The default (flag off) path still targets the llama.cpp import route.
+func TestModelImportWithoutZtcPackageUsesImportRoute(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", importPath),
+		jsonStub(201, `{"key":"m_hf1","version":1,"state":"converting"}`))
+
+	require.NoError(t, run(t, e, "model", "import", "meta-llama/Llama-3.2-1B", "-R", "zetic/whisper"))
+
+	require.Len(t, e.reg.Requests, 1)
+	assert.Equal(t, importPath, e.reg.Requests[0].URL.Path, "flag off must use the llama.cpp import route")
+}
+
+func TestModelImportZtcPackagePostsToZtcRoute(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", ztcPackagePath),
+		jsonStub(201, `{"key":"m_ztc1","version":1,"state":"converting"}`))
+
+	require.NoError(t, run(t, e, "model", "import", "meta-llama/Llama-3.2-1B",
+		"-R", "zetic/whisper", "--ztc-package"))
+
+	require.Len(t, e.reg.Requests, 1)
+	req := e.reg.Requests[0]
+	assert.Equal(t, ztcPackagePath, req.URL.Path)
+	assert.NotEmpty(t, req.Header.Get("Idempotency-Key"), "ztc-package import must carry an Idempotency-Key")
+	body := requestBody(t, req)
+	assert.Equal(t, "meta-llama/Llama-3.2-1B", body["uri"], "ztc-package body is {\"uri\": ...}")
+	assert.NotContains(t, body, "hf_repo", "ztc-package uses uri, not the llama.cpp hf_repo field")
+
+	assert.Contains(t, e.errOut.String(), "✓ Import started: model m_ztc1 version 1 (state converting)")
+	assert.Empty(t, e.out.String())
+}
+
+func TestModelImportZtcPackageJSONPreservesBytes(t *testing.T) {
+	e := setup(t)
+	body := `{"key":"m_ztc1","version":1,"state":"converting"}`
+	e.reg.Register(httpmock.REST("POST", ztcPackagePath), jsonStub(201, body))
+
+	require.NoError(t, run(t, e, "model", "import", "meta-llama/Llama-3.2-1B",
+		"-R", "zetic/whisper", "--ztc-package", "--json"))
+	assert.Equal(t, body+"\n", e.out.String())
+}
+
+func TestModelImportZtcPackageRejectsWaitExits2(t *testing.T) {
+	e := setup(t)
+	err := run(t, e, "model", "import", "meta-llama/Llama-3.2-1B",
+		"-R", "zetic/whisper", "--ztc-package", "--wait")
+	require.Error(t, err)
+	assert.Equal(t, 2, cmdutil.ExitCode(err))
+	assert.Contains(t, err.Error(), "--wait is not supported with --ztc-package")
+	assert.Empty(t, e.reg.Requests, "a rejected --wait must not create an import")
+}
+
+func TestModelImportZtcPackageStaffOnlySurfaces403(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", ztcPackagePath),
+		jsonStub(403, `{"type":"error","error":{"type":"permission_error","message":"ztc-package import is staff only"},"request_id":"req_9"}`))
+
+	err := run(t, e, "model", "import", "meta-llama/Llama-3.2-1B", "-R", "zetic/whisper", "--ztc-package")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ztc-package import is staff only")
+}
