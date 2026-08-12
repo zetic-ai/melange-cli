@@ -741,6 +741,8 @@
                   "ttft_ms",
                   "prompt_tokens",
                   "generated_tokens",
+                  "perplexity",
+                  "scored_tokens",
                   "memory_load_peak_mb",
                   "memory_load_min_mb",
                   "memory_inference_peak_mb",
@@ -769,7 +771,8 @@
                   "count",
                   "mb",
                   "score",
-                  "bytes"
+                  "bytes",
+                  "ppl"
                 ],
                 "title": "Unit",
                 "type": "string"
@@ -838,6 +841,16 @@
               "title": "Accuracy",
               "type": "array"
             },
+            "has_perplexity_attempt": {
+              "description": "True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable. Report-global: unaffected by the caller's plan device filter.",
+              "title": "Has Perplexity Attempt",
+              "type": "boolean"
+            },
+            "ppl_min_scored_tokens": {
+              "description": "The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.",
+              "title": "Ppl Min Scored Tokens",
+              "type": "integer"
+            },
             "quants": {
               "additionalProperties": {
                 "properties": {
@@ -850,6 +863,14 @@
                   },
                   "best_memory_mb": {
                     "title": "Best Memory Mb",
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "best_perplexity": {
+                    "description": "MIN over this quant's published perplexity records (lower is better; published values are full-budget-comparable — rule LS4). null when the quant has no published perplexity.",
+                    "title": "Best Perplexity",
                     "type": [
                       "number",
                       "null"
@@ -874,7 +895,8 @@
                   "best_tps",
                   "best_ttft_ms",
                   "best_memory_mb",
-                  "best_accuracy"
+                  "best_accuracy",
+                  "best_perplexity"
                 ],
                 "title": "LlmQuantAggregates",
                 "type": "object"
@@ -885,7 +907,9 @@
           },
           "required": [
             "quants",
-            "accuracy"
+            "accuracy",
+            "has_perplexity_attempt",
+            "ppl_min_scored_tokens"
           ],
           "title": "LlmReportSummary",
           "type": "object"
@@ -980,7 +1004,12 @@
                   "tps",
                   "ttft_ms",
                   "prompt_tokens",
-                  "generated_tokens"
+                  "generated_tokens",
+                  "perplexity",
+                  "scored_tokens",
+                  "vision_accuracy",
+                  "vision_expected_correct",
+                  "scored_images"
                 ],
                 "title": "Metric",
                 "type": "string"
@@ -1021,7 +1050,9 @@
                   "db",
                   "mb",
                   "tokens_per_s",
-                  "count"
+                  "count",
+                  "ppl",
+                  "rate"
                 ],
                 "title": "Unit",
                 "type": "string"
@@ -1045,7 +1076,7 @@
           "type": "array"
         },
         "summary": {
-          "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
+          "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode. The quality fields below\nare mode-independent (rule PS2).",
           "properties": {
             "auto": {
               "anyOf": [
@@ -1171,6 +1202,45 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "best_perplexity": {
+              "description": "MIN over the published package perplexity records (lower is better — rule PS2). null when nothing publishable exists.",
+              "title": "Best Perplexity",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "has_perplexity_attempt": {
+              "description": "True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable (report-global).",
+              "title": "Has Perplexity Attempt",
+              "type": "boolean"
+            },
+            "has_vision_accuracy_attempt": {
+              "description": "True when ANY source run attempted a vision-accuracy measurement, including attempts that produced nothing publishable (report-global).",
+              "title": "Has Vision Accuracy Attempt",
+              "type": "boolean"
+            },
+            "pooled_vision_accuracy": {
+              "description": "Sum of vision_expected_correct over sum of scored_images across the PUBLISHED runs, using exact numerators (4 decimals). This report-wide pooling is deliberately distinct from the dashboard's per-device pooling and from model selection's per-run-configuration pooling — the three are different numbers for the same package and are not reconcilable.",
+              "title": "Pooled Vision Accuracy",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "ppl_min_scored_tokens": {
+              "description": "The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.",
+              "title": "Ppl Min Scored Tokens",
+              "type": "integer"
+            },
+            "scored_images": {
+              "description": "Total images behind pooled_vision_accuracy (sample-size trust calibration). null when no vision run is published.",
+              "title": "Scored Images",
+              "type": [
+                "integer",
+                "null"
               ]
             },
             "speed": {
@@ -1302,7 +1372,13 @@
           },
           "required": [
             "auto",
-            "speed"
+            "speed",
+            "best_perplexity",
+            "pooled_vision_accuracy",
+            "scored_images",
+            "has_perplexity_attempt",
+            "has_vision_accuracy_attempt",
+            "ppl_min_scored_tokens"
           ],
           "title": "PackageReportSummary",
           "type": "object"

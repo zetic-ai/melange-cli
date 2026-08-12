@@ -178,8 +178,12 @@ const (
 	quotasBody = `{"prompts":{"used":120,"limit":1000,"remaining":880},` +
 		`"model_uploads":{"used":3,"limit":null,"remaining":null},` +
 		`"bandwidth":{"used":204800,"limit":10737418240,"remaining":10737213440},` +
-		`"active_devices":{"used":7,"limit":50,"remaining":43},"note":"spikes & bursts included"}`
-	planBody = `{"plan":"pro","label":"Pro & Team <beta>","is_trial":false,"trial_ends_at":null}`
+		`"active_devices":{"used":7,"limit":50,"remaining":43},` +
+		`"credits":{"available":12,"reserved":1,"outstanding_debt":0,` +
+		`"monthly_credits":20,"expiring_credits":2,"expiring_at":null},` +
+		`"note":"spikes & bursts included"}`
+	planBody = `{"plan":"pro","label":"Pro & Team <beta>","is_trial":false,"trial_ends_at":null,` +
+		`"billing_generation":"v3","tier":"pro","max_model_bytes":20000000000}`
 )
 
 // stubAccountSections registers the section endpoints named in sections.

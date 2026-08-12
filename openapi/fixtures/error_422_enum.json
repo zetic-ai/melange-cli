@@ -15,7 +15,7 @@
         "fields": [
           {
             "field": "use_case",
-            "message": "Input should be 'vision', 'nlp', 'llm', 'speech' or 'other'"
+            "message": "Input should be 'vision', 'nlp', 'llm', 'speech', 'physical' or 'other'"
           }
         ],
         "message": "Invalid request",

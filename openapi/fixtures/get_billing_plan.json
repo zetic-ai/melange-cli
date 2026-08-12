@@ -7,8 +7,11 @@
   },
   "response": {
     "body": {
+      "billing_generation": "legacy",
       "is_trial": false,
+      "max_model_bytes": 20000000000,
       "plan": "free",
+      "tier": null,
       "trial_ends_at": null
     },
     "headers": {

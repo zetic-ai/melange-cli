@@ -4,11 +4,28 @@
   "description": "get_account_info envelope. Each section is present exactly when requested via include; an omitted include returns all three.",
   "properties": {
     "plan": {
-      "description": "The account's effective billing plan identity.",
+      "description": "The account's effective billing plan identity.\n\n`plan` is the legacy tier quotas derive from; `billing_generation` and\n`tier` are the billing identity (`tier` is null for legacy-generation\naccounts, whose identity is `plan` itself).",
       "properties": {
+        "billing_generation": {
+          "description": "Which billing system governs the account: \"v3\" iff a Pricing v3 subscription record exists (in any state), else \"legacy\".",
+          "enum": [
+            "legacy",
+            "v3"
+          ],
+          "title": "Billing Generation",
+          "type": "string"
+        },
         "is_trial": {
           "title": "Is Trial",
           "type": "boolean"
+        },
+        "max_model_bytes": {
+          "description": "The entitlement cap on a custom model's total bytes; preflights only the 413 `custom_model_too_large` refusal. Null means a custom contract, NOT unlimited: the credit ledger separately refuses self-service runs over 20 GB (`credit_model_too_large`).",
+          "title": "Max Model Bytes",
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "plan": {
           "enum": [
@@ -21,6 +38,21 @@
           "title": "Plan",
           "type": "string"
         },
+        "tier": {
+          "description": "The Pricing v3 tier the service enforces right now; an inactive (past-due/canceled) v3 subscription reports \"free\". Null for legacy-generation accounts — their identity is `plan`.",
+          "enum": [
+            "free",
+            "pro",
+            "team",
+            "enterprise",
+            null
+          ],
+          "title": "Tier",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "trial_ends_at": {
           "format": "date-time",
           "title": "Trial Ends At",
@@ -32,7 +64,10 @@
       },
       "required": [
         "plan",
-        "is_trial"
+        "is_trial",
+        "billing_generation",
+        "tier",
+        "max_model_bytes"
       ],
       "title": "BillingPlanResponse",
       "type": "object"
@@ -93,6 +128,52 @@
             "used"
           ],
           "title": "QuotaItem",
+          "type": "object"
+        },
+        "credits": {
+          "description": "Benchmark-credit headroom from the ledger, ADVISORY only.\n\n`available > 0` is necessary but NOT sufficient for the next chargeable\nrun: `outstanding_debt` must be 0 (else 409 `credit_debt_outstanding`),\nthe subscription must not be past-due (402), and the charge grows with\nmodel size (1-12 credits by size band; the bands are not published\nhere) — expect 402 `credit_balance_exhausted` when it cannot be met.\n`expiring_credits` is the portion of `available` in the soonest-expiring\ngrants, gone at `expiring_at`.",
+          "properties": {
+            "available": {
+              "title": "Available",
+              "type": "integer"
+            },
+            "expiring_at": {
+              "format": "date-time",
+              "title": "Expiring At",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "expiring_credits": {
+              "title": "Expiring Credits",
+              "type": "integer"
+            },
+            "monthly_credits": {
+              "title": "Monthly Credits",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "outstanding_debt": {
+              "title": "Outstanding Debt",
+              "type": "integer"
+            },
+            "reserved": {
+              "title": "Reserved",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "available",
+            "reserved",
+            "outstanding_debt",
+            "monthly_credits",
+            "expiring_credits",
+            "expiring_at"
+          ],
+          "title": "CreditsBalance",
           "type": "object"
         },
         "model_uploads": {
@@ -156,7 +237,8 @@
         "bandwidth",
         "model_uploads",
         "active_devices",
-        "prompts"
+        "prompts",
+        "credits"
       ],
       "title": "UsageQuotasResponse",
       "type": "object"

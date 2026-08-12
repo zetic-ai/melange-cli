@@ -28,19 +28,23 @@ func reportBody(kind string) string {
 			`"snr_db":{"fp32":null,"fp16":null,"int8":null,"all":null},` +
 			`"memory_mb":{"fp32":null,"fp16":null,"int8":null,"all":null}}}`
 	case "llm":
-		return `{"derivation_version":3,"model":{"key":"whisper-tiny-1","version":1},` +
+		return `{"derivation_version":4,"model":{"key":"whisper-tiny-1","version":1},` +
 			`"records":[{"device":` + device + `,"ap_type":"cpu","variant":"v1","quant_type":"q4_k_m",` +
 			`"dataset":null,"run":0,"metric":"tps","value":42.5,"unit":"tokens_per_s"}],` +
 			`"summary":{"quants":{"q4_k_m":{"best_tps":42.5,"best_ttft_ms":null,` +
-			`"best_memory_mb":null,"best_accuracy":0.61}},` +
-			`"accuracy":[{"quant_type":"q4_k_m","dataset":"mmlu","score":0.61}]}}`
+			`"best_memory_mb":null,"best_accuracy":0.61,"best_perplexity":null}},` +
+			`"accuracy":[{"quant_type":"q4_k_m","dataset":"mmlu","score":0.61}],` +
+			`"has_perplexity_attempt":false,"ppl_min_scored_tokens":201}}`
 	case "package":
 		aggregates := `{"tps":{"min":42.5,"max":42.5,"median":42.5,"avg":42.5},"ttft_ms":null,` +
 			`"memory_inference_peak_mb":null}`
-		return `{"derivation_version":2,"model":{"key":"whisper-tiny-1","version":1},` +
+		return `{"derivation_version":4,"model":{"key":"whisper-tiny-1","version":1},` +
 			`"records":[{"device":` + device + `,"run_configuration":{"package":"com.zetic.demo","id":3,` +
 			`"configuration":null},"metric":"tps","value":42.5,"unit":"tokens_per_s"}],` +
-			`"summary":{"auto":` + aggregates + `,"speed":` + aggregates + `}}`
+			`"summary":{"auto":` + aggregates + `,"speed":` + aggregates + `,` +
+			`"best_perplexity":null,"pooled_vision_accuracy":null,"scored_images":null,` +
+			`"has_perplexity_attempt":false,"has_vision_accuracy_attempt":false,` +
+			`"ppl_min_scored_tokens":201}}`
 	}
 	panic("unknown report kind " + kind)
 }

@@ -17,8 +17,16 @@
         "remaining": 53687089966,
         "used": 1234
       },
+      "credits": {
+        "available": 0,
+        "expiring_at": null,
+        "expiring_credits": 0,
+        "monthly_credits": 0,
+        "outstanding_debt": 0,
+        "reserved": 0
+      },
       "model_uploads": {
-        "limit": 0,
+        "limit": 1,
         "remaining": 0,
         "used": 2
       },

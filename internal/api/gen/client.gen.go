@@ -17,27 +17,69 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for BillingPlanResponseBillingGeneration.
+const (
+	Legacy BillingPlanResponseBillingGeneration = "legacy"
+	V3     BillingPlanResponseBillingGeneration = "v3"
+)
+
+// Valid indicates whether the value is a known member of the BillingPlanResponseBillingGeneration enum.
+func (e BillingPlanResponseBillingGeneration) Valid() bool {
+	switch e {
+	case Legacy:
+		return true
+	case V3:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BillingPlanResponsePlan.
 const (
-	Enterprise BillingPlanResponsePlan = "enterprise"
-	Free       BillingPlanResponsePlan = "free"
-	Lite       BillingPlanResponsePlan = "lite"
-	Pro        BillingPlanResponsePlan = "pro"
-	ProPlus    BillingPlanResponsePlan = "pro_plus"
+	BillingPlanResponsePlanEnterprise BillingPlanResponsePlan = "enterprise"
+	BillingPlanResponsePlanFree       BillingPlanResponsePlan = "free"
+	BillingPlanResponsePlanLite       BillingPlanResponsePlan = "lite"
+	BillingPlanResponsePlanPro        BillingPlanResponsePlan = "pro"
+	BillingPlanResponsePlanProPlus    BillingPlanResponsePlan = "pro_plus"
 )
 
 // Valid indicates whether the value is a known member of the BillingPlanResponsePlan enum.
 func (e BillingPlanResponsePlan) Valid() bool {
 	switch e {
-	case Enterprise:
+	case BillingPlanResponsePlanEnterprise:
 		return true
-	case Free:
+	case BillingPlanResponsePlanFree:
 		return true
-	case Lite:
+	case BillingPlanResponsePlanLite:
 		return true
-	case Pro:
+	case BillingPlanResponsePlanPro:
 		return true
-	case ProPlus:
+	case BillingPlanResponsePlanProPlus:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPlanResponseTier.
+const (
+	BillingPlanResponseTierEnterprise BillingPlanResponseTier = "enterprise"
+	BillingPlanResponseTierFree       BillingPlanResponseTier = "free"
+	BillingPlanResponseTierPro        BillingPlanResponseTier = "pro"
+	BillingPlanResponseTierTeam       BillingPlanResponseTier = "team"
+)
+
+// Valid indicates whether the value is a known member of the BillingPlanResponseTier enum.
+func (e BillingPlanResponseTier) Valid() bool {
+	switch e {
+	case BillingPlanResponseTierEnterprise:
+		return true
+	case BillingPlanResponseTierFree:
+		return true
+	case BillingPlanResponseTierPro:
+		return true
+	case BillingPlanResponseTierTeam:
 		return true
 	default:
 		return false
@@ -133,8 +175,9 @@ func (e CreateModelUploadRequestManifestVersion) Valid() bool {
 
 // Defines values for CreateProjectRequestModelType.
 const (
-	CreateProjectRequestModelTypeGeneral CreateProjectRequestModelType = "general"
-	CreateProjectRequestModelTypeLlm     CreateProjectRequestModelType = "llm"
+	CreateProjectRequestModelTypeGeneral    CreateProjectRequestModelType = "general"
+	CreateProjectRequestModelTypeLlm        CreateProjectRequestModelType = "llm"
+	CreateProjectRequestModelTypePhysicalAi CreateProjectRequestModelType = "physical_ai"
 )
 
 // Valid indicates whether the value is a known member of the CreateProjectRequestModelType enum.
@@ -144,6 +187,8 @@ func (e CreateProjectRequestModelType) Valid() bool {
 		return true
 	case CreateProjectRequestModelTypeLlm:
 		return true
+	case CreateProjectRequestModelTypePhysicalAi:
+		return true
 	default:
 		return false
 	}
@@ -151,8 +196,9 @@ func (e CreateProjectRequestModelType) Valid() bool {
 
 // Defines values for CreateRepoRequestModelType.
 const (
-	CreateRepoRequestModelTypeGeneral CreateRepoRequestModelType = "general"
-	CreateRepoRequestModelTypeLlm     CreateRepoRequestModelType = "llm"
+	CreateRepoRequestModelTypeGeneral    CreateRepoRequestModelType = "general"
+	CreateRepoRequestModelTypeLlm        CreateRepoRequestModelType = "llm"
+	CreateRepoRequestModelTypePhysicalAi CreateRepoRequestModelType = "physical_ai"
 )
 
 // Valid indicates whether the value is a known member of the CreateRepoRequestModelType enum.
@@ -162,6 +208,8 @@ func (e CreateRepoRequestModelType) Valid() bool {
 		return true
 	case CreateRepoRequestModelTypeLlm:
 		return true
+	case CreateRepoRequestModelTypePhysicalAi:
+		return true
 	default:
 		return false
 	}
@@ -169,11 +217,12 @@ func (e CreateRepoRequestModelType) Valid() bool {
 
 // Defines values for CreateRepoRequestUseCase.
 const (
-	CreateRepoRequestUseCaseLlm    CreateRepoRequestUseCase = "llm"
-	CreateRepoRequestUseCaseNlp    CreateRepoRequestUseCase = "nlp"
-	CreateRepoRequestUseCaseOther  CreateRepoRequestUseCase = "other"
-	CreateRepoRequestUseCaseSpeech CreateRepoRequestUseCase = "speech"
-	CreateRepoRequestUseCaseVision CreateRepoRequestUseCase = "vision"
+	CreateRepoRequestUseCaseLlm      CreateRepoRequestUseCase = "llm"
+	CreateRepoRequestUseCaseNlp      CreateRepoRequestUseCase = "nlp"
+	CreateRepoRequestUseCaseOther    CreateRepoRequestUseCase = "other"
+	CreateRepoRequestUseCasePhysical CreateRepoRequestUseCase = "physical"
+	CreateRepoRequestUseCaseSpeech   CreateRepoRequestUseCase = "speech"
+	CreateRepoRequestUseCaseVision   CreateRepoRequestUseCase = "vision"
 )
 
 // Valid indicates whether the value is a known member of the CreateRepoRequestUseCase enum.
@@ -184,6 +233,8 @@ func (e CreateRepoRequestUseCase) Valid() bool {
 	case CreateRepoRequestUseCaseNlp:
 		return true
 	case CreateRepoRequestUseCaseOther:
+		return true
+	case CreateRepoRequestUseCasePhysical:
 		return true
 	case CreateRepoRequestUseCaseSpeech:
 		return true
@@ -375,6 +426,7 @@ func (e DeploymentOptionsResponseDefaultLanguage) Valid() bool {
 const (
 	ErrorEnvelopeErrorTypeApiError            ErrorEnvelopeErrorType = "api_error"
 	ErrorEnvelopeErrorTypeAuthenticationError ErrorEnvelopeErrorType = "authentication_error"
+	ErrorEnvelopeErrorTypeBillingError        ErrorEnvelopeErrorType = "billing_error"
 	ErrorEnvelopeErrorTypeConflictError       ErrorEnvelopeErrorType = "conflict_error"
 	ErrorEnvelopeErrorTypeInvalidRequestError ErrorEnvelopeErrorType = "invalid_request_error"
 	ErrorEnvelopeErrorTypeMethodNotAllowed    ErrorEnvelopeErrorType = "method_not_allowed"
@@ -391,6 +443,8 @@ func (e ErrorEnvelopeErrorType) Valid() bool {
 	case ErrorEnvelopeErrorTypeApiError:
 		return true
 	case ErrorEnvelopeErrorTypeAuthenticationError:
+		return true
+	case ErrorEnvelopeErrorTypeBillingError:
 		return true
 	case ErrorEnvelopeErrorTypeConflictError:
 		return true
@@ -578,7 +632,9 @@ const (
 	LlmReportRecordMetricMemoryLoadMinMb       LlmReportRecordMetric = "memory_load_min_mb"
 	LlmReportRecordMetricMemoryLoadPeakMb      LlmReportRecordMetric = "memory_load_peak_mb"
 	LlmReportRecordMetricModelSizeBytes        LlmReportRecordMetric = "model_size_bytes"
+	LlmReportRecordMetricPerplexity            LlmReportRecordMetric = "perplexity"
 	LlmReportRecordMetricPromptTokens          LlmReportRecordMetric = "prompt_tokens"
+	LlmReportRecordMetricScoredTokens          LlmReportRecordMetric = "scored_tokens"
 	LlmReportRecordMetricTps                   LlmReportRecordMetric = "tps"
 	LlmReportRecordMetricTtftMs                LlmReportRecordMetric = "ttft_ms"
 )
@@ -600,7 +656,11 @@ func (e LlmReportRecordMetric) Valid() bool {
 		return true
 	case LlmReportRecordMetricModelSizeBytes:
 		return true
+	case LlmReportRecordMetricPerplexity:
+		return true
 	case LlmReportRecordMetricPromptTokens:
+		return true
+	case LlmReportRecordMetricScoredTokens:
 		return true
 	case LlmReportRecordMetricTps:
 		return true
@@ -617,6 +677,7 @@ const (
 	LlmReportRecordUnitCount      LlmReportRecordUnit = "count"
 	LlmReportRecordUnitMb         LlmReportRecordUnit = "mb"
 	LlmReportRecordUnitMs         LlmReportRecordUnit = "ms"
+	LlmReportRecordUnitPpl        LlmReportRecordUnit = "ppl"
 	LlmReportRecordUnitScore      LlmReportRecordUnit = "score"
 	LlmReportRecordUnitTokensPerS LlmReportRecordUnit = "tokens_per_s"
 )
@@ -631,6 +692,8 @@ func (e LlmReportRecordUnit) Valid() bool {
 	case LlmReportRecordUnitMb:
 		return true
 	case LlmReportRecordUnitMs:
+		return true
+	case LlmReportRecordUnitPpl:
 		return true
 	case LlmReportRecordUnitScore:
 		return true
@@ -928,11 +991,16 @@ const (
 	PackageReportRecordMetricMemoryInferencePeakMb PackageReportRecordMetric = "memory_inference_peak_mb"
 	PackageReportRecordMetricMemoryLoadMinMb       PackageReportRecordMetric = "memory_load_min_mb"
 	PackageReportRecordMetricMemoryLoadPeakMb      PackageReportRecordMetric = "memory_load_peak_mb"
+	PackageReportRecordMetricPerplexity            PackageReportRecordMetric = "perplexity"
 	PackageReportRecordMetricPromptTokens          PackageReportRecordMetric = "prompt_tokens"
+	PackageReportRecordMetricScoredImages          PackageReportRecordMetric = "scored_images"
+	PackageReportRecordMetricScoredTokens          PackageReportRecordMetric = "scored_tokens"
 	PackageReportRecordMetricSnrDb                 PackageReportRecordMetric = "snr_db"
 	PackageReportRecordMetricTensorCopyLatencyMs   PackageReportRecordMetric = "tensor_copy_latency_ms"
 	PackageReportRecordMetricTps                   PackageReportRecordMetric = "tps"
 	PackageReportRecordMetricTtftMs                PackageReportRecordMetric = "ttft_ms"
+	PackageReportRecordMetricVisionAccuracy        PackageReportRecordMetric = "vision_accuracy"
+	PackageReportRecordMetricVisionExpectedCorrect PackageReportRecordMetric = "vision_expected_correct"
 )
 
 // Valid indicates whether the value is a known member of the PackageReportRecordMetric enum.
@@ -950,7 +1018,13 @@ func (e PackageReportRecordMetric) Valid() bool {
 		return true
 	case PackageReportRecordMetricMemoryLoadPeakMb:
 		return true
+	case PackageReportRecordMetricPerplexity:
+		return true
 	case PackageReportRecordMetricPromptTokens:
+		return true
+	case PackageReportRecordMetricScoredImages:
+		return true
+	case PackageReportRecordMetricScoredTokens:
 		return true
 	case PackageReportRecordMetricSnrDb:
 		return true
@@ -959,6 +1033,10 @@ func (e PackageReportRecordMetric) Valid() bool {
 	case PackageReportRecordMetricTps:
 		return true
 	case PackageReportRecordMetricTtftMs:
+		return true
+	case PackageReportRecordMetricVisionAccuracy:
+		return true
+	case PackageReportRecordMetricVisionExpectedCorrect:
 		return true
 	default:
 		return false
@@ -971,6 +1049,8 @@ const (
 	PackageReportRecordUnitDb         PackageReportRecordUnit = "db"
 	PackageReportRecordUnitMb         PackageReportRecordUnit = "mb"
 	PackageReportRecordUnitMs         PackageReportRecordUnit = "ms"
+	PackageReportRecordUnitPpl        PackageReportRecordUnit = "ppl"
+	PackageReportRecordUnitRate       PackageReportRecordUnit = "rate"
 	PackageReportRecordUnitTokensPerS PackageReportRecordUnit = "tokens_per_s"
 )
 
@@ -985,6 +1065,10 @@ func (e PackageReportRecordUnit) Valid() bool {
 		return true
 	case PackageReportRecordUnitMs:
 		return true
+	case PackageReportRecordUnitPpl:
+		return true
+	case PackageReportRecordUnitRate:
+		return true
 	case PackageReportRecordUnitTokensPerS:
 		return true
 	default:
@@ -994,11 +1078,12 @@ func (e PackageReportRecordUnit) Valid() bool {
 
 // Defines values for UpdateRepoRequestUseCase.
 const (
-	UpdateRepoRequestUseCaseLlm    UpdateRepoRequestUseCase = "llm"
-	UpdateRepoRequestUseCaseNlp    UpdateRepoRequestUseCase = "nlp"
-	UpdateRepoRequestUseCaseOther  UpdateRepoRequestUseCase = "other"
-	UpdateRepoRequestUseCaseSpeech UpdateRepoRequestUseCase = "speech"
-	UpdateRepoRequestUseCaseVision UpdateRepoRequestUseCase = "vision"
+	UpdateRepoRequestUseCaseLlm      UpdateRepoRequestUseCase = "llm"
+	UpdateRepoRequestUseCaseNlp      UpdateRepoRequestUseCase = "nlp"
+	UpdateRepoRequestUseCaseOther    UpdateRepoRequestUseCase = "other"
+	UpdateRepoRequestUseCasePhysical UpdateRepoRequestUseCase = "physical"
+	UpdateRepoRequestUseCaseSpeech   UpdateRepoRequestUseCase = "speech"
+	UpdateRepoRequestUseCaseVision   UpdateRepoRequestUseCase = "vision"
 )
 
 // Valid indicates whether the value is a known member of the UpdateRepoRequestUseCase enum.
@@ -1009,6 +1094,8 @@ func (e UpdateRepoRequestUseCase) Valid() bool {
 	case UpdateRepoRequestUseCaseNlp:
 		return true
 	case UpdateRepoRequestUseCaseOther:
+		return true
+	case UpdateRepoRequestUseCasePhysical:
 		return true
 	case UpdateRepoRequestUseCaseSpeech:
 		return true
@@ -1021,11 +1108,12 @@ func (e UpdateRepoRequestUseCase) Valid() bool {
 
 // Defines values for ListLibraryModelsParamsTask.
 const (
-	ListLibraryModelsParamsTaskLlm    ListLibraryModelsParamsTask = "llm"
-	ListLibraryModelsParamsTaskNlp    ListLibraryModelsParamsTask = "nlp"
-	ListLibraryModelsParamsTaskOther  ListLibraryModelsParamsTask = "other"
-	ListLibraryModelsParamsTaskSpeech ListLibraryModelsParamsTask = "speech"
-	ListLibraryModelsParamsTaskVision ListLibraryModelsParamsTask = "vision"
+	ListLibraryModelsParamsTaskLlm      ListLibraryModelsParamsTask = "llm"
+	ListLibraryModelsParamsTaskNlp      ListLibraryModelsParamsTask = "nlp"
+	ListLibraryModelsParamsTaskOther    ListLibraryModelsParamsTask = "other"
+	ListLibraryModelsParamsTaskPhysical ListLibraryModelsParamsTask = "physical"
+	ListLibraryModelsParamsTaskSpeech   ListLibraryModelsParamsTask = "speech"
+	ListLibraryModelsParamsTaskVision   ListLibraryModelsParamsTask = "vision"
 )
 
 // Valid indicates whether the value is a known member of the ListLibraryModelsParamsTask enum.
@@ -1036,6 +1124,8 @@ func (e ListLibraryModelsParamsTask) Valid() bool {
 	case ListLibraryModelsParamsTaskNlp:
 		return true
 	case ListLibraryModelsParamsTaskOther:
+		return true
+	case ListLibraryModelsParamsTaskPhysical:
 		return true
 	case ListLibraryModelsParamsTaskSpeech:
 		return true
@@ -1099,14 +1189,32 @@ type ActiveUpload struct {
 }
 
 // BillingPlanResponse The account's effective billing plan identity.
+//
+// `plan` is the legacy tier quotas derive from; `billing_generation` and
+// `tier` are the billing identity (`tier` is null for legacy-generation
+// accounts, whose identity is `plan` itself).
 type BillingPlanResponse struct {
-	IsTrial     bool                    `json:"is_trial"`
-	Plan        BillingPlanResponsePlan `json:"plan"`
-	TrialEndsAt *time.Time              `json:"trial_ends_at,omitempty"`
+	// BillingGeneration Which billing system governs the account: "v3" iff a Pricing v3 subscription record exists (in any state), else "legacy".
+	BillingGeneration BillingPlanResponseBillingGeneration `json:"billing_generation"`
+	IsTrial           bool                                 `json:"is_trial"`
+
+	// MaxModelBytes The entitlement cap on a custom model's total bytes; preflights only the 413 `custom_model_too_large` refusal. Null means a custom contract, NOT unlimited: the credit ledger separately refuses self-service runs over 20 GB (`credit_model_too_large`).
+	MaxModelBytes *int                    `json:"max_model_bytes"`
+	Plan          BillingPlanResponsePlan `json:"plan"`
+
+	// Tier The Pricing v3 tier the service enforces right now; an inactive (past-due/canceled) v3 subscription reports "free". Null for legacy-generation accounts — their identity is `plan`.
+	Tier        *BillingPlanResponseTier `json:"tier"`
+	TrialEndsAt *time.Time               `json:"trial_ends_at,omitempty"`
 }
+
+// BillingPlanResponseBillingGeneration Which billing system governs the account: "v3" iff a Pricing v3 subscription record exists (in any state), else "legacy".
+type BillingPlanResponseBillingGeneration string
 
 // BillingPlanResponsePlan defines model for BillingPlanResponse.Plan.
 type BillingPlanResponsePlan string
+
+// BillingPlanResponseTier The Pricing v3 tier the service enforces right now; an inactive (past-due/canceled) v3 subscription reports "free". Null for legacy-generation accounts — their identity is `plan`.
+type BillingPlanResponseTier string
 
 // CancelModelUploadResponse defines model for CancelModelUploadResponse.
 type CancelModelUploadResponse struct {
@@ -1197,6 +1305,24 @@ type CreateUploadResponse struct {
 	Files     []IssuedUpload `json:"files"`
 	Id        string         `json:"id"`
 	Status    string         `json:"status"`
+}
+
+// CreditsBalance Benchmark-credit headroom from the ledger, ADVISORY only.
+//
+// `available > 0` is necessary but NOT sufficient for the next chargeable
+// run: `outstanding_debt` must be 0 (else 409 `credit_debt_outstanding`),
+// the subscription must not be past-due (402), and the charge grows with
+// model size (1-12 credits by size band; the bands are not published
+// here) — expect 402 `credit_balance_exhausted` when it cannot be met.
+// `expiring_credits` is the portion of `available` in the soonest-expiring
+// grants, gone at `expiring_at`.
+type CreditsBalance struct {
+	Available       int        `json:"available"`
+	ExpiringAt      *time.Time `json:"expiring_at"`
+	ExpiringCredits int        `json:"expiring_credits"`
+	MonthlyCredits  *int       `json:"monthly_credits"`
+	OutstandingDebt int        `json:"outstanding_debt"`
+	Reserved        int        `json:"reserved"`
 }
 
 // DeploymentGuideModel defines model for DeploymentGuideModel.
@@ -1305,6 +1431,9 @@ type ErrorEnvelope struct {
 	Error struct {
 		// ActiveUploadId Blocking upload-session id on the create-model-upload active-session conflict (409 only).
 		ActiveUploadId *string `json:"active_upload_id,omitempty"`
+
+		// Code Specific machine-readable reason within the `type` category (e.g. `credit_balance_exhausted`, `custom_model_too_large`, `sdk_upgrade_required`). Present on Pricing-v3 and SDK-gate refusals; branch on `code` when it is present, on `type` otherwise.
+		Code *string `json:"code,omitempty"`
 
 		// Fields Per-field validation details (422 only).
 		Fields *[]struct {
@@ -1515,8 +1644,11 @@ type LlmAccuracyEntry struct {
 type LlmQuantAggregates struct {
 	BestAccuracy *float32 `json:"best_accuracy"`
 	BestMemoryMb *float32 `json:"best_memory_mb"`
-	BestTps      *float32 `json:"best_tps"`
-	BestTtftMs   *float32 `json:"best_ttft_ms"`
+
+	// BestPerplexity MIN over this quant's published perplexity records (lower is better; published values are full-budget-comparable — rule LS4). null when the quant has no published perplexity.
+	BestPerplexity *float32 `json:"best_perplexity"`
+	BestTps        *float32 `json:"best_tps"`
+	BestTtftMs     *float32 `json:"best_ttft_ms"`
 }
 
 // LlmReportRecord `device`/`ap_type` are null on server-side accuracy records;
@@ -1555,8 +1687,14 @@ type LlmReportResponse struct {
 
 // LlmReportSummary defines model for LlmReportSummary.
 type LlmReportSummary struct {
-	Accuracy []LlmAccuracyEntry            `json:"accuracy"`
-	Quants   map[string]LlmQuantAggregates `json:"quants"`
+	Accuracy []LlmAccuracyEntry `json:"accuracy"`
+
+	// HasPerplexityAttempt True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable. Report-global: unaffected by the caller's plan device filter.
+	HasPerplexityAttempt bool `json:"has_perplexity_attempt"`
+
+	// PplMinScoredTokens The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.
+	PplMinScoredTokens int                           `json:"ppl_min_scored_tokens"`
+	Quants             map[string]LlmQuantAggregates `json:"quants"`
 }
 
 // ManifestBucket defines model for ManifestBucket.
@@ -1600,6 +1738,7 @@ type MeResponse struct {
 
 // MeToken defines model for MeToken.
 type MeToken struct {
+	Aud        *string    `json:"aud,omitempty"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	Name       string     `json:"name"`
@@ -1799,15 +1938,35 @@ type PackageReportResponse struct {
 	Records           []PackageReportRecord `json:"records"`
 
 	// Summary `auto` and `speed` are the same selection in v2 (packages carry no
-	// accuracy signal); there is no `accuracy` mode.
+	// accuracy signal); there is no `accuracy` mode. The quality fields below
+	// are mode-independent (rule PS2).
 	Summary PackageReportSummary `json:"summary"`
 }
 
 // PackageReportSummary `auto` and `speed` are the same selection in v2 (packages carry no
-// accuracy signal); there is no `accuracy` mode.
+// accuracy signal); there is no `accuracy` mode. The quality fields below
+// are mode-independent (rule PS2).
 type PackageReportSummary struct {
-	Auto  *PackageModeAggregates `json:"auto"`
-	Speed *PackageModeAggregates `json:"speed"`
+	Auto *PackageModeAggregates `json:"auto"`
+
+	// BestPerplexity MIN over the published package perplexity records (lower is better — rule PS2). null when nothing publishable exists.
+	BestPerplexity *float32 `json:"best_perplexity"`
+
+	// HasPerplexityAttempt True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable (report-global).
+	HasPerplexityAttempt bool `json:"has_perplexity_attempt"`
+
+	// HasVisionAccuracyAttempt True when ANY source run attempted a vision-accuracy measurement, including attempts that produced nothing publishable (report-global).
+	HasVisionAccuracyAttempt bool `json:"has_vision_accuracy_attempt"`
+
+	// PooledVisionAccuracy Sum of vision_expected_correct over sum of scored_images across the PUBLISHED runs, using exact numerators (4 decimals). This report-wide pooling is deliberately distinct from the dashboard's per-device pooling and from model selection's per-run-configuration pooling — the three are different numbers for the same package and are not reconcilable.
+	PooledVisionAccuracy *float32 `json:"pooled_vision_accuracy"`
+
+	// PplMinScoredTokens The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.
+	PplMinScoredTokens int `json:"ppl_min_scored_tokens"`
+
+	// ScoredImages Total images behind pooled_vision_accuracy (sample-size trust calibration). null when no vision run is published.
+	ScoredImages *int                   `json:"scored_images"`
+	Speed        *PackageModeAggregates `json:"speed"`
 }
 
 // PackageRunConfiguration `configuration` is the SANITIZED producer payload (derivation rule
@@ -1987,6 +2146,17 @@ type UsageQuotasResponse struct {
 	// do this" check.
 	Bandwidth QuotaItem `json:"bandwidth"`
 
+	// Credits Benchmark-credit headroom from the ledger, ADVISORY only.
+	//
+	// `available > 0` is necessary but NOT sufficient for the next chargeable
+	// run: `outstanding_debt` must be 0 (else 409 `credit_debt_outstanding`),
+	// the subscription must not be past-due (402), and the charge grows with
+	// model size (1-12 credits by size band; the bands are not published
+	// here) — expect 402 `credit_balance_exhausted` when it cannot be met.
+	// `expiring_credits` is the portion of `available` in the soonest-expiring
+	// grants, gone at `expiring_at`.
+	Credits CreditsBalance `json:"credits"`
+
 	// ModelUploads `used` this month vs the plan `limit`, plus enforcement-accurate
 	// `remaining`.
 	//
@@ -2043,6 +2213,9 @@ type Forbidden = ErrorEnvelope
 // NotFound Standard error envelope returned by every non-2xx response of the public API.
 type NotFound = ErrorEnvelope
 
+// PaymentRequired Standard error envelope returned by every non-2xx response of the public API.
+type PaymentRequired = ErrorEnvelope
+
 // RateLimited Standard error envelope returned by every non-2xx response of the public API.
 type RateLimited = ErrorEnvelope
 
@@ -2057,6 +2230,9 @@ type ServiceUnavailable = ErrorEnvelope
 
 // Unauthorized Standard error envelope returned by every non-2xx response of the public API.
 type Unauthorized = ErrorEnvelope
+
+// UpgradeRequired Standard error envelope returned by every non-2xx response of the public API.
+type UpgradeRequired = ErrorEnvelope
 
 // ValidationError Standard error envelope returned by every non-2xx response of the public API.
 type ValidationError = ErrorEnvelope
@@ -2251,9 +2427,11 @@ type ClientInterface interface {
 	//
 	// Effective billing plan for the token's account.
 	//
-	// `plan` is the entitlement tier quotas derive from (a trial grant reports
-	// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
-	// per-counter headroom.
+	// `plan` is the legacy tier quotas derive from (a trial grant reports the
+	// granted tier with `is_trial: true`). `billing_generation` and `tier` are
+	// the billing identity; `tier` is null for legacy-generation accounts,
+	// whose identity is `plan` itself. Use `/usage/quotas` for the per-counter
+	// headroom.
 	//
 	// Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
 	GetBillingPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2759,11 +2937,20 @@ type ClientInterface interface {
 
 	// GetUsageQuotas Get Usage Quotas
 	//
-	// Usage against the account's plan quotas.
+	// Usage against the account's plan quotas, plus credit headroom.
 	//
 	// Each counter reports `{used, limit, remaining}`; null means unlimited.
 	// `remaining` is what enforcement would allow right now (spike headroom
 	// included, floored at 0) — preflight on `remaining`, not `limit - used`.
+	//
+	// `credits` is ADVISORY headroom, not a sufficient preflight for a
+	// chargeable benchmark run: `model_uploads.remaining > 0` and
+	// `credits.available > 0` are necessary but not sufficient —
+	// `credits.outstanding_debt` must also be 0 (else 409
+	// `credit_debt_outstanding`), the subscription must not be past-due (402),
+	// and the charge grows with model size (1-12 credits by size band; the
+	// bands are not published here) — expect 402 `credit_balance_exhausted`
+	// when it cannot be met.
 	//
 	// Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 	GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2773,9 +2960,11 @@ type ClientInterface interface {
 //
 // Effective billing plan for the token's account.
 //
-// `plan` is the entitlement tier quotas derive from (a trial grant reports
-// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
-// per-counter headroom.
+// `plan` is the legacy tier quotas derive from (a trial grant reports the
+// granted tier with `is_trial: true`). `billing_generation` and `tier` are
+// the billing identity; `tier` is null for legacy-generation accounts,
+// whose identity is `plan` itself. Use `/usage/quotas` for the per-counter
+// headroom.
 //
 // Corresponds with GET /v1/billing/plan (the `GetBillingPlan` operationId).
 func (c *Client) GetBillingPlan(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3729,11 +3918,20 @@ func (c *Client) GetUsage(ctx context.Context, reqEditors ...RequestEditorFn) (*
 
 // GetUsageQuotas Get Usage Quotas
 //
-// Usage against the account's plan quotas.
+// Usage against the account's plan quotas, plus credit headroom.
 //
 // Each counter reports `{used, limit, remaining}`; null means unlimited.
 // `remaining` is what enforcement would allow right now (spike headroom
 // included, floored at 0) — preflight on `remaining`, not `limit - used`.
+//
+// `credits` is ADVISORY headroom, not a sufficient preflight for a
+// chargeable benchmark run: `model_uploads.remaining > 0` and
+// `credits.available > 0` are necessary but not sufficient —
+// `credits.outstanding_debt` must also be 0 (else 409
+// `credit_debt_outstanding`), the subscription must not be past-due (402),
+// and the charge grows with model size (1-12 credits by size band; the
+// bands are not published here) — expect 402 `credit_balance_exhausted`
+// when it cannot be met.
 //
 // Corresponds with GET /v1/usage/quotas (the `GetUsageQuotas` operationId).
 func (c *Client) GetUsageQuotas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5687,9 +5885,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Effective billing plan for the token's account.
 	//
-	// `plan` is the entitlement tier quotas derive from (a trial grant reports
-	// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
-	// per-counter headroom.
+	// `plan` is the legacy tier quotas derive from (a trial grant reports the
+	// granted tier with `is_trial: true`). `billing_generation` and `tier` are
+	// the billing identity; `tier` is null for legacy-generation accounts,
+	// whose identity is `plan` itself. Use `/usage/quotas` for the per-counter
+	// headroom.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -6251,11 +6451,20 @@ type ClientWithResponsesInterface interface {
 
 	// GetUsageQuotasWithResponse Get Usage Quotas
 	//
-	// Usage against the account's plan quotas.
+	// Usage against the account's plan quotas, plus credit headroom.
 	//
 	// Each counter reports `{used, limit, remaining}`; null means unlimited.
 	// `remaining` is what enforcement would allow right now (spike headroom
 	// included, floored at 0) — preflight on `remaining`, not `limit - used`.
+	//
+	// `credits` is ADVISORY headroom, not a sufficient preflight for a
+	// chargeable benchmark run: `model_uploads.remaining > 0` and
+	// `credits.available > 0` are necessary but not sufficient —
+	// `credits.outstanding_debt` must also be 0 (else 409
+	// `credit_debt_outstanding`), the subscription must not be past-due (402),
+	// and the charge grows with model size (1-12 credits by size band; the
+	// bands are not published here) — expect 402 `credit_balance_exhausted`
+	// when it cannot be met.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -7552,6 +7761,11 @@ type ZeticPublicUploadsCompleteUploadResult401Headers struct {
 	XRequestID      *string
 }
 
+// ZeticPublicUploadsCompleteUploadResult402Headers the declared response headers of an HTTP 402 response for ZeticPublicUploadsCompleteUpload
+type ZeticPublicUploadsCompleteUploadResult402Headers struct {
+	XRequestID *string
+}
+
 // ZeticPublicUploadsCompleteUploadResult403Headers the declared response headers of an HTTP 403 response for ZeticPublicUploadsCompleteUpload
 type ZeticPublicUploadsCompleteUploadResult403Headers struct {
 	XRequestID *string
@@ -7564,6 +7778,11 @@ type ZeticPublicUploadsCompleteUploadResult404Headers struct {
 
 // ZeticPublicUploadsCompleteUploadResult409Headers the declared response headers of an HTTP 409 response for ZeticPublicUploadsCompleteUpload
 type ZeticPublicUploadsCompleteUploadResult409Headers struct {
+	XRequestID *string
+}
+
+// ZeticPublicUploadsCompleteUploadResult413Headers the declared response headers of an HTTP 413 response for ZeticPublicUploadsCompleteUpload
+type ZeticPublicUploadsCompleteUploadResult413Headers struct {
 	XRequestID *string
 }
 
@@ -7592,12 +7811,16 @@ type ZeticPublicUploadsCompleteUploadResult struct {
 	JSON400 *BadRequest
 	// JSON401 the response for an HTTP 401 `application/json` response
 	JSON401 *Unauthorized
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *PaymentRequired
 	// JSON403 the response for an HTTP 403 `application/json` response
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *RequestTooLarge
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
 	// JSON429 the response for an HTTP 429 `application/json` response
@@ -7608,12 +7831,16 @@ type ZeticPublicUploadsCompleteUploadResult struct {
 	Headers400 *ZeticPublicUploadsCompleteUploadResult400Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *ZeticPublicUploadsCompleteUploadResult401Headers
+	// Headers402 the parsed response headers for an HTTP 402 response
+	Headers402 *ZeticPublicUploadsCompleteUploadResult402Headers
 	// Headers403 the parsed response headers for an HTTP 403 response
 	Headers403 *ZeticPublicUploadsCompleteUploadResult403Headers
 	// Headers404 the parsed response headers for an HTTP 404 response
 	Headers404 *ZeticPublicUploadsCompleteUploadResult404Headers
 	// Headers409 the parsed response headers for an HTTP 409 response
 	Headers409 *ZeticPublicUploadsCompleteUploadResult409Headers
+	// Headers413 the parsed response headers for an HTTP 413 response
+	Headers413 *ZeticPublicUploadsCompleteUploadResult413Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *ZeticPublicUploadsCompleteUploadResult422Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
@@ -7637,6 +7864,11 @@ func (r ZeticPublicUploadsCompleteUploadResult) GetJSON401() *Unauthorized {
 	return r.JSON401
 }
 
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r ZeticPublicUploadsCompleteUploadResult) GetJSON402() *PaymentRequired {
+	return r.JSON402
+}
+
 // GetJSON403 returns the response for an HTTP 403 `application/json` response
 func (r ZeticPublicUploadsCompleteUploadResult) GetJSON403() *Forbidden {
 	return r.JSON403
@@ -7650,6 +7882,11 @@ func (r ZeticPublicUploadsCompleteUploadResult) GetJSON404() *NotFound {
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
 func (r ZeticPublicUploadsCompleteUploadResult) GetJSON409() *Conflict {
 	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r ZeticPublicUploadsCompleteUploadResult) GetJSON413() *RequestTooLarge {
+	return r.JSON413
 }
 
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
@@ -8557,6 +8794,11 @@ type CreateModelUploadResult409Headers struct {
 	XRequestID *string
 }
 
+// CreateModelUploadResult413Headers the declared response headers of an HTTP 413 response for CreateModelUpload
+type CreateModelUploadResult413Headers struct {
+	XRequestID *string
+}
+
 // CreateModelUploadResult422Headers the declared response headers of an HTTP 422 response for CreateModelUpload
 type CreateModelUploadResult422Headers struct {
 	XRequestID *string
@@ -8593,6 +8835,8 @@ type CreateModelUploadResult struct {
 	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *RequestTooLarge
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
 	// JSON429 the response for an HTTP 429 `application/json` response
@@ -8613,6 +8857,8 @@ type CreateModelUploadResult struct {
 	Headers404 *CreateModelUploadResult404Headers
 	// Headers409 the parsed response headers for an HTTP 409 response
 	Headers409 *CreateModelUploadResult409Headers
+	// Headers413 the parsed response headers for an HTTP 413 response
+	Headers413 *CreateModelUploadResult413Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *CreateModelUploadResult422Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
@@ -8651,6 +8897,11 @@ func (r CreateModelUploadResult) GetJSON404() *NotFound {
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
 func (r CreateModelUploadResult) GetJSON409() *Conflict {
 	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r CreateModelUploadResult) GetJSON413() *RequestTooLarge {
+	return r.JSON413
 }
 
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
@@ -8708,6 +8959,11 @@ type ImportModelResult401Headers struct {
 	XRequestID      *string
 }
 
+// ImportModelResult402Headers the declared response headers of an HTTP 402 response for ImportModel
+type ImportModelResult402Headers struct {
+	XRequestID *string
+}
+
 // ImportModelResult403Headers the declared response headers of an HTTP 403 response for ImportModel
 type ImportModelResult403Headers struct {
 	XRequestID *string
@@ -8720,6 +8976,11 @@ type ImportModelResult404Headers struct {
 
 // ImportModelResult409Headers the declared response headers of an HTTP 409 response for ImportModel
 type ImportModelResult409Headers struct {
+	XRequestID *string
+}
+
+// ImportModelResult413Headers the declared response headers of an HTTP 413 response for ImportModel
+type ImportModelResult413Headers struct {
 	XRequestID *string
 }
 
@@ -8739,6 +9000,11 @@ type ImportModelResult500Headers struct {
 	XRequestID *string
 }
 
+// ImportModelResult503Headers the declared response headers of an HTTP 503 response for ImportModel
+type ImportModelResult503Headers struct {
+	XRequestID *string
+}
+
 type ImportModelResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8748,32 +9014,44 @@ type ImportModelResult struct {
 	JSON201 *ImportModelResponse
 	// JSON401 the response for an HTTP 401 `application/json` response
 	JSON401 *Unauthorized
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *PaymentRequired
 	// JSON403 the response for an HTTP 403 `application/json` response
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *RequestTooLarge
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
 	// JSON429 the response for an HTTP 429 `application/json` response
 	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *ImportModelResult401Headers
+	// Headers402 the parsed response headers for an HTTP 402 response
+	Headers402 *ImportModelResult402Headers
 	// Headers403 the parsed response headers for an HTTP 403 response
 	Headers403 *ImportModelResult403Headers
 	// Headers404 the parsed response headers for an HTTP 404 response
 	Headers404 *ImportModelResult404Headers
 	// Headers409 the parsed response headers for an HTTP 409 response
 	Headers409 *ImportModelResult409Headers
+	// Headers413 the parsed response headers for an HTTP 413 response
+	Headers413 *ImportModelResult413Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *ImportModelResult422Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
 	Headers429 *ImportModelResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *ImportModelResult500Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *ImportModelResult503Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -8791,6 +9069,11 @@ func (r ImportModelResult) GetJSON401() *Unauthorized {
 	return r.JSON401
 }
 
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r ImportModelResult) GetJSON402() *PaymentRequired {
+	return r.JSON402
+}
+
 // GetJSON403 returns the response for an HTTP 403 `application/json` response
 func (r ImportModelResult) GetJSON403() *Forbidden {
 	return r.JSON403
@@ -8806,6 +9089,11 @@ func (r ImportModelResult) GetJSON409() *Conflict {
 	return r.JSON409
 }
 
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r ImportModelResult) GetJSON413() *RequestTooLarge {
+	return r.JSON413
+}
+
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r ImportModelResult) GetJSON422() *ValidationError {
 	return r.JSON422
@@ -8819,6 +9107,11 @@ func (r ImportModelResult) GetJSON429() *RateLimited {
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
 func (r ImportModelResult) GetJSON500() *ServerError {
 	return r.JSON500
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ImportModelResult) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -9208,6 +9501,11 @@ type CompleteModelUploadResult401Headers struct {
 	XRequestID      *string
 }
 
+// CompleteModelUploadResult402Headers the declared response headers of an HTTP 402 response for CompleteModelUpload
+type CompleteModelUploadResult402Headers struct {
+	XRequestID *string
+}
+
 // CompleteModelUploadResult403Headers the declared response headers of an HTTP 403 response for CompleteModelUpload
 type CompleteModelUploadResult403Headers struct {
 	XRequestID *string
@@ -9220,6 +9518,11 @@ type CompleteModelUploadResult404Headers struct {
 
 // CompleteModelUploadResult409Headers the declared response headers of an HTTP 409 response for CompleteModelUpload
 type CompleteModelUploadResult409Headers struct {
+	XRequestID *string
+}
+
+// CompleteModelUploadResult413Headers the declared response headers of an HTTP 413 response for CompleteModelUpload
+type CompleteModelUploadResult413Headers struct {
 	XRequestID *string
 }
 
@@ -9246,12 +9549,16 @@ type CompleteModelUploadResult struct {
 	JSON200 *CompleteModelUploadResponse
 	// JSON401 the response for an HTTP 401 `application/json` response
 	JSON401 *Unauthorized
+	// JSON402 the response for an HTTP 402 `application/json` response
+	JSON402 *PaymentRequired
 	// JSON403 the response for an HTTP 403 `application/json` response
 	JSON403 *Forbidden
 	// JSON404 the response for an HTTP 404 `application/json` response
 	JSON404 *NotFound
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
+	// JSON413 the response for an HTTP 413 `application/json` response
+	JSON413 *RequestTooLarge
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
 	// JSON429 the response for an HTTP 429 `application/json` response
@@ -9260,12 +9567,16 @@ type CompleteModelUploadResult struct {
 	JSON500 *ServerError
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *CompleteModelUploadResult401Headers
+	// Headers402 the parsed response headers for an HTTP 402 response
+	Headers402 *CompleteModelUploadResult402Headers
 	// Headers403 the parsed response headers for an HTTP 403 response
 	Headers403 *CompleteModelUploadResult403Headers
 	// Headers404 the parsed response headers for an HTTP 404 response
 	Headers404 *CompleteModelUploadResult404Headers
 	// Headers409 the parsed response headers for an HTTP 409 response
 	Headers409 *CompleteModelUploadResult409Headers
+	// Headers413 the parsed response headers for an HTTP 413 response
+	Headers413 *CompleteModelUploadResult413Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *CompleteModelUploadResult422Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
@@ -9284,6 +9595,11 @@ func (r CompleteModelUploadResult) GetJSON401() *Unauthorized {
 	return r.JSON401
 }
 
+// GetJSON402 returns the response for an HTTP 402 `application/json` response
+func (r CompleteModelUploadResult) GetJSON402() *PaymentRequired {
+	return r.JSON402
+}
+
 // GetJSON403 returns the response for an HTTP 403 `application/json` response
 func (r CompleteModelUploadResult) GetJSON403() *Forbidden {
 	return r.JSON403
@@ -9297,6 +9613,11 @@ func (r CompleteModelUploadResult) GetJSON404() *NotFound {
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
 func (r CompleteModelUploadResult) GetJSON409() *Conflict {
 	return r.JSON409
+}
+
+// GetJSON413 returns the response for an HTTP 413 `application/json` response
+func (r CompleteModelUploadResult) GetJSON413() *RequestTooLarge {
+	return r.JSON413
 }
 
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
@@ -10403,6 +10724,11 @@ type CreateDownloadAuthorizationResult422Headers struct {
 	XRequestID *string
 }
 
+// CreateDownloadAuthorizationResult426Headers the declared response headers of an HTTP 426 response for CreateDownloadAuthorization
+type CreateDownloadAuthorizationResult426Headers struct {
+	XRequestID *string
+}
+
 // CreateDownloadAuthorizationResult429Headers the declared response headers of an HTTP 429 response for CreateDownloadAuthorization
 type CreateDownloadAuthorizationResult429Headers struct {
 	RetryAfter *int
@@ -10436,6 +10762,8 @@ type CreateDownloadAuthorizationResult struct {
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
+	// JSON426 the response for an HTTP 426 `application/json` response
+	JSON426 *UpgradeRequired
 	// JSON429 the response for an HTTP 429 `application/json` response
 	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
@@ -10456,6 +10784,8 @@ type CreateDownloadAuthorizationResult struct {
 	Headers409 *CreateDownloadAuthorizationResult409Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *CreateDownloadAuthorizationResult422Headers
+	// Headers426 the parsed response headers for an HTTP 426 response
+	Headers426 *CreateDownloadAuthorizationResult426Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
 	Headers429 *CreateDownloadAuthorizationResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
@@ -10497,6 +10827,11 @@ func (r CreateDownloadAuthorizationResult) GetJSON409() *Conflict {
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r CreateDownloadAuthorizationResult) GetJSON422() *ValidationError {
 	return r.JSON422
+}
+
+// GetJSON426 returns the response for an HTTP 426 `application/json` response
+func (r CreateDownloadAuthorizationResult) GetJSON426() *UpgradeRequired {
+	return r.JSON426
 }
 
 // GetJSON429 returns the response for an HTTP 429 `application/json` response
@@ -10743,9 +11078,11 @@ func (r GetUsageQuotasResult) ContentType() string {
 //
 // Effective billing plan for the token's account.
 //
-// `plan` is the entitlement tier quotas derive from (a trial grant reports
-// the granted tier with `is_trial: true`). Use `/usage/quotas` for the
-// per-counter headroom.
+// `plan` is the legacy tier quotas derive from (a trial grant reports the
+// granted tier with `is_trial: true`). `billing_generation` and `tier` are
+// the billing identity; `tier` is null for legacy-generation accounts,
+// whose identity is `plan` itself. Use `/usage/quotas` for the per-counter
+// headroom.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -11579,11 +11916,20 @@ func (c *ClientWithResponses) GetUsageWithResponse(ctx context.Context, reqEdito
 
 // GetUsageQuotasWithResponse Get Usage Quotas
 //
-// Usage against the account's plan quotas.
+// Usage against the account's plan quotas, plus credit headroom.
 //
 // Each counter reports `{used, limit, remaining}`; null means unlimited.
 // `remaining` is what enforcement would allow right now (spike headroom
 // included, floored at 0) — preflight on `remaining`, not `limit - used`.
+//
+// `credits` is ADVISORY headroom, not a sufficient preflight for a
+// chargeable benchmark run: `model_uploads.remaining > 0` and
+// `credits.available > 0` are necessary but not sufficient —
+// `credits.outstanding_debt` must also be 0 (else 409
+// `credit_debt_outstanding`), the subscription must not be past-due (402),
+// and the charge grows with model size (1-12 credits by size band; the
+// bands are not published here) — expect 402 `credit_balance_exhausted`
+// when it cannot be met.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -13032,6 +13378,13 @@ func ParseZeticPublicUploadsCompleteUploadResult(rsp *http.Response) (*ZeticPubl
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest PaymentRequired
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -13052,6 +13405,13 @@ func ParseZeticPublicUploadsCompleteUploadResult(rsp *http.Response) (*ZeticPubl
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest RequestTooLarge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ValidationError
@@ -13104,6 +13464,16 @@ func ParseZeticPublicUploadsCompleteUploadResult(rsp *http.Response) (*ZeticPubl
 			headers.XRequestID = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 402:
+		var headers ZeticPublicUploadsCompleteUploadResult402Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers402 = &headers
 	case rsp.StatusCode == 403:
 		var headers ZeticPublicUploadsCompleteUploadResult403Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -13134,6 +13504,16 @@ func ParseZeticPublicUploadsCompleteUploadResult(rsp *http.Response) (*ZeticPubl
 			headers.XRequestID = &value
 		}
 		response.Headers409 = &headers
+	case rsp.StatusCode == 413:
+		var headers ZeticPublicUploadsCompleteUploadResult413Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers413 = &headers
 	case rsp.StatusCode == 422:
 		var headers ZeticPublicUploadsCompleteUploadResult422Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -14164,6 +14544,13 @@ func ParseCreateModelUploadResult(rsp *http.Response) (*CreateModelUploadResult,
 		}
 		response.JSON409 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest RequestTooLarge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ValidationError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -14262,6 +14649,16 @@ func ParseCreateModelUploadResult(rsp *http.Response) (*CreateModelUploadResult,
 			headers.XRequestID = &value
 		}
 		response.Headers409 = &headers
+	case rsp.StatusCode == 413:
+		var headers CreateModelUploadResult413Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers413 = &headers
 	case rsp.StatusCode == 422:
 		var headers CreateModelUploadResult422Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -14349,6 +14746,13 @@ func ParseImportModelResult(rsp *http.Response) (*ImportModelResult, error) {
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest PaymentRequired
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -14369,6 +14773,13 @@ func ParseImportModelResult(rsp *http.Response) (*ImportModelResult, error) {
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest RequestTooLarge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ValidationError
@@ -14391,6 +14802,13 @@ func ParseImportModelResult(rsp *http.Response) (*ImportModelResult, error) {
 		}
 		response.JSON500 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	switch {
@@ -14411,6 +14829,16 @@ func ParseImportModelResult(rsp *http.Response) (*ImportModelResult, error) {
 			headers.XRequestID = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 402:
+		var headers ImportModelResult402Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers402 = &headers
 	case rsp.StatusCode == 403:
 		var headers ImportModelResult403Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -14441,6 +14869,16 @@ func ParseImportModelResult(rsp *http.Response) (*ImportModelResult, error) {
 			headers.XRequestID = &value
 		}
 		response.Headers409 = &headers
+	case rsp.StatusCode == 413:
+		var headers ImportModelResult413Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers413 = &headers
 	case rsp.StatusCode == 422:
 		var headers ImportModelResult422Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -14478,6 +14916,16 @@ func ParseImportModelResult(rsp *http.Response) (*ImportModelResult, error) {
 			headers.XRequestID = &value
 		}
 		response.Headers500 = &headers
+	case rsp.StatusCode == 503:
+		var headers ImportModelResult503Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -14905,6 +15353,13 @@ func ParseCompleteModelUploadResult(rsp *http.Response) (*CompleteModelUploadRes
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 402:
+		var dest PaymentRequired
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON402 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -14925,6 +15380,13 @@ func ParseCompleteModelUploadResult(rsp *http.Response) (*CompleteModelUploadRes
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest RequestTooLarge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ValidationError
@@ -14967,6 +15429,16 @@ func ParseCompleteModelUploadResult(rsp *http.Response) (*CompleteModelUploadRes
 			headers.XRequestID = &value
 		}
 		response.Headers401 = &headers
+	case rsp.StatusCode == 402:
+		var headers CompleteModelUploadResult402Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers402 = &headers
 	case rsp.StatusCode == 403:
 		var headers CompleteModelUploadResult403Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -14997,6 +15469,16 @@ func ParseCompleteModelUploadResult(rsp *http.Response) (*CompleteModelUploadRes
 			headers.XRequestID = &value
 		}
 		response.Headers409 = &headers
+	case rsp.StatusCode == 413:
+		var headers CompleteModelUploadResult413Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers413 = &headers
 	case rsp.StatusCode == 422:
 		var headers CompleteModelUploadResult422Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
@@ -16225,6 +16707,13 @@ func ParseCreateDownloadAuthorizationResult(rsp *http.Response) (*CreateDownload
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 426:
+		var dest UpgradeRequired
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON426 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest RateLimited
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16326,6 +16815,16 @@ func ParseCreateDownloadAuthorizationResult(rsp *http.Response) (*CreateDownload
 			headers.XRequestID = &value
 		}
 		response.Headers422 = &headers
+	case rsp.StatusCode == 426:
+		var headers CreateDownloadAuthorizationResult426Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers426 = &headers
 	case rsp.StatusCode == 429:
 		var headers CreateDownloadAuthorizationResult429Headers
 		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {

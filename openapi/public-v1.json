@@ -85,6 +85,24 @@
           }
         }
       },
+      "PaymentRequired": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The account cannot pay for the operation. `error.code` names the reason: `credit_balance_exhausted` (no spendable credits \u2014 the conversion has not started and nothing was charged; buy credits or wait for the monthly grant, then replay the request) or `subscription_past_due` (payment is past due \u2014 fix the payment method on the dashboard).",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "RateLimited": {
         "content": {
           "application/json": {
@@ -117,7 +135,7 @@
             }
           }
         },
-        "description": "A declared file exceeds the per-file size limit; nothing was uploaded.",
+        "description": "A size limit was exceeded and nothing was uploaded or charged. `error.code` distinguishes the causes: `custom_model_too_large` (the model exceeds the plan's custom-model size entitlement), `credit_model_too_large` (the model exceeds the self-service credit-band ceiling), or \u2014 on the legacy upload create \u2014 a declared file exceeds the per-file size limit.",
         "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
@@ -153,7 +171,7 @@
             }
           }
         },
-        "description": "A dependency needed to fulfil the request is temporarily unavailable (e.g. upload URL signing failed); the operation had no lasting effect \u2014 retry later.",
+        "description": "A dependency needed to fulfil the request is temporarily unavailable (e.g. upload URL signing failed, or the stored model size could not be verified \u2014 `error.code: custom_model_size_unverified`); the operation had no lasting effect \u2014 retry later.",
         "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
@@ -179,6 +197,24 @@
               "type": "string"
             }
           },
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpgradeRequired": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The declared SDK version is past its delivery window (`error.code: sdk_upgrade_required`). Sent only to callers that supply an SDK version header; upgrade the SDK to restore delivery.",
+        "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
             "schema": {
@@ -234,11 +270,32 @@
         "type": "object"
       },
       "BillingPlanResponse": {
-        "description": "The account's effective billing plan identity.",
+        "description": "The account's effective billing plan identity.\n\n`plan` is the legacy tier quotas derive from; `billing_generation` and\n`tier` are the billing identity (`tier` is null for legacy-generation\naccounts, whose identity is `plan` itself).",
         "properties": {
+          "billing_generation": {
+            "description": "Which billing system governs the account: \"v3\" iff a Pricing v3 subscription record exists (in any state), else \"legacy\".",
+            "enum": [
+              "legacy",
+              "v3"
+            ],
+            "title": "Billing Generation",
+            "type": "string"
+          },
           "is_trial": {
             "title": "Is Trial",
             "type": "boolean"
+          },
+          "max_model_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The entitlement cap on a custom model's total bytes; preflights only the 413 `custom_model_too_large` refusal. Null means a custom contract, NOT unlimited: the credit ledger separately refuses self-service runs over 20 GB (`credit_model_too_large`).",
+            "title": "Max Model Bytes"
           },
           "plan": {
             "enum": [
@@ -250,6 +307,24 @@
             ],
             "title": "Plan",
             "type": "string"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "enum": [
+                  "free",
+                  "pro",
+                  "team",
+                  "enterprise"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Pricing v3 tier the service enforces right now; an inactive (past-due/canceled) v3 subscription reports \"free\". Null for legacy-generation accounts \u2014 their identity is `plan`.",
+            "title": "Tier"
           },
           "trial_ends_at": {
             "anyOf": [
@@ -266,7 +341,10 @@
         },
         "required": [
           "plan",
-          "is_trial"
+          "is_trial",
+          "billing_generation",
+          "tier",
+          "max_model_bytes"
         ],
         "title": "BillingPlanResponse",
         "type": "object"
@@ -422,7 +500,8 @@
           "model_type": {
             "enum": [
               "general",
-              "llm"
+              "llm",
+              "physical_ai"
             ],
             "title": "Model Type",
             "type": "string"
@@ -500,7 +579,8 @@
           "model_type": {
             "enum": [
               "general",
-              "llm"
+              "llm",
+              "physical_ai"
             ],
             "title": "Model Type",
             "type": "string"
@@ -549,6 +629,7 @@
                   "nlp",
                   "llm",
                   "speech",
+                  "physical",
                   "other"
                 ],
                 "type": "string"
@@ -612,6 +693,60 @@
           "status"
         ],
         "title": "CreateUploadResponse",
+        "type": "object"
+      },
+      "CreditsBalance": {
+        "description": "Benchmark-credit headroom from the ledger, ADVISORY only.\n\n`available > 0` is necessary but NOT sufficient for the next chargeable\nrun: `outstanding_debt` must be 0 (else 409 `credit_debt_outstanding`),\nthe subscription must not be past-due (402), and the charge grows with\nmodel size (1-12 credits by size band; the bands are not published\nhere) \u2014 expect 402 `credit_balance_exhausted` when it cannot be met.\n`expiring_credits` is the portion of `available` in the soonest-expiring\ngrants, gone at `expiring_at`.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "expiring_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiring At"
+          },
+          "expiring_credits": {
+            "title": "Expiring Credits",
+            "type": "integer"
+          },
+          "monthly_credits": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Credits"
+          },
+          "outstanding_debt": {
+            "title": "Outstanding Debt",
+            "type": "integer"
+          },
+          "reserved": {
+            "title": "Reserved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "reserved",
+          "outstanding_debt",
+          "monthly_credits",
+          "expiring_credits",
+          "expiring_at"
+        ],
+        "title": "CreditsBalance",
         "type": "object"
       },
       "DeploymentGuideModel": {
@@ -942,6 +1077,10 @@
                 "description": "Blocking upload-session id on the create-model-upload active-session conflict (409 only).",
                 "type": "string"
               },
+              "code": {
+                "description": "Specific machine-readable reason within the `type` category (e.g. `credit_balance_exhausted`, `custom_model_too_large`, `sdk_upgrade_required`). Present on Pricing-v3 and SDK-gate refusals; branch on `code` when it is present, on `type` otherwise.",
+                "type": "string"
+              },
               "fields": {
                 "description": "Per-field validation details (422 only).",
                 "items": {
@@ -970,6 +1109,7 @@
                 "enum": [
                   "api_error",
                   "authentication_error",
+                  "billing_error",
                   "conflict_error",
                   "invalid_request_error",
                   "method_not_allowed",
@@ -1797,6 +1937,18 @@
             ],
             "title": "Best Memory Mb"
           },
+          "best_perplexity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MIN over this quant's published perplexity records (lower is better; published values are full-budget-comparable \u2014 rule LS4). null when the quant has no published perplexity.",
+            "title": "Best Perplexity"
+          },
           "best_tps": {
             "anyOf": [
               {
@@ -1824,7 +1976,8 @@
           "best_tps",
           "best_ttft_ms",
           "best_memory_mb",
-          "best_accuracy"
+          "best_accuracy",
+          "best_perplexity"
         ],
         "title": "LlmQuantAggregates",
         "type": "object"
@@ -1875,6 +2028,8 @@
               "ttft_ms",
               "prompt_tokens",
               "generated_tokens",
+              "perplexity",
+              "scored_tokens",
               "memory_load_peak_mb",
               "memory_load_min_mb",
               "memory_inference_peak_mb",
@@ -1907,7 +2062,8 @@
               "count",
               "mb",
               "score",
-              "bytes"
+              "bytes",
+              "ppl"
             ],
             "title": "Unit",
             "type": "string"
@@ -1980,6 +2136,16 @@
             "title": "Accuracy",
             "type": "array"
           },
+          "has_perplexity_attempt": {
+            "description": "True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable. Report-global: unaffected by the caller's plan device filter.",
+            "title": "Has Perplexity Attempt",
+            "type": "boolean"
+          },
+          "ppl_min_scored_tokens": {
+            "description": "The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.",
+            "title": "Ppl Min Scored Tokens",
+            "type": "integer"
+          },
           "quants": {
             "additionalProperties": {
               "$ref": "#/components/schemas/LlmQuantAggregates"
@@ -1990,7 +2156,9 @@
         },
         "required": [
           "quants",
-          "accuracy"
+          "accuracy",
+          "has_perplexity_attempt",
+          "ppl_min_scored_tokens"
         ],
         "title": "LlmReportSummary",
         "type": "object"
@@ -2166,6 +2334,17 @@
       },
       "MeToken": {
         "properties": {
+          "aud": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aud"
+          },
           "expires_at": {
             "anyOf": [
               {
@@ -2846,7 +3025,12 @@
               "tps",
               "ttft_ms",
               "prompt_tokens",
-              "generated_tokens"
+              "generated_tokens",
+              "perplexity",
+              "scored_tokens",
+              "vision_accuracy",
+              "vision_expected_correct",
+              "scored_images"
             ],
             "title": "Metric",
             "type": "string"
@@ -2860,7 +3044,9 @@
               "db",
               "mb",
               "tokens_per_s",
-              "count"
+              "count",
+              "ppl",
+              "rate"
             ],
             "title": "Unit",
             "type": "string"
@@ -2910,7 +3096,7 @@
         "type": "object"
       },
       "PackageReportSummary": {
-        "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
+        "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode. The quality fields below\nare mode-independent (rule PS2).",
         "properties": {
           "auto": {
             "anyOf": [
@@ -2921,6 +3107,57 @@
                 "type": "null"
               }
             ]
+          },
+          "best_perplexity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MIN over the published package perplexity records (lower is better \u2014 rule PS2). null when nothing publishable exists.",
+            "title": "Best Perplexity"
+          },
+          "has_perplexity_attempt": {
+            "description": "True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable (report-global).",
+            "title": "Has Perplexity Attempt",
+            "type": "boolean"
+          },
+          "has_vision_accuracy_attempt": {
+            "description": "True when ANY source run attempted a vision-accuracy measurement, including attempts that produced nothing publishable (report-global).",
+            "title": "Has Vision Accuracy Attempt",
+            "type": "boolean"
+          },
+          "pooled_vision_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sum of vision_expected_correct over sum of scored_images across the PUBLISHED runs, using exact numerators (4 decimals). This report-wide pooling is deliberately distinct from the dashboard's per-device pooling and from model selection's per-run-configuration pooling \u2014 the three are different numbers for the same package and are not reconcilable.",
+            "title": "Pooled Vision Accuracy"
+          },
+          "ppl_min_scored_tokens": {
+            "description": "The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.",
+            "title": "Ppl Min Scored Tokens",
+            "type": "integer"
+          },
+          "scored_images": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Total images behind pooled_vision_accuracy (sample-size trust calibration). null when no vision run is published.",
+            "title": "Scored Images"
           },
           "speed": {
             "anyOf": [
@@ -2935,7 +3172,13 @@
         },
         "required": [
           "auto",
-          "speed"
+          "speed",
+          "best_perplexity",
+          "pooled_vision_accuracy",
+          "scored_images",
+          "has_perplexity_attempt",
+          "has_vision_accuracy_attempt",
+          "ppl_min_scored_tokens"
         ],
         "title": "PackageReportSummary",
         "type": "object"
@@ -3525,6 +3768,7 @@
               "nlp",
               "llm",
               "speech",
+              "physical",
               "other"
             ],
             "title": "Use Case",
@@ -3579,6 +3823,9 @@
           "bandwidth": {
             "$ref": "#/components/schemas/QuotaItem"
           },
+          "credits": {
+            "$ref": "#/components/schemas/CreditsBalance"
+          },
           "model_uploads": {
             "$ref": "#/components/schemas/QuotaItem"
           },
@@ -3590,7 +3837,8 @@
           "bandwidth",
           "model_uploads",
           "active_devices",
-          "prompts"
+          "prompts",
+          "credits"
         ],
         "title": "UsageQuotasResponse",
         "type": "object"
@@ -3682,7 +3930,7 @@
   "paths": {
     "/v1/billing/plan": {
       "get": {
-        "description": "Effective billing plan for the token's account.\n\n`plan` is the entitlement tier quotas derive from (a trial grant reports\nthe granted tier with `is_trial: true`). Use `/usage/quotas` for the\nper-counter headroom.",
+        "description": "Effective billing plan for the token's account.\n\n`plan` is the legacy tier quotas derive from (a trial grant reports the\ngranted tier with `is_trial: true`). `billing_generation` and `tier` are\nthe billing identity; `tier` is null for legacy-generation accounts,\nwhose identity is `plan` itself. Use `/usage/quotas` for the per-counter\nheadroom.",
         "operationId": "get_billing_plan",
         "parameters": [],
         "responses": {
@@ -3776,6 +4024,7 @@
                       "nlp",
                       "llm",
                       "speech",
+                      "physical",
                       "other"
                     ],
                     "type": "string"
@@ -4435,6 +4684,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -4443,6 +4695,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5050,6 +5305,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -5135,6 +5393,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -5144,6 +5405,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -5152,6 +5416,9 @@
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
         "security": [
@@ -5423,6 +5690,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -5431,6 +5701,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -6258,6 +6531,9 @@
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "426": {
+            "$ref": "#/components/responses/UpgradeRequired"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -6321,7 +6597,7 @@
     },
     "/v1/usage/quotas": {
       "get": {
-        "description": "Usage against the account's plan quotas.\n\nEach counter reports `{used, limit, remaining}`; null means unlimited.\n`remaining` is what enforcement would allow right now (spike headroom\nincluded, floored at 0) \u2014 preflight on `remaining`, not `limit - used`.",
+        "description": "Usage against the account's plan quotas, plus credit headroom.\n\nEach counter reports `{used, limit, remaining}`; null means unlimited.\n`remaining` is what enforcement would allow right now (spike headroom\nincluded, floored at 0) \u2014 preflight on `remaining`, not `limit - used`.\n\n`credits` is ADVISORY headroom, not a sufficient preflight for a\nchargeable benchmark run: `model_uploads.remaining > 0` and\n`credits.available > 0` are necessary but not sufficient \u2014\n`credits.outstanding_debt` must also be 0 (else 409\n`credit_debt_outstanding`), the subscription must not be past-due (402),\nand the charge grows with model size (1-12 credits by size band; the\nbands are not published here) \u2014 expect 402 `credit_balance_exhausted`\nwhen it cannot be met.",
         "operationId": "get_usage_quotas",
         "parameters": [],
         "responses": {

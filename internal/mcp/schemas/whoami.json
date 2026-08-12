@@ -21,6 +21,13 @@
     },
     "token": {
       "properties": {
+        "aud": {
+          "title": "Aud",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "expires_at": {
           "format": "date-time",
           "title": "Expires At",

@@ -44,6 +44,7 @@ var FixtureSkipped = map[string]string{
 	"create_model_upload_conflict": "409 error exchange: upload_model surfaces the conflict as IsError resume guidance, not structuredContent",
 	"cancel_model_upload":          "upload_model never cancels a session; cancellation stays CLI-only (melange model upload --cancel)",
 	"error_401":                    "error envelope: failures surface as IsError text, not structuredContent",
+	"error_402_credit":             "error envelope: failures surface as IsError text, not structuredContent",
 	"error_422":                    "error envelope: failures surface as IsError text, not structuredContent",
 	"error_422_enum":               "error envelope: failures surface as IsError text, not structuredContent",
 }
