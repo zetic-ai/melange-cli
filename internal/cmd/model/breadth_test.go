@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -654,6 +655,41 @@ func TestModelImportZtcPackageDoesNotRetryTransientFailure(t *testing.T) {
 
 	assert.Len(t, e.reg.Requests, 1,
 		"a 502 must not be replayed: the route cannot dedupe a second import")
+	assert.Contains(t, err.Error(), "outcome is UNKNOWN",
+		"an unretried 5xx is ambiguous: the import may already be registered and charged")
+	assert.Contains(t, err.Error(), "model list -R zetic/whisper",
+		"the warning must name the exact command that resolves the ambiguity")
+}
+
+// A transport error (connection reset/refused) is the other ambiguous class:
+// the request may have reached the server before the connection died.
+func TestModelImportZtcPackageTransportErrorWarnsOfAmbiguity(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", ztcPackagePath),
+		httpmock.ErrorResponse(errors.New("connect: connection reset by peer")))
+
+	err := run(t, e, "model", "import", "meta-llama/Llama-3.2-1B",
+		"-R", "zetic/whisper", "--ztc-package")
+	require.Error(t, err)
+
+	assert.Len(t, e.reg.Requests, 1, "a transport error must not be replayed either")
+	assert.Contains(t, err.Error(), "connection reset by peer", "the cause must surface")
+	assert.Contains(t, err.Error(), "outcome is UNKNOWN")
+}
+
+// A definitive 4xx rejection is NOT ambiguous — nothing was registered, so the
+// warning would only add noise and discourage a safe re-run.
+func TestModelImportZtcPackageDefinitiveRejectionHasNoAmbiguityWarning(t *testing.T) {
+	e := setup(t)
+	e.reg.Register(httpmock.REST("POST", ztcPackagePath), jsonStub(403,
+		`{"type":"error","error":{"type":"permission_error","message":"staff only"},"request_id":"r2"}`))
+
+	err := run(t, e, "model", "import", "meta-llama/Llama-3.2-1B",
+		"-R", "zetic/whisper", "--ztc-package")
+	require.Error(t, err)
+
+	assert.NotContains(t, err.Error(), "outcome is UNKNOWN",
+		"a 403 is a verdict: the import was never created")
 }
 
 // The same pricing refusals the route documents must carry the same

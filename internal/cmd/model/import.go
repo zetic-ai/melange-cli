@@ -84,9 +84,10 @@ Exit codes: 0 success, 1 API error or failed conversion under --wait,
 				imported, raw, err := client.ImportModelZtcPackage(cmd.Context(), account, name,
 					args[0])
 				if err != nil {
-					// The route reaches the same pricing refusals as the
-					// generic import, so it needs the same remediation.
-					return withBillingHint(f.Edition.ProgramName(), err)
+					// Billing refusals are verdicts and get the same
+					// remediation as the generic import; everything else is
+					// unretried and therefore ambiguous.
+					return withZtcFailureGuidance(f.Edition.ProgramName(), repo, err)
 				}
 				ios := f.IOStreams
 				fmt.Fprintf(ios.ErrOut, "✓ Import started: model %s version %d (state %s)\n",

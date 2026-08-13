@@ -109,3 +109,28 @@ func withBillingHint(program string, err error) error {
 	}
 	return err
 }
+
+// ztcAmbiguousOutcomeHint is the warning a ztc-package import must print when
+// it fails without a verdict from the server. That route accepts no
+// idempotency key, so the CLI never replays it: a 502/503/504 or a transport
+// error leaves the caller unable to tell a rejected request from one the
+// server accepted and already charged.
+const ztcAmbiguousOutcomeHint = "The outcome is UNKNOWN: the server may have registered the import and reserved its credits. " +
+	"Check `%s model list -R %s` before running this again — a second run converts and charges twice."
+
+// withZtcFailureGuidance turns a ztc-package import failure into an actionable
+// one. A billing refusal is a verdict, so it gets its remediation hint; any
+// other failure (transport error, or a 5xx that could have been applied
+// server-side) gets the ambiguity warning instead, because no retry happened.
+func withZtcFailureGuidance(program, repo string, err error) error {
+	if hint := billingHint(program, err); hint != "" {
+		return fmt.Errorf("%w\n%s", err, hint)
+	}
+	var apiErr *api.Error
+	// A 4xx other than the billing codes is a definitive rejection: nothing
+	// was registered, so re-running is safe and needs no warning.
+	if errors.As(err, &apiErr) && apiErr.StatusCode < 500 {
+		return err
+	}
+	return fmt.Errorf("%w\n%s", err, fmt.Sprintf(ztcAmbiguousOutcomeHint, program, repo))
+}
