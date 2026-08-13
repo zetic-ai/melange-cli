@@ -87,23 +87,30 @@ type ztcPackageRequest struct {
 // ImportModelZtcPackage triggers the non-llama.cpp ZTC package conversion path
 // for a HuggingFace repo, mirroring the web UI's staff-only endpoint. It rides
 // this client's transport chain (auth -> retry -> debug) exactly like the
-// generated ImportModel call, and carries an Idempotency-Key so the retry
-// transport may safely replay it. It returns the decoded response, the raw
+// generated ImportModel call. It returns the decoded response, the raw
 // response bytes (for --json/--jq output), and a GenError-converted error.
 //
-// BACKEND: the public route is assumed to be
+// It deliberately sends NO Idempotency-Key. The server route does not read one
+// (unlike import_model, which resolves a key and replays), the spec declares no
+// such parameter for it, and the route disables its own HF dedup by forcing
+// skip_hf_revision_lookup. Sending the header would only make retryEligible
+// true, so a 502/503/504 or connection blip would replay the POST into a
+// SECOND import and a second credit hold — a silent double charge. Without the
+// header the POST is not retried and a transient failure surfaces for the
+// caller to re-run deliberately. Restore the key once the route honors it.
+//
+// BACKEND: the public route is
 // POST /v1/repos/{account_name}/{repo_name}/models/ztc-package with body
 // {"uri": "<hf_repo>"}, aligned to the existing import route. The path lives
 // here alone, so adjust this one line if the backend exposes a different route.
-func (c *Client) ImportModelZtcPackage(ctx context.Context, accountName, repoName, hfRepo, idempotencyKey string) (*gen.ImportModelResponse, []byte, error) {
+func (c *Client) ImportModelZtcPackage(ctx context.Context, accountName, repoName, hfRepo string) (*gen.ImportModelResponse, []byte, error) {
 	reqBody, err := json.Marshal(ztcPackageRequest{URI: hfRepo})
 	if err != nil {
 		return nil, nil, err
 	}
 	path := fmt.Sprintf("/v1/repos/%s/%s/models/ztc-package", accountName, repoName)
 	resp, err := c.Do(ctx, http.MethodPost, path, bytes.NewReader(reqBody), map[string]string{
-		"Content-Type":    "application/json",
-		"Idempotency-Key": idempotencyKey,
+		"Content-Type": "application/json",
 	})
 	if err != nil {
 		return nil, nil, err

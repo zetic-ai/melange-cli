@@ -85,6 +85,24 @@
           }
         }
       },
+      "PaymentRequired": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The account cannot pay for the operation. `error.code` names the reason: `credit_balance_exhausted` (no spendable credits — the conversion has not started and nothing was charged; buy credits or wait for the monthly grant, then replay the request) or `subscription_past_due` (payment is past due — fix the payment method on the dashboard).",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "RateLimited": {
         "content": {
           "application/json": {
@@ -117,7 +135,7 @@
             }
           }
         },
-        "description": "A declared file exceeds the per-file size limit; nothing was uploaded.",
+        "description": "A size limit was exceeded and nothing was uploaded or charged. Which limit it was is per-operation: when the refusal comes from a pricing-v3 size gate the response carries an `error.code` naming it, and the operation's own description lists exactly the codes reachable there. A 413 without an `error.code` is a plain request-shape limit (the legacy upload create's per-file cap).",
         "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
@@ -153,7 +171,7 @@
             }
           }
         },
-        "description": "A dependency needed to fulfil the request is temporarily unavailable (e.g. upload URL signing failed); the operation had no lasting effect — retry later.",
+        "description": "A dependency needed to fulfil the request is temporarily unavailable (e.g. upload URL signing failed, or the stored model size could not be verified — `error.code: custom_model_size_unverified`); the operation had no lasting effect — retry later.",
         "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
@@ -179,6 +197,24 @@
               "type": "string"
             }
           },
+          "X-Request-ID": {
+            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpgradeRequired": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "The declared SDK version is past its delivery window (`error.code: sdk_upgrade_required`). Sent only to callers that supply an SDK version header; upgrade the SDK to restore delivery.",
+        "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
             "schema": {
@@ -234,11 +270,26 @@
         "type": "object"
       },
       "BillingPlanResponse": {
-        "description": "The account's effective billing plan identity.",
+        "description": "The account's effective billing plan identity.\n\n`plan` is the legacy tier quotas derive from; `billing_generation` and\n`tier` are the billing identity (`tier` is null for legacy-generation\naccounts, whose identity is `plan` itself).",
         "properties": {
+          "billing_generation": {
+            "description": "Which billing system governs the account: \"v3\" iff a Pricing v3 subscription record exists (in any state), else \"legacy\".",
+            "enum": [
+              "legacy",
+              "v3"
+            ],
+            "title": "Billing Generation",
+            "type": "string"
+          },
           "is_trial": {
             "title": "Is Trial",
             "type": "boolean"
+          },
+          "max_model_bytes": {
+            "description": "The entitlement cap on a custom model's total bytes; preflights only the 413 `custom_model_too_large` refusal. Null means a custom contract, NOT unlimited: the credit ledger separately refuses self-service runs over 20 GB (`credit_model_too_large`).",
+            "nullable": true,
+            "title": "Max Model Bytes",
+            "type": "integer"
           },
           "plan": {
             "enum": [
@@ -251,6 +302,18 @@
             "title": "Plan",
             "type": "string"
           },
+          "tier": {
+            "description": "The Pricing v3 tier the service enforces right now; an inactive (past-due/canceled) v3 subscription reports \"free\". Null for legacy-generation accounts — their identity is `plan`.",
+            "enum": [
+              "free",
+              "pro",
+              "team",
+              "enterprise"
+            ],
+            "nullable": true,
+            "title": "Tier",
+            "type": "string"
+          },
           "trial_ends_at": {
             "format": "date-time",
             "nullable": true,
@@ -260,7 +323,10 @@
         },
         "required": [
           "plan",
-          "is_trial"
+          "is_trial",
+          "billing_generation",
+          "tier",
+          "max_model_bytes"
         ],
         "title": "BillingPlanResponse",
         "type": "object"
@@ -396,7 +462,8 @@
           "model_type": {
             "enum": [
               "general",
-              "llm"
+              "llm",
+              "physical_ai"
             ],
             "title": "Model Type",
             "type": "string"
@@ -450,7 +517,8 @@
           "model_type": {
             "enum": [
               "general",
-              "llm"
+              "llm",
+              "physical_ai"
             ],
             "title": "Model Type",
             "type": "string"
@@ -485,6 +553,7 @@
               "nlp",
               "llm",
               "speech",
+              "physical",
               "other"
             ],
             "nullable": true,
@@ -544,6 +613,48 @@
           "status"
         ],
         "title": "CreateUploadResponse",
+        "type": "object"
+      },
+      "CreditsBalance": {
+        "description": "Benchmark-credit headroom from the ledger, ADVISORY only.\n\n`available > 0` is necessary but NOT sufficient for the next chargeable\nrun: `outstanding_debt` must be 0 (else 409 `credit_debt_outstanding`),\nthe subscription must not be past-due (402), and the charge grows with\nmodel size (1-12 credits by size band; the bands are not published\nhere) — expect 402 `credit_balance_exhausted` when it cannot be met.\n`expiring_credits` is the portion of `available` in the soonest-expiring\ngrants, gone at `expiring_at`.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "expiring_at": {
+            "format": "date-time",
+            "nullable": true,
+            "title": "Expiring At",
+            "type": "string"
+          },
+          "expiring_credits": {
+            "title": "Expiring Credits",
+            "type": "integer"
+          },
+          "monthly_credits": {
+            "nullable": true,
+            "title": "Monthly Credits",
+            "type": "integer"
+          },
+          "outstanding_debt": {
+            "title": "Outstanding Debt",
+            "type": "integer"
+          },
+          "reserved": {
+            "title": "Reserved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "reserved",
+          "outstanding_debt",
+          "monthly_credits",
+          "expiring_credits",
+          "expiring_at"
+        ],
+        "title": "CreditsBalance",
         "type": "object"
       },
       "DeploymentGuideModel": {
@@ -862,6 +973,10 @@
                 "description": "Blocking upload-session id on the create-model-upload active-session conflict (409 only).",
                 "type": "string"
               },
+              "code": {
+                "description": "Specific machine-readable reason within the `type` category (e.g. `credit_balance_exhausted`, `custom_model_too_large`, `sdk_upgrade_required`). Present on Pricing-v3 and SDK-gate refusals; branch on `code` when it is present, on `type` otherwise.",
+                "type": "string"
+              },
               "fields": {
                 "description": "Per-field validation details (422 only).",
                 "items": {
@@ -890,6 +1005,7 @@
                 "enum": [
                   "api_error",
                   "authentication_error",
+                  "billing_error",
                   "conflict_error",
                   "invalid_request_error",
                   "method_not_allowed",
@@ -1262,6 +1378,22 @@
         "title": "ImportModelResponse",
         "type": "object"
       },
+      "ImportZtcPackageRequest": {
+        "description": "POST .../models/ztc-package body — a PUBLIC HuggingFace model repo id\nfor the non-llama.cpp (ZTC package) conversion path, which composes\nprefill+decode into a single wearable `.ztc` via the mentat_hf pipeline.\n\nStaff only. `uri` accepts the same canonical HuggingFace forms as\n`hf_repo` on the import route (e.g. \"org/name\").",
+        "properties": {
+          "uri": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "title": "ImportZtcPackageRequest",
+        "type": "object"
+      },
       "IssuedSessionFile": {
         "properties": {
           "canonical_path": {
@@ -1593,6 +1725,12 @@
             "title": "Best Memory Mb",
             "type": "number"
           },
+          "best_perplexity": {
+            "description": "MIN over this quant's published perplexity records (lower is better; published values are full-budget-comparable — rule LS4). null when the quant has no published perplexity.",
+            "nullable": true,
+            "title": "Best Perplexity",
+            "type": "number"
+          },
           "best_tps": {
             "nullable": true,
             "title": "Best Tps",
@@ -1608,7 +1746,8 @@
           "best_tps",
           "best_ttft_ms",
           "best_memory_mb",
-          "best_accuracy"
+          "best_accuracy",
+          "best_perplexity"
         ],
         "title": "LlmQuantAggregates",
         "type": "object"
@@ -1645,6 +1784,8 @@
               "ttft_ms",
               "prompt_tokens",
               "generated_tokens",
+              "perplexity",
+              "scored_tokens",
               "memory_load_peak_mb",
               "memory_load_min_mb",
               "memory_inference_peak_mb",
@@ -1671,7 +1812,8 @@
               "count",
               "mb",
               "score",
-              "bytes"
+              "bytes",
+              "ppl"
             ],
             "title": "Unit",
             "type": "string"
@@ -1738,6 +1880,16 @@
             "title": "Accuracy",
             "type": "array"
           },
+          "has_perplexity_attempt": {
+            "description": "True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable. Report-global: unaffected by the caller's plan device filter.",
+            "title": "Has Perplexity Attempt",
+            "type": "boolean"
+          },
+          "ppl_min_scored_tokens": {
+            "description": "The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.",
+            "title": "Ppl Min Scored Tokens",
+            "type": "integer"
+          },
           "quants": {
             "additionalProperties": {
               "$ref": "#/components/schemas/LlmQuantAggregates"
@@ -1748,7 +1900,9 @@
         },
         "required": [
           "quants",
-          "accuracy"
+          "accuracy",
+          "has_perplexity_attempt",
+          "ppl_min_scored_tokens"
         ],
         "title": "LlmReportSummary",
         "type": "object"
@@ -1900,6 +2054,11 @@
       },
       "MeToken": {
         "properties": {
+          "aud": {
+            "nullable": true,
+            "title": "Aud",
+            "type": "string"
+          },
           "expires_at": {
             "format": "date-time",
             "nullable": true,
@@ -2488,7 +2647,12 @@
               "tps",
               "ttft_ms",
               "prompt_tokens",
-              "generated_tokens"
+              "generated_tokens",
+              "perplexity",
+              "scored_tokens",
+              "vision_accuracy",
+              "vision_expected_correct",
+              "scored_images"
             ],
             "title": "Metric",
             "type": "string"
@@ -2502,7 +2666,9 @@
               "db",
               "mb",
               "tokens_per_s",
-              "count"
+              "count",
+              "ppl",
+              "rate"
             ],
             "title": "Unit",
             "type": "string"
@@ -2552,7 +2718,7 @@
         "type": "object"
       },
       "PackageReportSummary": {
-        "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode.",
+        "description": "`auto` and `speed` are the same selection in v2 (packages carry no\naccuracy signal); there is no `accuracy` mode. The quality fields below\nare mode-independent (rule PS2).",
         "properties": {
           "auto": {
             "allOf": [
@@ -2561,6 +2727,39 @@
               }
             ],
             "nullable": true
+          },
+          "best_perplexity": {
+            "description": "MIN over the published package perplexity records (lower is better — rule PS2). null when nothing publishable exists.",
+            "nullable": true,
+            "title": "Best Perplexity",
+            "type": "number"
+          },
+          "has_perplexity_attempt": {
+            "description": "True when ANY source run attempted a perplexity measurement, including attempts that produced nothing publishable (report-global).",
+            "title": "Has Perplexity Attempt",
+            "type": "boolean"
+          },
+          "has_vision_accuracy_attempt": {
+            "description": "True when ANY source run attempted a vision-accuracy measurement, including attempts that produced nothing publishable (report-global).",
+            "title": "Has Vision Accuracy Attempt",
+            "type": "boolean"
+          },
+          "pooled_vision_accuracy": {
+            "description": "Sum of vision_expected_correct over sum of scored_images across the PUBLISHED runs, using exact numerators (4 decimals). This report-wide pooling is deliberately distinct from the dashboard's per-device pooling and from model selection's per-run-configuration pooling — the three are different numbers for the same package and are not reconcilable.",
+            "nullable": true,
+            "title": "Pooled Vision Accuracy",
+            "type": "number"
+          },
+          "ppl_min_scored_tokens": {
+            "description": "The backend's reliability threshold: perplexity records are published only for runs that scored at least this many tokens.",
+            "title": "Ppl Min Scored Tokens",
+            "type": "integer"
+          },
+          "scored_images": {
+            "description": "Total images behind pooled_vision_accuracy (sample-size trust calibration). null when no vision run is published.",
+            "nullable": true,
+            "title": "Scored Images",
+            "type": "integer"
           },
           "speed": {
             "allOf": [
@@ -2573,7 +2772,13 @@
         },
         "required": [
           "auto",
-          "speed"
+          "speed",
+          "best_perplexity",
+          "pooled_vision_accuracy",
+          "scored_images",
+          "has_perplexity_attempt",
+          "has_vision_accuracy_attempt",
+          "ppl_min_scored_tokens"
         ],
         "title": "PackageReportSummary",
         "type": "object"
@@ -3055,6 +3260,7 @@
               "nlp",
               "llm",
               "speech",
+              "physical",
               "other"
             ],
             "title": "Use Case",
@@ -3103,6 +3309,9 @@
           "bandwidth": {
             "$ref": "#/components/schemas/QuotaItem"
           },
+          "credits": {
+            "$ref": "#/components/schemas/CreditsBalance"
+          },
           "model_uploads": {
             "$ref": "#/components/schemas/QuotaItem"
           },
@@ -3114,7 +3323,8 @@
           "bandwidth",
           "model_uploads",
           "active_devices",
-          "prompts"
+          "prompts",
+          "credits"
         ],
         "title": "UsageQuotasResponse",
         "type": "object"
@@ -3194,7 +3404,7 @@
   "paths": {
     "/v1/billing/plan": {
       "get": {
-        "description": "Effective billing plan for the token's account.\n\n`plan` is the entitlement tier quotas derive from (a trial grant reports\nthe granted tier with `is_trial: true`). Use `/usage/quotas` for the\nper-counter headroom.",
+        "description": "Effective billing plan for the token's account.\n\n`plan` is the legacy tier quotas derive from (a trial grant reports the\ngranted tier with `is_trial: true`). `billing_generation` and `tier` are\nthe billing identity; `tier` is null for legacy-generation accounts,\nwhose identity is `plan` itself. Use `/usage/quotas` for the per-counter\nheadroom.",
         "operationId": "get_billing_plan",
         "parameters": [],
         "responses": {
@@ -3287,6 +3497,7 @@
                   "nlp",
                   "llm",
                   "speech",
+                  "physical",
                   "other"
                 ],
                 "type": "string"
@@ -3679,7 +3890,7 @@
       },
       "post": {
         "deprecated": true,
-        "description": "Start an upload session. Returns presigned PUT URLs for each requested file.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
+        "description": "Start an upload session. Returns presigned PUT URLs for each requested file.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`. This operation also answers 413 without an `error.code` when a declared file exceeds the per-file upload size limit.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_create_upload",
         "parameters": [
           {
@@ -3880,7 +4091,7 @@
     "/v1/projects/{project_name}/uploads/{upload_id}/complete": {
       "post": {
         "deprecated": true,
-        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
+        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_complete_upload",
         "parameters": [
           {
@@ -3929,6 +4140,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -3937,6 +4151,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4448,7 +4665,7 @@
         ]
       },
       "post": {
-        "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.",
+        "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.",
         "operationId": "create_model_upload",
         "parameters": [
           {
@@ -4538,6 +4755,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -4564,7 +4784,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/import": {
       "post": {
-        "description": "Register an LLM model from a public HuggingFace repo.\n\nReturns 201 with the created model reference; conversion continues\nasynchronously (poll `get_model_status`). An `Idempotency-Key` replay of\nthe same body returns the original model with 200. The repository must\nhave `model_type` \"llm\".",
+        "description": "Register an LLM model from a public HuggingFace repo.\n\nReturns 201 with the created model reference; conversion continues\nasynchronously (poll `get_model_status`). An `Idempotency-Key` replay of\nthe same body returns the original model with 200. The repository must\nhave `model_type` \"llm\".\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.",
         "operationId": "import_model",
         "parameters": [
           {
@@ -4623,6 +4843,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -4632,6 +4855,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -4640,6 +4866,9 @@
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
         "security": [
@@ -4863,7 +5092,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete": {
       "post": {
-        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed — not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.\n\nSession expiry is deliberately not checked here: an expired session the\ncleanup sweep has not processed yet may still complete (the sweep\nre-checks state under a lock, so the race resolves to one winner).\n\nIf the account's conversion quota is exhausted the request returns the\nstandard 429 `rate_limit_error`: the conversion has NOT started and the\nsession stays DISPATCH_PENDING — complete again after resolving the\nquota to retry the dispatch.",
+        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed — not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.\n\nSession expiry is deliberately not checked here: an expired session the\ncleanup sweep has not processed yet may still complete (the sweep\nre-checks state under a lock, so the race resolves to one winner).\n\nIf the account's conversion quota is exhausted the request returns the\nstandard 429 `rate_limit_error`: the conversion has NOT started and the\nsession stays DISPATCH_PENDING — complete again after resolving the\nquota to retry the dispatch.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.",
         "operationId": "complete_model_upload",
         "parameters": [
           {
@@ -4911,6 +5140,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
@@ -4919,6 +5151,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5034,6 +5269,93 @@
           }
         ],
         "summary": "Reissue Upload Files",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/repos/{account_name}/{repo_name}/models/ztc-package": {
+      "post": {
+        "description": "Register a ZTC-package (non-llama.cpp) LLM conversion from a public\nHuggingFace repo.\n\nThe ZTC-package path composes the prefill and decode graphs into a single\nchip-targeted `.ztc` via the mentat_hf pipeline — the wearable/NPU package,\nas opposed to the default llama.cpp (GGUF) import. This is the PAT-auth\npublic twin of the internal `/p/{project}/models/ztc-package` route the web\nUI's \"Enable non llamacpp conversion\" toggle calls, and it enforces the same\nstaff-only entitlement.\n\nReturns 201 with the created model reference; conversion continues\nasynchronously (poll `get_model_status`). The repository must have\n`model_type` \"llm\".\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.",
+        "operationId": "import_ztc_package_model",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_name",
+            "required": true,
+            "schema": {
+              "title": "Account Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repo_name",
+            "required": true,
+            "schema": {
+              "title": "Repo Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportZtcPackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportModelResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Import Ztc Package Model",
         "tags": [
           "models"
         ]
@@ -5645,7 +5967,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations": {
       "post": {
-        "description": "Authorize downloading a converted target's artifacts (BILLABLE).\n\nCharges the target's aggregate `download_size` against the CALLER's\nbandwidth quota — also for public models owned by others. Over quota is\na 429 with nothing charged and no row created. Returns signed GET URLs\nvalid until `expires_at` (about one hour).\n\nWith an `Idempotency-Key`, replaying returns the original authorization\n(200) with fresh URLs and does NOT charge again; without one, EVERY\ncall charges. The key is scoped to the caller's account; reusing it for\na different target is a 409.",
+        "description": "Authorize downloading a converted target's artifacts (BILLABLE).\n\nCharges the target's aggregate `download_size` against the CALLER's\nbandwidth quota — also for public models owned by others. Over quota is\na 429 with nothing charged and no row created. Returns signed GET URLs\nvalid until `expires_at` (about one hour).\n\nWith an `Idempotency-Key`, replaying returns the original authorization\n(200) with fresh URLs and does NOT charge again; without one, EVERY\ncall charges. The key is scoped to the caller's account; reusing it for\na different target is a 409.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.",
         "operationId": "create_download_authorization",
         "parameters": [
           {
@@ -5746,6 +6068,9 @@
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
+          "426": {
+            "$ref": "#/components/responses/UpgradeRequired"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -5809,7 +6134,7 @@
     },
     "/v1/usage/quotas": {
       "get": {
-        "description": "Usage against the account's plan quotas.\n\nEach counter reports `{used, limit, remaining}`; null means unlimited.\n`remaining` is what enforcement would allow right now (spike headroom\nincluded, floored at 0) — preflight on `remaining`, not `limit - used`.",
+        "description": "Usage against the account's plan quotas, plus credit headroom.\n\nEach counter reports `{used, limit, remaining}`; null means unlimited.\n`remaining` is what enforcement would allow right now (spike headroom\nincluded, floored at 0) — preflight on `remaining`, not `limit - used`.\n\n`credits` is ADVISORY headroom, not a sufficient preflight for a\nchargeable benchmark run: `model_uploads.remaining > 0` and\n`credits.available > 0` are necessary but not sufficient —\n`credits.outstanding_debt` must also be 0 (else 409\n`credit_debt_outstanding`), the subscription must not be past-due (402),\nand the charge grows with model size (1-12 credits by size band; the\nbands are not published here) — expect 402 `credit_balance_exhausted`\nwhen it cannot be met.",
         "operationId": "get_usage_quotas",
         "parameters": [],
         "responses": {

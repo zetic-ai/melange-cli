@@ -3,5 +3,5 @@
 # copied here verbatim; re-sync with `make fixtures-check`.
 # line 1: source commit in zetic_backend
 # line 2: sha256 of the concatenated fixture JSON payloads
-97f414c74f421341686f54b0eb2141e958aa44a1
-c5ff57025edc08d99c6bf3d5bd94805a09989a4379b2e532d8d5b8d2d58da50d
+0de5f08a36b70bd734be14a022a7881875ef02e9
+8f81455c4518b632e4a3a93d51e9b4216c22878050f9321efd42c1e7e457b070

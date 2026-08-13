@@ -7,7 +7,7 @@
   },
   "response": {
     "body": {
-      "derivation_version": 3,
+      "derivation_version": 4,
       "model": {
         "key": "<uuid>",
         "version": 1

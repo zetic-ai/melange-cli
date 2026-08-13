@@ -15,6 +15,13 @@ terminal state.
 Each invocation carries a fresh Idempotency-Key so transient failures can be
 retried automatically within that invocation without creating a second import.
 Running the command again starts a new import request.
+
+--ztc-package is the exception: that route does not accept an idempotency
+key, so the request is never retried automatically. A transient failure
+there leaves the outcome ambiguous — the server may still have registered
+the import and reserved its credits. Check "melange model list" before
+running it again, or the second run converts (and charges for) the model
+twice.
 Pinning a HuggingFace revision is not supported yet: imports always use
 the repository's current default-branch head.
 

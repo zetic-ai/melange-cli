@@ -374,6 +374,56 @@ func TestReportLLMTable(t *testing.T) {
 	assert.Contains(t, out, "mmlu")
 }
 
+// llmFixtureWithPPL extends llmFixture with perplexity records: two Pixel
+// Q4_0 measurements (the LOWER one must win the cell) and none for Q8_0
+// (that cell renders "-").
+func llmFixtureWithPPL() string {
+	recs := []string{
+		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","variant":"v1","quant_type":"Q4_0","dataset":null,"run":0,"metric":"tps","value":42.5,"unit":"tokens_per_s"}`,
+		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","variant":"v1","quant_type":"Q8_0","dataset":null,"run":0,"metric":"tps","value":30.0,"unit":"tokens_per_s"}`,
+		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","variant":"v1","quant_type":"Q4_0","dataset":null,"run":0,"metric":"perplexity","value":9.87,"unit":"perplexity"}`,
+		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"ap_type":"npu","variant":"v2","quant_type":"Q4_0","dataset":null,"run":0,"metric":"perplexity","value":10.42,"unit":"perplexity"}`,
+	}
+	summary := `{"quants":{"Q4_0":{"best_tps":42.5,"best_ttft_ms":10,"best_memory_mb":100,"best_accuracy":0.9,"best_perplexity":9.87},"Q8_0":{"best_tps":30,"best_ttft_ms":12,"best_memory_mb":120,"best_accuracy":0.95,"best_perplexity":null}},` +
+		`"accuracy":[{"quant_type":"Q4_0","dataset":"mmlu","score":0.9},{"quant_type":"Q8_0","dataset":"mmlu","score":0.95}],` +
+		`"has_perplexity_attempt":true,"ppl_min_scored_tokens":201}`
+	return fmt.Sprintf(`{"derivation_version":1,"model":{"key":"m_x","version":1},"records":[%s],"summary":%s}`,
+		strings.Join(recs, ","), summary)
+}
+
+func TestReportLLMPerplexitySection(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	e.reg.Register(httpmock.REST("GET", llmPath), jsonStub(200, llmFixtureWithPPL()))
+
+	require.NoError(t, run(t, e, "--no-color", "report", "view", "m_x", "-R", "zetic/whisper", "--type", "llm"))
+
+	out := e.out.String()
+	assert.Contains(t, out, "Perplexity (lower is better):")
+	// The section follows the Accuracy section.
+	assert.Less(t, strings.Index(out, "Accuracy:"), strings.Index(out, "Perplexity (lower is better):"))
+	section := out[strings.Index(out, "Perplexity (lower is better):"):]
+	pixelLine := lineWith(t, section, "Pixel")
+	assert.Contains(t, pixelLine, "9.87", "the MIN perplexity record fills the (Pixel, Q4_0) cell")
+	assert.NotContains(t, pixelLine, "10.42", "the higher record must not win")
+	assert.Contains(t, pixelLine, "-", "Q8_0 has no perplexity record")
+}
+
+// A report without perplexity records must render byte-identically to the
+// pre-change output: the section is rendered only when a record exists.
+func TestReportLLMWithoutPerplexityIsByteIdentical(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	e.reg.Register(httpmock.REST("GET", llmPath), jsonStub(200, llmFixture()))
+
+	require.NoError(t, run(t, e, "--no-color", "report", "view", "m_x", "-R", "zetic/whisper", "--type", "llm"))
+
+	// Captured verbatim from the pre-change rendering of llmFixture().
+	want := "DEVICE  Q4_0  Q8_0\n──────  ────  ────\nPixel   42.5  30.0\n\n" +
+		"Accuracy:\nDATASET  QUANT  SCORE\n───────  ─────  ─────\nmmlu     Q4_0   0.9\nmmlu     Q8_0   0.9\n"
+	assert.Equal(t, want, e.out.String())
+}
+
 func packageFixture() string {
 	recs := []string{
 		`{"device":{"marketing_name":"Pixel","name":"Pixel"},"run_configuration":{"package":"pkg","id":1,"configuration":null},"metric":"tps","value":50,"unit":"tokens_per_s"}`,
@@ -397,6 +447,36 @@ func TestReportPackageTable(t *testing.T) {
 	assert.Contains(t, out, "speed")
 	assert.Contains(t, out, "50.0", "median tps")
 	assert.Contains(t, out, "200.0", "median memory")
+}
+
+func TestReportPackageQualitySection(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	body := strings.Replace(packageFixture(), `"summary":{`,
+		`"summary":{"best_perplexity":12.34,"pooled_vision_accuracy":0.6524,"scored_images":45,`+
+			`"has_perplexity_attempt":true,"has_vision_accuracy_attempt":true,"ppl_min_scored_tokens":201,`, 1)
+	e.reg.Register(httpmock.REST("GET", packagePath), jsonStub(200, body))
+
+	require.NoError(t, run(t, e, "--no-color", "report", "view", "m_x", "-R", "zetic/whisper", "--type", "package"))
+
+	out := e.out.String()
+	assert.Contains(t, out, "Quality:")
+	assert.Contains(t, lineWith(t, out, "Perplexity (best)"), "12.34")
+	visionLine := lineWith(t, out, "Vision accuracy")
+	assert.Contains(t, visionLine, "0.6524")
+	assert.Contains(t, visionLine, "(45 images)")
+}
+
+// A summary without published quality values renders no Quality section, so
+// legacy package reports keep their exact output.
+func TestReportPackageWithoutQualityOmitsSection(t *testing.T) {
+	e := setup(t)
+	e.f.IOStreams.SetStdoutTTY(true)
+	e.reg.Register(httpmock.REST("GET", packagePath), jsonStub(200, packageFixture()))
+
+	require.NoError(t, run(t, e, "--no-color", "report", "view", "m_x", "-R", "zetic/whisper", "--type", "package"))
+
+	assert.NotContains(t, e.out.String(), "Quality:")
 }
 
 func TestReportPackageNonTTYRecordPerLine(t *testing.T) {

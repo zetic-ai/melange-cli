@@ -7,7 +7,7 @@
   },
   "response": {
     "body": {
-      "derivation_version": 3,
+      "derivation_version": 4,
       "model": {
         "key": "<uuid>",
         "version": 1
@@ -102,6 +102,96 @@
           },
           "unit": "count",
           "value": 64.0
+        },
+        {
+          "device": {
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os": "15",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "perplexity",
+          "run_configuration": {
+            "configuration": {
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "ppl",
+          "value": 11.03
+        },
+        {
+          "device": {
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os": "15",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "scored_tokens",
+          "run_configuration": {
+            "configuration": {
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "count",
+          "value": 280.0
+        },
+        {
+          "device": {
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os": "15",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "vision_accuracy",
+          "run_configuration": {
+            "configuration": {
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "rate",
+          "value": 0.6524
+        },
+        {
+          "device": {
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os": "15",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "vision_expected_correct",
+          "run_configuration": {
+            "configuration": {
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "count",
+          "value": 29.36
+        },
+        {
+          "device": {
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os": "15",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "scored_images",
+          "run_configuration": {
+            "configuration": {
+              "threads": 4
+            },
+            "id": 7,
+            "package": "pkg-fixture-1"
+          },
+          "unit": "count",
+          "value": 45.0
         }
       ],
       "summary": {
@@ -125,6 +215,12 @@
             "min": 150.0
           }
         },
+        "best_perplexity": 11.03,
+        "has_perplexity_attempt": true,
+        "has_vision_accuracy_attempt": true,
+        "pooled_vision_accuracy": 0.6524,
+        "ppl_min_scored_tokens": 201,
+        "scored_images": 45,
         "speed": {
           "memory_inference_peak_mb": {
             "avg": 512.0,

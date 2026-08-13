@@ -7,11 +7,29 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/zetic-ai/melange-cli/internal/api/gen"
+)
+
+// Record metric names the summaries key on. The general, LLM and package
+// paths share one vocabulary, so the literals live here instead of being
+// re-spelled at every call site.
+const (
+	metricLatencyMs             = "latency_ms"
+	metricSnrDb                 = "snr_db"
+	metricMemoryLoadPeakMb      = "memory_load_peak_mb"
+	metricMemoryLoadMinMb       = "memory_load_min_mb"
+	metricMemoryInferencePeakMb = "memory_inference_peak_mb"
+	metricMemoryInferenceMinMb  = "memory_inference_min_mb"
+	metricTps                   = "tps"
+	metricTtftMs                = "ttft_ms"
+	metricAccuracyScore         = "accuracy_score"
+	metricPerplexity            = "perplexity"
+	metricVisionExpectedCorrect = "vision_expected_correct"
+	metricScoredImages          = "scored_images"
 )
 
 // ErrNoQualcommMeasurements means a report carried no approved Qualcomm
@@ -238,17 +256,27 @@ func filterLLMReport(body []byte) ([]byte, error) {
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("decoding llm report: %w", err)
 	}
-	filtered := make([]gen.LlmReportRecord, 0, len(response.Records))
-	meta, matched := filterDevices(response.Records,
-		func(r gen.LlmReportRecord) *gen.ReportDevice { return r.Device },
-		func(r gen.LlmReportRecord) bool { return string(r.Metric) == "accuracy_score" },
-		func(r gen.LlmReportRecord) { filtered = append(filtered, r) },
+	exact, err := exactRecords(body, len(response.Records))
+	if err != nil {
+		return nil, fmt.Errorf("decoding llm report: %w", err)
+	}
+	kept := make([]int, 0, len(response.Records))
+	meta, matched := filterDevices(indexes(len(response.Records)),
+		func(i int) *gen.ReportDevice { return response.Records[i].Device },
+		// Device-less records (accuracy, model size) are model-level, not
+		// device benchmarks: they are retained, never fleet-filtered.
+		func(int) bool { return true },
+		func(i int) { kept = append(kept, i) },
 	)
 	if len(matched) == 0 {
 		return nil, noMeasurementsError(meta)
 	}
+	filtered := make([]gen.LlmReportRecord, 0, len(kept))
+	for _, i := range kept {
+		filtered = append(filtered, response.Records[i])
+	}
 	response.Records = filtered
-	response.Summary = summarizeLLM(filtered)
+	response.Summary = summarizeLLM(pick(exact, kept), response.Summary)
 	meta.MatchedDevices = len(matched)
 	return json.Marshal(struct {
 		gen.LlmReportResponse
@@ -261,18 +289,107 @@ func filterPackageReport(body []byte) ([]byte, error) {
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("decoding package report: %w", err)
 	}
-	filtered := make([]gen.PackageReportRecord, 0, len(response.Records))
-	meta, matched := filterDevices(response.Records, func(r gen.PackageReportRecord) *gen.ReportDevice { return &r.Device }, nil, func(r gen.PackageReportRecord) { filtered = append(filtered, r) })
+	exact, err := exactRecords(body, len(response.Records))
+	if err != nil {
+		return nil, fmt.Errorf("decoding package report: %w", err)
+	}
+	kept := make([]int, 0, len(response.Records))
+	meta, matched := filterDevices(indexes(len(response.Records)),
+		func(i int) *gen.ReportDevice { return &response.Records[i].Device },
+		nil,
+		func(i int) { kept = append(kept, i) },
+	)
 	if len(matched) == 0 {
 		return nil, noMeasurementsError(meta)
 	}
+	filtered := make([]gen.PackageReportRecord, 0, len(kept))
+	for _, i := range kept {
+		filtered = append(filtered, response.Records[i])
+	}
 	response.Records = filtered
-	response.Summary = summarizePackage(filtered)
+	response.Summary = summarizePackage(pick(exact, kept), response.Summary, droppedQualityRecord(exact, kept))
 	meta.MatchedDevices = len(matched)
 	return json.Marshal(struct {
 		gen.PackageReportResponse
 		QualcommFilter reportFilterMeta `json:"qualcomm_filter"`
 	}{response, meta})
+}
+
+// exactRecord is a float64 view of one report record, parsed from the SAME
+// `records` array as the generated structs and kept index-aligned with them.
+//
+// The generated client types `value` as float32 (the width the contract
+// declares), which transports a served value fine but cannot re-derive one:
+// the backend pools vision accuracy in float64, and float32 inputs move the
+// 4-decimal result (15.4/160 lands on 0.0962 instead of 0.0963). Summaries are
+// therefore recomputed from this view, never from the generated records.
+type exactRecord struct {
+	Metric           string           `json:"metric"`
+	Value            float64          `json:"value"`
+	Dataset          *string          `json:"dataset"`
+	QuantType        *string          `json:"quant_type"`
+	Device           gen.ReportDevice `json:"device"`
+	RunConfiguration exactRunConfig   `json:"run_configuration"`
+}
+
+type exactRunConfig struct {
+	Id      int     `json:"id"`
+	Package *string `json:"package"`
+}
+
+func exactValue(r exactRecord) (string, float64) { return r.Metric, r.Value }
+
+// exactRecords parses body's `records` array as the float64 view. The count is
+// asserted against the generated slice so the two stay index-aligned: every
+// downstream lookup addresses both by the same position.
+func exactRecords(body []byte, decoded int) ([]exactRecord, error) {
+	var doc struct {
+		Records []exactRecord `json:"records"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, err
+	}
+	if len(doc.Records) != decoded {
+		return nil, fmt.Errorf("record view desynchronized: %d exact records for %d decoded records", len(doc.Records), decoded)
+	}
+	return doc.Records, nil
+}
+
+// indexes returns 0..n-1 so filterDevices can run over record positions rather
+// than over one record type, which keeps the generated records and their
+// float64 view aligned under the same predicate and order.
+func indexes(n int) []int {
+	out := make([]int, n)
+	for i := range out {
+		out[i] = i
+	}
+	return out
+}
+
+// pick returns the elements at the given (ascending) positions.
+func pick[T any](values []T, positions []int) []T {
+	out := make([]T, 0, len(positions))
+	for _, i := range positions {
+		out = append(out, values[i])
+	}
+	return out
+}
+
+// droppedQualityRecord reports whether the fleet filter removed any record the
+// package summary's quality fields derive from. positions is ascending.
+func droppedQualityRecord(all []exactRecord, positions []int) bool {
+	next := 0
+	for i, record := range all {
+		if next < len(positions) && positions[next] == i {
+			next++
+			continue
+		}
+		switch record.Metric {
+		case metricPerplexity, metricVisionExpectedCorrect, metricScoredImages:
+			return true
+		}
+	}
+	return false
 }
 
 func filterDevices[T any](records []T, device func(T) *gen.ReportDevice, keepUnscoped func(T) bool, keep func(T)) (reportFilterMeta, map[deviceIdentity]struct{}) {
@@ -346,16 +463,16 @@ func summarizeGeneral(records []gen.GeneralReportRecord) gen.GeneralReportSummar
 	}
 	return gen.GeneralReportSummary{
 		LatencyMs: gen.GeneralLatencySummary{
-			All:  stats(generalValues(buckets["all"], "latency_ms")),
-			Fp16: stats(generalValues(buckets["fp16"], "latency_ms")),
-			Fp32: stats(generalValues(buckets["fp32"], "latency_ms")),
-			Int8: stats(generalValues(buckets["int8"], "latency_ms")),
+			All:  stats(metricValues(buckets["all"], metricLatencyMs, generalValue)),
+			Fp16: stats(metricValues(buckets["fp16"], metricLatencyMs, generalValue)),
+			Fp32: stats(metricValues(buckets["fp32"], metricLatencyMs, generalValue)),
+			Int8: stats(metricValues(buckets["int8"], metricLatencyMs, generalValue)),
 		},
 		SnrDb: gen.GeneralSnrSummary{
-			All:  minMax(generalValues(buckets["all"], "snr_db")),
-			Fp16: minMax(generalValues(buckets["fp16"], "snr_db")),
-			Fp32: minMax(generalValues(buckets["fp32"], "snr_db")),
-			Int8: minMax(generalValues(buckets["int8"], "snr_db")),
+			All:  minMax(metricValues(buckets["all"], metricSnrDb, generalValue)),
+			Fp16: minMax(metricValues(buckets["fp16"], metricSnrDb, generalValue)),
+			Fp32: minMax(metricValues(buckets["fp32"], metricSnrDb, generalValue)),
+			Int8: minMax(metricValues(buckets["int8"], metricSnrDb, generalValue)),
 		},
 		MemoryMb: gen.GeneralMemorySummary{
 			All:  memoryBounds(buckets["all"]),
@@ -366,33 +483,41 @@ func summarizeGeneral(records []gen.GeneralReportRecord) gen.GeneralReportSummar
 	}
 }
 
-func generalValues(records []gen.GeneralReportRecord, metric string) []float32 {
-	values := []float32{}
+// metricValues is the one metric collector every summary path uses: value
+// reads a record's (metric name, value) pair, so the same helper serves the
+// generated general records and the float64 record view alike. Values are
+// float64 because that is the width the backend aggregates in.
+func metricValues[T any](records []T, metric string, value func(T) (string, float64)) []float64 {
+	values := []float64{}
 	for _, record := range records {
-		if string(record.Metric) == metric {
-			values = append(values, record.Value)
+		if name, v := value(record); name == metric {
+			values = append(values, v)
 		}
 	}
 	return values
 }
 
-func stats(values []float32) *gen.ReportStats {
+func generalValue(r gen.GeneralReportRecord) (string, float64) {
+	return string(r.Metric), float64(r.Value)
+}
+
+func stats(values []float64) *gen.ReportStats {
 	if len(values) == 0 {
 		return nil
 	}
-	ordered := append([]float32(nil), values...)
-	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
+	ordered := append([]float64(nil), values...)
+	sort.Float64s(ordered)
 	var sum float64
 	for _, value := range ordered {
-		sum += float64(value)
+		sum += value
 	}
 	return &gen.ReportStats{
 		Min: round2(ordered[0]), Max: round2(ordered[len(ordered)-1]),
-		Median: round2(ordered[len(ordered)/2]), Avg: round2(float32(sum / float64(len(ordered)))),
+		Median: round2(ordered[len(ordered)/2]), Avg: round2(sum / float64(len(ordered))),
 	}
 }
 
-func minMax(values []float32) *gen.ReportMinMax {
+func minMax(values []float64) *gen.ReportMinMax {
 	if len(values) == 0 {
 		return nil
 	}
@@ -409,8 +534,8 @@ func minMax(values []float32) *gen.ReportMinMax {
 }
 
 func memoryBounds(records []gen.GeneralReportRecord) *gen.ReportMemoryBounds {
-	load := append(generalValues(records, "memory_load_peak_mb"), generalValues(records, "memory_load_min_mb")...)
-	inference := append(generalValues(records, "memory_inference_peak_mb"), generalValues(records, "memory_inference_min_mb")...)
+	load := append(metricValues(records, metricMemoryLoadPeakMb, generalValue), metricValues(records, metricMemoryLoadMinMb, generalValue)...)
+	inference := append(metricValues(records, metricMemoryInferencePeakMb, generalValue), metricValues(records, metricMemoryInferenceMinMb, generalValue)...)
 	if len(load) == 0 && len(inference) == 0 {
 		return nil
 	}
@@ -424,54 +549,68 @@ func memoryBounds(records []gen.GeneralReportRecord) *gen.ReportMemoryBounds {
 	return result
 }
 
-func summarizeLLM(records []gen.LlmReportRecord) gen.LlmReportSummary {
-	byQuant := map[string][]gen.LlmReportRecord{}
+// summarizeLLM recomputes per-quant aggregates from the filtered records.
+// The attempt flag and reliability threshold are report-global policy facts:
+// they COPY through from the served summary, never recomputed from the
+// filtered slice.
+func summarizeLLM(records []exactRecord, served gen.LlmReportSummary) gen.LlmReportSummary {
+	byQuant := map[string][]exactRecord{}
 	accuracy := []gen.LlmAccuracyEntry{}
 	for _, record := range records {
 		if record.QuantType != nil {
 			byQuant[*record.QuantType] = append(byQuant[*record.QuantType], record)
 		}
-		if string(record.Metric) == "accuracy_score" {
-			accuracy = append(accuracy, gen.LlmAccuracyEntry{Dataset: record.Dataset, QuantType: record.QuantType, Score: record.Value})
+		if record.Metric == metricAccuracyScore {
+			accuracy = append(accuracy, gen.LlmAccuracyEntry{Dataset: record.Dataset, QuantType: record.QuantType, Score: float32(record.Value)})
 		}
 	}
 	quants := map[string]gen.LlmQuantAggregates{}
 	for quant, rows := range byQuant {
 		quants[quant] = gen.LlmQuantAggregates{
-			BestTps:      maxValue(llmValues(rows, "tps")),
-			BestTtftMs:   minValue(llmValues(rows, "ttft_ms")),
-			BestMemoryMb: minValue(llmValues(rows, "memory_inference_peak_mb")),
-			BestAccuracy: maxValue(llmValues(rows, "accuracy_score")),
+			BestTps:        maxValue(metricValues(rows, metricTps, exactValue)),
+			BestTtftMs:     minValue(metricValues(rows, metricTtftMs, exactValue)),
+			BestMemoryMb:   minValue(metricValues(rows, metricMemoryInferencePeakMb, exactValue)),
+			BestAccuracy:   maxValue(metricValues(rows, metricAccuracyScore, exactValue)),
+			BestPerplexity: minValueExact(metricValues(rows, metricPerplexity, exactValue)),
 		}
 	}
-	return gen.LlmReportSummary{Quants: quants, Accuracy: accuracy}
-}
-
-func llmValues(records []gen.LlmReportRecord, metric string) []float32 {
-	values := []float32{}
-	for _, record := range records {
-		if string(record.Metric) == metric {
-			values = append(values, record.Value)
-		}
+	return gen.LlmReportSummary{
+		Quants:               quants,
+		Accuracy:             accuracy,
+		HasPerplexityAttempt: served.HasPerplexityAttempt,
+		PplMinScoredTokens:   served.PplMinScoredTokens,
 	}
-	return values
 }
 
-func minValue(values []float32) *float32 {
+func minValue(values []float64) *float32 {
 	if len(values) == 0 {
 		return nil
 	}
+	rounded := round2(minOf(values))
+	return &rounded
+}
+
+// minValueExact keeps the published value as served: perplexity minima are
+// already rounded by the backend, so re-rounding could only move them.
+func minValueExact(values []float64) *float32 {
+	if len(values) == 0 {
+		return nil
+	}
+	value := float32(minOf(values))
+	return &value
+}
+
+func minOf(values []float64) float64 {
 	value := values[0]
 	for _, candidate := range values[1:] {
 		if candidate < value {
 			value = candidate
 		}
 	}
-	value = round2(value)
-	return &value
+	return value
 }
 
-func maxValue(values []float32) *float32 {
+func maxValue(values []float64) *float32 {
 	if len(values) == 0 {
 		return nil
 	}
@@ -481,54 +620,179 @@ func maxValue(values []float32) *float32 {
 			value = candidate
 		}
 	}
-	value = round2(value)
-	return &value
+	rounded := round2(value)
+	return &rounded
 }
 
-func summarizePackage(records []gen.PackageReportRecord) gen.PackageReportSummary {
-	type runKey struct {
-		device, pkg string
-		id          int
+// summarizePackage rebuilds the package summary over the records this edition
+// kept. The attempt flags and the reliability threshold are report-global
+// policy facts: they COPY through from the served summary, never recomputed.
+//
+// The quality fields (best_perplexity, pooled_vision_accuracy, scored_images)
+// take one of two paths:
+//
+//  1. Copy-through, when droppedQuality is false. The Qualcomm filter only
+//     ever REMOVES records, so if it dropped no perplexity and no vision
+//     record then the served summary already IS the summary of the retained
+//     set. Copying it verbatim is exact by construction, which keeps the
+//     common all-Qualcomm fleet byte-identical to the backend instead of
+//     merely close to it.
+//
+//  2. Re-derivation, once a quality record WAS dropped. This is a
+//     re-derivation over the VISIBLE fleet: it is not expected to equal the
+//     served summary, because the served summary covers devices this edition
+//     hides. Pooling is Σ(vision_expected_correct)/Σ(scored_images) over runs,
+//     rounded the way the backend's round(x, 4) rounds.
+func summarizePackage(records []exactRecord, served gen.PackageReportSummary, droppedQuality bool) gen.PackageReportSummary {
+	runs, order := groupPackageRuns(records)
+
+	summary := gen.PackageReportSummary{
+		BestPerplexity:           served.BestPerplexity,
+		PooledVisionAccuracy:     served.PooledVisionAccuracy,
+		ScoredImages:             served.ScoredImages,
+		HasPerplexityAttempt:     served.HasPerplexityAttempt,
+		HasVisionAccuracyAttempt: served.HasVisionAccuracyAttempt,
+		PplMinScoredTokens:       served.PplMinScoredTokens,
 	}
-	runs := map[runKey]map[string]float32{}
-	for _, record := range records {
-		key := runKey{device: normalize(deref(record.Device.MarketingName)) + "\x00" + normalize(deref(record.Device.Soc)), pkg: deref(record.RunConfiguration.Package), id: record.RunConfiguration.Id}
-		if runs[key] == nil {
-			runs[key] = map[string]float32{}
-		}
-		runs[key][string(record.Metric)] = record.Value
+	if droppedQuality {
+		summary.BestPerplexity = minValueExact(metricValues(records, metricPerplexity, exactValue))
+		summary.PooledVisionAccuracy, summary.ScoredImages = poolVisionAccuracy(runs, order)
 	}
-	winners := map[string]map[string]float32{}
-	for key, metrics := range runs {
-		tps, ok := metrics["tps"]
+
+	// PS1: one best-tps winner per device. Devices are walked in record order
+	// so a tps tie resolves to the same run on every run of the binary.
+	best := map[string]*packageRun{}
+	devices := []string{}
+	for _, key := range order {
+		run := runs[key]
+		tps, ok := run.metrics[metricTps]
 		if !ok {
 			continue
 		}
-		current, exists := winners[key.device]
-		if !exists || tps > current["tps"] {
-			winners[key.device] = metrics
+		current, exists := best[key.device]
+		if !exists {
+			best[key.device] = run
+			devices = append(devices, key.device)
+			continue
+		}
+		if tps > current.metrics[metricTps] {
+			best[key.device] = run
 		}
 	}
-	if len(winners) == 0 {
-		return gen.PackageReportSummary{}
+	if len(devices) == 0 {
+		return summary
 	}
-	values := func(metric string) []float32 {
-		out := []float32{}
-		for _, winner := range winners {
-			if value, ok := winner[metric]; ok {
+	values := func(metric string) []float64 {
+		out := []float64{}
+		for _, device := range devices {
+			if value, ok := best[device].metrics[metric]; ok {
 				out = append(out, value)
 			}
 		}
 		return out
 	}
 	mode := &gen.PackageModeAggregates{
-		Tps: stats(values("tps")), TtftMs: stats(values("ttft_ms")),
-		MemoryInferencePeakMb: stats(values("memory_inference_peak_mb")),
+		Tps: stats(values(metricTps)), TtftMs: stats(values(metricTtftMs)),
+		MemoryInferencePeakMb: stats(values(metricMemoryInferencePeakMb)),
 	}
 	copyMode := *mode
-	return gen.PackageReportSummary{Auto: mode, Speed: &copyMode}
+	summary.Auto, summary.Speed = mode, &copyMode
+	return summary
 }
 
-func round2(value float32) float32 {
-	return float32(math.Round(float64(value)*100) / 100)
+// packageRunKey is the finest run identity a PUBLIC package record carries:
+// the full device identity plus the run configuration's package and id. The
+// backend keys its runs by the device PRIMARY KEY, a summary-only hidden
+// field, so this key is still coarser than the backend's and two distinct runs
+// can share one key — packageRun therefore accumulates observations instead of
+// overwriting them.
+type packageRunKey struct {
+	device, pkg string
+	id          int
+}
+
+// packageRun holds one run key's records. metrics is last-write-wins and only
+// feeds the per-device best-tps selection, where a collision picks one of two
+// equally valid runs. The vision pair must NOT be lost that way, so its
+// observations are appended and zipped positionally: the server emits one
+// vision_expected_correct and one scored_images per valid run, contiguously,
+// so position i of each slice belongs to the same underlying run.
+type packageRun struct {
+	metrics          map[string]float64
+	visionNumerators []float64
+	visionImages     []float64
+}
+
+func groupPackageRuns(records []exactRecord) (map[packageRunKey]*packageRun, []packageRunKey) {
+	runs := map[packageRunKey]*packageRun{}
+	order := []packageRunKey{}
+	for _, record := range records {
+		key := packageRunKey{
+			device: deviceKey(record.Device),
+			pkg:    deref(record.RunConfiguration.Package),
+			id:     record.RunConfiguration.Id,
+		}
+		run, ok := runs[key]
+		if !ok {
+			run = &packageRun{metrics: map[string]float64{}}
+			runs[key] = run
+			order = append(order, key)
+		}
+		run.metrics[record.Metric] = record.Value
+		switch record.Metric {
+		case metricVisionExpectedCorrect:
+			run.visionNumerators = append(run.visionNumerators, record.Value)
+		case metricScoredImages:
+			run.visionImages = append(run.visionImages, record.Value)
+		}
+	}
+	return runs, order
+}
+
+// deviceKey is the full normalized device identity — all four published
+// dimensions, because any subset merges devices the backend keeps apart.
+func deviceKey(d gen.ReportDevice) string {
+	return strings.Join([]string{
+		normalize(deref(d.Name)), normalize(deref(d.MarketingName)),
+		normalize(deref(d.Soc)), normalize(deref(d.Os)),
+	}, "\x00")
+}
+
+// poolVisionAccuracy sums the exact numerators and images across runs and
+// rounds the rate the way the backend does.
+func poolVisionAccuracy(runs map[packageRunKey]*packageRun, order []packageRunKey) (*float32, *int) {
+	var expectedCorrect, scoredImages float64
+	for _, key := range order {
+		run := runs[key]
+		pairs := min(len(run.visionNumerators), len(run.visionImages))
+		for i := range pairs {
+			expectedCorrect += run.visionNumerators[i]
+			scoredImages += run.visionImages[i]
+		}
+	}
+	if scoredImages <= 0 {
+		return nil, nil
+	}
+	pooled := float32(roundDecimal(expectedCorrect/scoredImages, 4))
+	total := int(scoredImages)
+	return &pooled, &total
+}
+
+func round2(value float64) float32 {
+	return float32(roundDecimal(value, 2))
+}
+
+// roundDecimal rounds to a fixed number of decimal places the way Python's
+// round() does — correctly rounded off the exact float64, ties to even.
+// Scaling by a power of ten and calling math.Round instead is BOTH biased
+// (half away from zero) and inexact (the scaling itself perturbs the value:
+// 4.1/16 scales to exactly 2562.5 and rounds up to 0.2563, where the backend
+// answers 0.2562). Any value this edition must reproduce from a server-rounded
+// computation goes through here.
+func roundDecimal(value float64, places int) float64 {
+	rounded, err := strconv.ParseFloat(strconv.FormatFloat(value, 'f', places, 64), 64)
+	if err != nil {
+		return value
+	}
+	return rounded
 }

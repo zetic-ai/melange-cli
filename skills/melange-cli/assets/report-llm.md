@@ -66,8 +66,8 @@ melange report view "$model_key" -R "$repo" --type llm --json --jq '{
 
 ## 4. Per-quantization summary
 
-| Quant | Throughput (TPS) | First token (ms) | Peak memory (MB) | Accuracy |
-|-------|-----------------:|-----------------:|-----------------:|---------:|
+| Quant | Throughput (TPS) | First token (ms) | Peak memory (MB) | Accuracy | Perplexity |
+|-------|-----------------:|-----------------:|-----------------:|---------:|-----------:|
 
 One row per quantization, best across all devices, sorted by throughput.
 
@@ -75,10 +75,35 @@ One row per quantization, best across all devices, sorted by throughput.
 melange report view "$model_key" -R "$repo" --type llm --json \
   --jq '.summary.quants | to_entries | sort_by(-(.value.best_tps // -1))[]
         | {quant: .key, tps: .value.best_tps, ttft_ms: .value.best_ttft_ms,
-           memory_mb: .value.best_memory_mb, accuracy: .value.best_accuracy}'
+           memory_mb: .value.best_memory_mb, accuracy: .value.best_accuracy,
+           perplexity: .value.best_perplexity}'
 ```
 
-## 5. Full device performance benchmark
+## 5. Perplexity
+
+Lower is better. `best_perplexity` per quant, plus the reliability threshold:
+
+```sh
+melange report view "$model_key" -R "$repo" --type llm --json \
+  --jq '.summary.quants | to_entries[] | {quant: .key, best_ppl: .value.best_perplexity}'
+melange report view "$model_key" -R "$repo" --type llm --json \
+  --jq '{attempted: .summary.has_perplexity_attempt, min_scored_tokens: .summary.ppl_min_scored_tokens}'
+```
+
+Values below `ppl_min_scored_tokens` scored tokens are never published, so
+every published perplexity is full-budget-comparable. A report without
+perplexity keeps the column: `-` in tables, `N/A` in cards
+(`has_perplexity_attempt` says whether a measurement was even attempted).
+Per-device perplexity comes from `records[]`:
+
+```sh
+melange report view "$model_key" -R "$repo" --type llm --json \
+  --jq '[.records[] | select(.metric == "perplexity" and .device != null)]
+        | group_by(.device.marketing_name)[]
+        | {device: .[0].device.marketing_name, best_ppl: (map(.value) | min)}'
+```
+
+## 6. Full device performance benchmark
 
 One row per device, one column per quantization.
 
@@ -110,7 +135,7 @@ For first-token latency or memory, replace `"tps"` with `"ttft_ms"` or
 `"memory_inference_peak_mb"`, swap `max_by` for `min_by`, sort ascending
 (`sort_by(.best)`), and say lower is better.
 
-## 6. Coverage
+## 7. Coverage
 
 State the device count and that it reflects what this account's plan can see:
 

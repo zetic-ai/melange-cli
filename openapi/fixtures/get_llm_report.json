@@ -7,7 +7,7 @@
   },
   "response": {
     "body": {
-      "derivation_version": 3,
+      "derivation_version": 4,
       "model": {
         "key": "<uuid>",
         "version": 1
@@ -78,6 +78,38 @@
           "variant": "v1"
         },
         {
+          "ap_type": "cpu",
+          "dataset": null,
+          "device": {
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os": "15",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "perplexity",
+          "quant_type": "q4_k_m",
+          "run": 0,
+          "unit": "ppl",
+          "value": 9.87,
+          "variant": "v1"
+        },
+        {
+          "ap_type": "cpu",
+          "dataset": null,
+          "device": {
+            "marketing_name": "Samsung Galaxy S25",
+            "name": "SM-S931U1",
+            "os": "15",
+            "soc": "Snapdragon 8 Elite"
+          },
+          "metric": "scored_tokens",
+          "quant_type": "q4_k_m",
+          "run": 0,
+          "unit": "count",
+          "value": 320.0,
+          "variant": "v1"
+        },
+        {
           "ap_type": null,
           "dataset": "mmlu",
           "device": null,
@@ -108,10 +140,13 @@
             "score": 0.69
           }
         ],
+        "has_perplexity_attempt": true,
+        "ppl_min_scored_tokens": 201,
         "quants": {
           "q4_k_m": {
             "best_accuracy": 0.69,
             "best_memory_mb": null,
+            "best_perplexity": 9.87,
             "best_tps": 42.5,
             "best_ttft_ms": 250.0
           }

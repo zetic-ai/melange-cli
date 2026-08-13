@@ -28,6 +28,7 @@ type FieldError struct {
 type Error struct {
 	StatusCode int
 	Type       string // e.g. authentication_error, rate_limit_error, invalid_request_error
+	Code       string // machine-readable refusal code, e.g. credit_balance_exhausted; "" when absent
 	Message    string
 	Fields     []FieldError
 	// ActiveUploadID is populated by upload-session conflict responses. It is
@@ -40,7 +41,11 @@ type Error struct {
 
 // Error implements the error interface.
 func (e *Error) Error() string {
-	s := fmt.Sprintf("melange API: %s (%s, HTTP %d", e.Message, e.Type, e.StatusCode)
+	kind := e.Type
+	if e.Code != "" {
+		kind += "/" + e.Code
+	}
+	s := fmt.Sprintf("melange API: %s (%s, HTTP %d", e.Message, kind, e.StatusCode)
 	if e.RequestID != "" {
 		s += ", request " + e.RequestID
 	}
@@ -66,6 +71,7 @@ type errorEnvelope struct {
 	Type  string `json:"type"`
 	Error struct {
 		Type           string       `json:"type"`
+		Code           string       `json:"code"`
 		Message        string       `json:"message"`
 		Fields         []FieldError `json:"fields"`
 		ActiveUploadID string       `json:"active_upload_id"`
@@ -107,6 +113,7 @@ func ErrorFrom(status int, header http.Header, body []byte) error {
 	if err := json.Unmarshal(body, &env); err == nil && env.Type == "error" &&
 		(env.Error.Type != "" || env.Error.Message != "") {
 		apiErr.Type = env.Error.Type
+		apiErr.Code = env.Error.Code
 		apiErr.Message = env.Error.Message
 		apiErr.Fields = env.Error.Fields
 		apiErr.ActiveUploadID = env.Error.ActiveUploadID

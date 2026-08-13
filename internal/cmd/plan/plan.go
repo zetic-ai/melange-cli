@@ -5,6 +5,7 @@ package plan
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/zetic-ai/melange-cli/internal/api"
@@ -22,19 +23,32 @@ func NewCmdPlan(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plan",
 		Short: "Show the account's billing plan",
-		Long: `Show the effective billing plan for the token's account: the tier its
-quotas derive from (free, lite, pro, pro_plus, or enterprise), whether it is
-a trial, and when a trial ends.
+		Long: `Show the effective billing identity for the token's account. Two
+vocabularies coexist:
 
-The plan reflects what the server actually enforces — an account that bypasses
-quota limits reports pro_plus, matching the dashboard. Use "melange usage
-quotas" for the per-counter headroom.
+"plan" is the legacy tier the account's quotas derive from (free, lite,
+pro, pro_plus, or enterprise). It reflects what the server actually
+enforces — an account that bypasses quota limits reports pro_plus,
+matching the dashboard. Use "melange usage quotas" for the per-counter
+headroom.
 
-On a terminal this prints a human-readable block. When stdout is not a
-terminal it prints stable tab-separated key/value lines (plan, is_trial,
-trial_ends_at; trial_ends_at is empty when not a trial). With --json, API
-fields and order are preserved and output ends with exactly one trailing
-newline.
+"tier" is the current pricing identity (free, pro, team, or enterprise).
+It is null on accounts still on legacy billing; "billing_generation" says
+which system governs the account (legacy or v3).
+
+"max_model_bytes" is the plan's own cap on a custom model's total bytes.
+It preflights only that size entitlement — other billing checks (credits,
+debt, subscription state) are enforced separately at conversion time. A
+null cap means a custom contract, NOT an unlimited one: the credit ledger
+still refuses runs above the self-service size ceiling.
+
+On a terminal this prints a human-readable block; every field is always
+shown, and one the account does not carry renders as "-". When stdout is
+not a terminal it prints stable tab-separated key/value lines (plan, is_trial,
+trial_ends_at, billing_generation, tier, max_model_bytes; trial_ends_at
+is empty when not a trial, tier and max_model_bytes are empty when null).
+With --json, API fields and order are preserved and output ends with
+exactly one trailing newline.
 
 Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
 		Example: `  # Show the plan
@@ -43,8 +57,11 @@ Exit codes: 0 success, 1 API error, 2 usage error, 4 not authenticated.`,
   # Machine-readable
   melange plan --json
 
-  # Agent pattern: the plan tier
-  melange plan --jq .plan`,
+  # Agent pattern: the legacy plan tier
+  melange plan --jq .plan
+
+  # Agent pattern: the pricing identity (null on legacy billing)
+  melange plan --jq .tier`,
 		Args: cmdutil.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			g, err := genClient(f)
@@ -86,6 +103,16 @@ func printPlan(ios *iostreams.IOStreams, p *gen.BillingPlanResponse) error {
 		trialEnds = p.TrialEndsAt.Format("2006-01-02T15:04:05Z07:00")
 	}
 
+	generation := text.SanitizeTerminalInline(string(p.BillingGeneration))
+	tier := ""
+	if p.Tier != nil {
+		tier = text.SanitizeTerminalInline(string(*p.Tier))
+	}
+	maxBytes := ""
+	if p.MaxModelBytes != nil {
+		maxBytes = strconv.Itoa(*p.MaxModelBytes)
+	}
+
 	out := ios.Out
 	if ios.HumanOutput() {
 		trial := "no"
@@ -98,12 +125,32 @@ func printPlan(ios *iostreams.IOStreams, p *gen.BillingPlanResponse) error {
 		fields := tableprinter.NewFields(ios)
 		fields.Add("Plan", plan)
 		fields.Add("Trial", trial)
+		// The human field set is stable across accounts. A legacy account
+		// has no tier and a custom-contract account no size cap; both
+		// render the absent-value dash rather than dropping the row, since
+		// Fields.Add skips empty values and a shorter block reads as though
+		// the CLI does not know about the field at all.
+		fields.Add("Tier", orDash(tier))
+		fields.Add("Billing generation", generation)
+		fields.Add("Max model bytes", orDash(maxBytes))
 		return fields.Render()
 	}
 	fmt.Fprintf(out, "plan\t%s\n", plan)
 	fmt.Fprintf(out, "is_trial\t%t\n", p.IsTrial)
 	fmt.Fprintf(out, "trial_ends_at\t%s\n", trialEnds)
+	fmt.Fprintf(out, "billing_generation\t%s\n", generation)
+	fmt.Fprintf(out, "tier\t%s\n", tier)
+	fmt.Fprintf(out, "max_model_bytes\t%s\n", maxBytes)
 	return nil
+}
+
+// orDash renders an absent value as "-", the convention this CLI's tables use
+// for a field the object does not carry.
+func orDash(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
 }
 
 // genClient returns the generated API client over the authenticated transport.

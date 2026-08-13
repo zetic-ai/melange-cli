@@ -462,6 +462,12 @@ func cases() []contractCase {
 			responseBody: func() any { return &gen.ErrorEnvelope{} },
 		},
 		{
+			// The pricing-v3 402 (insufficient credit) — a billing_error
+			// envelope with a machine-readable code.
+			name:         "error_402_credit",
+			responseBody: func() any { return &gen.ErrorEnvelope{} },
+		},
+		{
 			name:         "error_422",
 			responseBody: func() any { return &gen.ErrorEnvelope{} },
 		},
