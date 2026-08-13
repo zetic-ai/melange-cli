@@ -55,6 +55,37 @@ func TestReleaseChecksumsAreKeylesslySignedAndInstallerVerifiesThem(t *testing.T
 	assert.Contains(t, installer, "https://token.actions.githubusercontent.com")
 }
 
+// The Qualcomm installer is a standalone copy, not a wrapper, so a fix landed
+// in script/install.sh does NOT reach melange-qcom users. That already happened
+// once: the shadowing detection (#18) shipped in v0.8.1 for the general CLI
+// only, while the mirror repo's install.sh delegates to this script on main —
+// so Qualcomm installs silently kept running an older binary. Pin the safety
+// properties both installers must share.
+func TestQualcommInstallerKeepsTheGeneralInstallersSafetyProperties(t *testing.T) {
+	installer := readRepoFile(t, "script/install-qcom.sh")
+
+	verifyAt := strings.Index(installer, "cosign verify-blob")
+	checksumAt := strings.Index(installer, `[ "$expected" = "$actual" ]`)
+	require.NotEqual(t, -1, verifyAt, "installer must verify the signed checksum manifest")
+	require.NotEqual(t, -1, checksumAt)
+	assert.Less(t, verifyAt, checksumAt,
+		"the checksum manifest's identity must be authenticated before trusting its digest")
+	assert.Contains(t, installer, `.github/workflows/release.yml@refs/tags/${version}`)
+	assert.Contains(t, installer, `REPO="zetic-ai/melange-cli"`)
+	assert.Contains(t, installer, "https://token.actions.githubusercontent.com")
+
+	// Shadow detection: an older melange-qcom earlier in PATH must be reported
+	// rather than silently winning every later command.
+	assert.Contains(t, installer, "canonical_path()",
+		"symlink resolution is what keeps one binary under two names from reading as a shadow")
+	assert.Contains(t, installer, "earlier in your PATH will run instead of the one just installed")
+
+	// npm and Homebrew ship `melange` only, so a shadowing melange-qcom can
+	// never be npm-installed; that remedy would send users down a dead end.
+	assert.NotContains(t, installer, "npm uninstall -g",
+		"the qcom edition is not distributed through npm")
+}
+
 func TestLocalSnapshotSkipsSigningWithoutWeakeningReleases(t *testing.T) {
 	makefile := readRepoFile(t, "Makefile")
 	assert.Regexp(t,
