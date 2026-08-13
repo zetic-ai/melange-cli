@@ -82,6 +82,32 @@ shell_quote() {
     printf "'"
 }
 
+# canonical_path resolves symlinks and directory spellings so two names for one
+# file compare equal — a /usr/local/bin/melange symlinked to the install
+# directory is the same binary, not a shadowing one. `readlink -f` is avoided:
+# it is absent on older macOS. The loop is bounded so a symlink cycle cannot
+# hang the installer.
+canonical_path() {
+    _cp_path="$1"
+    _cp_hops=0
+    while [ -L "$_cp_path" ] && [ "$_cp_hops" -lt 16 ]; do
+        _cp_target=$(readlink "$_cp_path" 2>/dev/null) || break
+        [ -n "$_cp_target" ] || break
+        case "$_cp_target" in
+            /*) _cp_path="$_cp_target" ;;
+            *) _cp_path="$(dirname "$_cp_path")/$_cp_target" ;;
+        esac
+        _cp_hops=$((_cp_hops + 1))
+    done
+    _cp_dir=$(dirname "$_cp_path")
+    _cp_base=$(basename "$_cp_path")
+    if _cp_real=$(cd "$_cp_dir" 2>/dev/null && pwd -P); then
+        printf '%s/%s\n' "$_cp_real" "$_cp_base"
+    else
+        printf '%s\n' "$_cp_path"
+    fi
+}
+
 is_vsemver() {
     case "$1" in
         "" | *[!0-9A-Za-z.+-]*) return 1 ;;
@@ -431,6 +457,62 @@ if [ -n "$installed_bin" ]; then
     esac
 fi
 
+# --- Warn when an older melange still wins -----------------------------------
+# Having the install directory on PATH is not the same as `melange` resolving to
+# what we just installed. An older copy earlier in PATH keeps winning — a stale
+# `npm install -g @zetic-ai/melange-cli` is the usual one, since npm's bin
+# directory commonly sits ahead of ~/.local/bin. That matters more than a normal
+# version skew: releases before v0.5.0 had no browser login at all, so the
+# symptom is `melange auth login` asking for a personal access token instead of
+# opening a browser, which reads as "OAuth is broken" rather than "wrong binary".
+#
+# Only checked when the install directory is already on PATH: the "not on your
+# PATH" advice above prepends it, which resolves the shadowing too, so raising
+# both at once would just be noise.
+shadow_bin=""
+dir_on_path=""
+if [ -n "$installed_bin" ]; then
+    case ":${PATH}:" in
+        *":${target_dir}:"*) dir_on_path=1 ;;
+    esac
+fi
+if [ -n "$installed_bin" ] && [ -n "$dir_on_path" ]; then
+    resolved=$(command -v "$BINARY" 2>/dev/null || true)
+    if [ -n "$resolved" ] &&
+        [ "$(canonical_path "$resolved")" != "$(canonical_path "$installed_bin")" ]; then
+        shadow_bin="$resolved"
+        # Best effort: a pre-0.3 binary has no `version` subcommand, and the
+        # warning stands either way, so a failure here is not worth reporting.
+        shadow_version=$("$resolved" version 2>/dev/null | head -n 1) || shadow_version=""
+        next_cmd="$installed_bin"
+
+        info ""
+        warn "another ${BINARY} earlier in your PATH will run instead of the one just installed."
+        info "  runs now:  ${shadow_bin}${shadow_version:+  (${shadow_version})}"
+        info "  installed: ${installed_bin} (${version})"
+        info ""
+        info "  Until that is resolved, '${BINARY}' commands use the older binary —"
+        info "  on releases before v0.5.0 that means 'auth login' asks for a token"
+        info "  instead of opening a browser."
+        case "$shadow_bin" in
+            *", "*) ;; # defensive: never build a command line from an odd path
+            */node_modules/* | */.nvm/* | */npm/* | */node/*)
+                info ""
+                info "  It looks npm-installed. Remove it with:"
+                info "      npm uninstall -g @zetic-ai/melange-cli"
+                ;;
+            *)
+                info ""
+                info "  Remove it, or put ${target_dir} earlier in PATH:"
+                info "      rm $(shell_quote "$shadow_bin")"
+                ;;
+        esac
+        info ""
+        info "  Then refresh your shell's command cache:"
+        info "      hash -r"
+    fi
+fi
+
 info ""
 step "Done."
 [ -n "$installed_bin" ] && info "  CLI:   ${installed_bin} (${version})"
@@ -441,8 +523,12 @@ if [ -n "$skill_installed" ]; then
 fi
 info ""
 info "Next steps:"
-info "  1. Authenticate: ${next_cmd} auth login   (or export MELANGE_API_KEY=ztp_…)"
-info "     Get a token at https://melange.zetic.ai/settings?tab=pat"
+# Browser login is the default and the one to lead with. Naming a token first
+# taught people to reach for one even when the browser flow was available, which
+# made any OAuth failure look like the only path rather than a fallback.
+info "  1. Authenticate: ${next_cmd} auth login   (opens your browser)"
+info "     Headless, CI or agents: ${next_cmd} auth login --with-token < token.txt"
+info "     (create a token at https://melange.zetic.ai/settings?tab=pat, or set MELANGE_API_KEY)"
 [ -n "$skill_installed" ] &&
     info "  2. Restart your coding agent so it discovers the ${SKILL} skill."
 
