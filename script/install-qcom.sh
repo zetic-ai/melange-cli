@@ -82,6 +82,32 @@ shell_quote() {
     printf "'"
 }
 
+# canonical_path resolves symlinks and directory spellings so two names for one
+# file compare equal — a /usr/local/bin/melange-qcom symlinked to the install
+# directory is the same binary, not a shadowing one. `readlink -f` is avoided:
+# it is absent on older macOS. The loop is bounded so a symlink cycle cannot
+# hang the installer.
+canonical_path() {
+    _cp_path="$1"
+    _cp_hops=0
+    while [ -L "$_cp_path" ] && [ "$_cp_hops" -lt 16 ]; do
+        _cp_target=$(readlink "$_cp_path" 2>/dev/null) || break
+        [ -n "$_cp_target" ] || break
+        case "$_cp_target" in
+            /*) _cp_path="$_cp_target" ;;
+            *) _cp_path="$(dirname "$_cp_path")/$_cp_target" ;;
+        esac
+        _cp_hops=$((_cp_hops + 1))
+    done
+    _cp_dir=$(dirname "$_cp_path")
+    _cp_base=$(basename "$_cp_path")
+    if _cp_real=$(cd "$_cp_dir" 2>/dev/null && pwd -P); then
+        printf '%s/%s\n' "$_cp_real" "$_cp_base"
+    else
+        printf '%s\n' "$_cp_path"
+    fi
+}
+
 is_vsemver() {
     case "$1" in
         "" | *[!0-9A-Za-z.+-]*) return 1 ;;
@@ -429,6 +455,55 @@ if [ -n "$installed_bin" ]; then
             info "  To persist:      ${persist}"
             ;;
     esac
+fi
+
+# --- Warn when an older melange-qcom still wins ------------------------------
+# Having the install directory on PATH is not the same as `melange-qcom`
+# resolving to what we just installed. An older copy earlier in PATH keeps
+# winning, so every command silently runs the stale binary — including the
+# reports and deployment guides this edition exists to curate.
+#
+# Unlike the general CLI, melange-qcom is not distributed through npm or
+# Homebrew, so a shadowing copy is an earlier install of this script into a
+# different directory. The remedy is therefore always the same: remove it, or
+# reorder PATH.
+#
+# Only checked when the install directory is already on PATH: the "not on your
+# PATH" advice above prepends it, which resolves the shadowing too, so raising
+# both at once would just be noise.
+shadow_bin=""
+dir_on_path=""
+if [ -n "$installed_bin" ]; then
+    case ":${PATH}:" in
+        *":${target_dir}:"*) dir_on_path=1 ;;
+    esac
+fi
+if [ -n "$installed_bin" ] && [ -n "$dir_on_path" ]; then
+    resolved=$(command -v "$BINARY" 2>/dev/null || true)
+    if [ -n "$resolved" ] &&
+        [ "$(canonical_path "$resolved")" != "$(canonical_path "$installed_bin")" ]; then
+        shadow_bin="$resolved"
+        # Best effort: the warning stands whether or not the older binary can
+        # report a version, so a failure here is not worth reporting.
+        shadow_version=$("$resolved" version 2>/dev/null | head -n 1) || shadow_version=""
+        next_cmd="$installed_bin"
+
+        info ""
+        warn "another ${BINARY} earlier in your PATH will run instead of the one just installed."
+        info "  runs now:  ${shadow_bin}${shadow_version:+  (${shadow_version})}"
+        info "  installed: ${installed_bin} (${version})"
+        info ""
+        info "  Until that is resolved, '${BINARY}' commands use the older binary."
+        case "$shadow_bin" in
+            *", "*) ;; # defensive: never build a command line from an odd path
+            *)
+                info ""
+                info "  Remove it, or put ${target_dir} earlier in PATH:"
+                info "      rm $(shell_quote "$shadow_bin")"
+                ;;
+        esac
+        info ""
+    fi
 fi
 
 info ""
