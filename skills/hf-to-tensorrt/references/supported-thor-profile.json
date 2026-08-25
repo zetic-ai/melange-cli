@@ -1,0 +1,13 @@
+{
+  "fingerprint": {
+    "compute_capability": "11.0",
+    "cuda_version": "13.0",
+    "driver_version": "580.00",
+    "gpu_name": "NVIDIA Jetson AGX Thor Developer Kit",
+    "jetpack_version": "7.1-b112",
+    "os_release": "Ubuntu 24.04.3 LTS",
+    "tensorrt_version": "10.13.3.9",
+    "trtexec_sha256": "b74f3daf9e9bfdadc062b6b446b2435c96d5aa14c11912a7473d29d56e45a542"
+  },
+  "profile": "zetic-thor-v1"
+}

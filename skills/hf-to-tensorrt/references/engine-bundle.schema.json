@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.zetic.ai/engine-bundle/v1.schema.json",
+  "title": "Zetic TensorRT Engine Bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source", "target", "engines"],
+  "properties": {
+    "schema": {
+      "const": "zetic.engine_bundle.v1"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "engines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/engine"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo_id", "revision", "architecture"],
+      "properties": {
+        "repo_id": {
+          "type": "string",
+          "pattern": "^[^/\\s]+/[^/\\s]+$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "fingerprint"],
+      "properties": {
+        "profile": {
+          "const": "zetic-thor-v1"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        }
+      }
+    },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gpu_name",
+        "compute_capability",
+        "jetpack_version",
+        "tensorrt_version",
+        "cuda_version",
+        "driver_version",
+        "os_release",
+        "trtexec_sha256"
+      ],
+      "properties": {
+        "gpu_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compute_capability": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "jetpack_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tensorrt_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cuda_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "driver_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os_release": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trtexec_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "dtype", "shape"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dtype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shape": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs", "outputs"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["onnx_sha256", "trtexec_command"],
+      "properties": {
+        "onnx_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "trtexec_command": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "parity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "status",
+        "fixture_count",
+        "report_file",
+        "report_sha256"
+      ],
+      "properties": {
+        "policy": {
+          "const": "zetic.engine_parity.v1"
+        },
+        "status": {
+          "const": "passed"
+        },
+        "fixture_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "report_file": {
+          "allOf": [
+            {"$ref": "#/$defs/relativePath"},
+            {"pattern": "\\.json$"}
+          ]
+        },
+        "report_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "file",
+        "sha256",
+        "precision",
+        "bindings",
+        "build",
+        "parity"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "file": {
+          "allOf": [
+            {"$ref": "#/$defs/relativePath"},
+            {"pattern": "\\.engine$"}
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "precision": {
+          "enum": ["fp16", "strongly_typed"]
+        },
+        "bindings": {
+          "$ref": "#/$defs/bindings"
+        },
+        "build": {
+          "$ref": "#/$defs/build"
+        },
+        "parity": {
+          "$ref": "#/$defs/parity"
+        }
+      }
+    }
+  }
+}

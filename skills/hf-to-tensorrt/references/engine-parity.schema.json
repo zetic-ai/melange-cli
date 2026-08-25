@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.zetic.ai/engine-parity/v1.schema.json",
+  "title": "Zetic Engine Parity Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "policy",
+    "status",
+    "fixture_count",
+    "reference_sha256",
+    "actual_sha256",
+    "outputs"
+  ],
+  "properties": {
+    "schema": {
+      "const": "zetic.engine_parity.v1"
+    },
+    "policy": {
+      "const": "zetic.engine_parity.v1"
+    },
+    "status": {
+      "enum": ["passed", "failed"]
+    },
+    "fixture_count": {
+      "const": 1
+    },
+    "reference_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "actual_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/output"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "shape": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2147483647
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "reference_dtype",
+        "actual_dtype",
+        "reference_shape",
+        "actual_shape",
+        "comparison",
+        "rtol",
+        "atol",
+        "element_count",
+        "mismatch_count",
+        "nonfinite_count",
+        "max_abs_error",
+        "max_rel_error",
+        "passed"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_dtype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actual_dtype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_shape": {
+          "$ref": "#/$defs/shape"
+        },
+        "actual_shape": {
+          "$ref": "#/$defs/shape"
+        },
+        "comparison": {
+          "enum": ["exact", "allclose", "unavailable"]
+        },
+        "rtol": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "atol": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "element_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mismatch_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nonfinite_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_abs_error": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "max_rel_error": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
