@@ -18,12 +18,13 @@ Consider boundaries in this order:
 2. **Modality towers:** Vision encoders, projectors, audio encoders, and language
    towers often already have meaningful tensor interfaces and different static
    sizing constraints.
-3. **Reusable invariant computation:** If the public source computes a large
-   representation once and intentionally reuses it while later tensor inputs
-   vary, consider that representation as a cut. For example, an image encoder's
-   features may remain fixed across several point prompts. Require a static,
-   independently capturable tensor contract; do not encode cache ownership or
-   invocation ordering in the engine bundle.
+3. **Reusable invariant computation:** If the public source computes an
+   expensive representation once and intentionally reuses it while later tensor
+   inputs vary, split at that representation when it passes the boundary quality
+   test below, even if a monolithic graph also converts. For example, an image
+   encoder's features may remain fixed across several point prompts. Require a
+   static, independently capturable tensor contract; do not encode cache
+   ownership or invocation ordering in the engine bundle.
 4. **State transitions:** Separate prefill from single-step decode when a source
    model hides KV state or grows a cache dynamically. Make old and new state
    explicit tensor bindings.

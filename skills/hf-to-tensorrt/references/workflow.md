@@ -41,6 +41,8 @@ Attempt the largest sensible tensor-to-tensor boundary first, then check whether
 it would repeat an expensive source representation that is explicitly reusable
 while later inputs vary. If either that condition holds or the whole boundary is
 not a static export candidate, apply the decision rules in `decomposition.md`.
+Do not accept a monolithic candidate when its reusable invariant boundary passes
+the boundary quality test.
 
 For every proposed engine record:
 
