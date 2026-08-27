@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engine Bundle to ZTC"
+  short_description: "Package one verified Thor engine into an encrypted ZTC"
+  default_prompt: "Use $engine-bundle-to-ztc to package this one-entry Thor engine bundle and validate its metadata and engine-byte round-trip."
