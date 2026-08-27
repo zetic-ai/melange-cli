@@ -17,6 +17,30 @@ requires static runtime bindings, records opset domains, and recommends either
 `fp16` or `strongly_typed`. Q/DQ nodes, BF16/FP64/complex types, and low-bit
 tensor types are reported but are unsupported by this v1 FP16/FP32 skill.
 
+## Run ONNX parity
+
+Run the captured fixture with a provider installed in the model's locked
+environment:
+
+```sh
+uv run --with onnxruntime --with numpy \
+  python <skill-dir>/scripts/run_onnx.py model.onnx \
+  --inputs captured-inputs.npz \
+  --outputs onnx-outputs.npz
+```
+
+The runner requires the NPZ input names, dtypes, and shapes to match the static
+ONNX bindings exactly. A different provider may be selected with `--provider`
+only when that provider is present in the locked environment. Record and report
+the first missing-kernel error instead of silently skipping ONNX execution.
+
+`--disable-optimizations` may diagnose an execution-provider fusion with missing
+type coverage, but its output still must pass parity. If an all-FP16 graph runs
+and fails parity, do not relax the policy. A strongly typed mixed graph may
+preserve source FP32 computation and expose deliberate FP16 bindings, but it is
+a new adapter candidate: rerun source-to-adapter and adapter-to-ONNX parity from
+the beginning.
+
 ## Build the engine
 
 ```sh

@@ -81,7 +81,8 @@ data when required by the protobuf size limit. Validate that:
 
 Output: checked ONNX artifacts and passing adapter-to-ONNX report.
 
-Use `scripts/inspect_onnx.py` for the structural and static-shape checks.
+Use `scripts/inspect_onnx.py` for the structural and static-shape checks and
+`scripts/run_onnx.py` for the captured-fixture execution.
 
 ## Gate 5: TensorRT build
 

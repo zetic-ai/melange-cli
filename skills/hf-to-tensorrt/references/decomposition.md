@@ -53,6 +53,10 @@ For an annotated application of these rules, read `lfm-vl-case-study.md`.
 - Prefer explicit inputs over mutable module attributes or hidden caches.
 - Replace data-dependent shapes with a fixed slot, pad, or window chosen from the
   representative source path.
+- When a declared static contract still exports symbolic dimensions, replace
+  symbolic repeat counts, inferred reshape dimensions, and generic output slices
+  with their contract constants. Preserve the source operation order and rerun
+  source-to-adapter parity after every such rewrite.
 - Preserve FP32 reductions or normalization islands when an all-FP16 rewrite
   causes divergence.
 - Record every externalized operation and rewrite in the decision report.
