@@ -29,6 +29,7 @@ def build_command(
     engine_path: Path,
     typing: str,
     timing_cache: Path | None,
+    disable_tf32: bool = False,
 ) -> list[str]:
     command = [
         str(trtexec),
@@ -41,6 +42,8 @@ def build_command(
         command.append("--stronglyTyped")
     else:
         raise ValueError(f"unsupported TensorRT typing mode: {typing!r}")
+    if disable_tf32:
+        command.append("--noTF32")
     if timing_cache is not None:
         command.append(f"--timingCacheFile={timing_cache}")
     command.append("--skipInference")
@@ -55,6 +58,7 @@ def build(
     log_path: Path,
     result_path: Path,
     timing_cache: Path | None,
+    disable_tf32: bool = False,
 ) -> dict[str, Any]:
     onnx_metadata = inspect_onnx.inspect(onnx_path)
     if onnx_metadata["has_qdq"]:
@@ -84,6 +88,7 @@ def build(
         engine_path=engine,
         typing=typing,
         timing_cache=timing_cache.resolve() if timing_cache is not None else None,
+        disable_tf32=disable_tf32,
     )
     completed = subprocess.run(command, check=False, capture_output=True, text=True)
     output = (completed.stdout or "") + (completed.stderr or "")
@@ -95,6 +100,7 @@ def build(
         "schema": "zetic.tensorrt_build.v1",
         "status": "failed",
         "typing": typing,
+        "tf32": "disabled" if disable_tf32 else "enabled",
         "onnx_sha256": onnx_metadata["sha256"],
         "trtexec_command": command,
         "inputs": onnx_metadata["inputs"],
@@ -128,6 +134,11 @@ def main() -> int:
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)
     parser.add_argument("--timing-cache", type=Path)
+    parser.add_argument(
+        "--disable-tf32",
+        action="store_true",
+        help="append trtexec --noTF32 when default TF32 tactics fail parity",
+    )
     args = parser.parse_args()
     try:
         build(
@@ -137,6 +148,7 @@ def main() -> int:
             log_path=args.log,
             result_path=args.result,
             timing_cache=args.timing_cache,
+            disable_tf32=args.disable_tf32,
         )
     except (OSError, ValueError, RuntimeError) as exc:
         parser.error(str(exc))

@@ -57,6 +57,13 @@ graph and `--stronglyTyped` when the graph already carries FP16/mixed precision,
 and refuses Q/DQ or low-bit graphs. It records the exact command and hashes. A
 successful build is not a parity result.
 
+TensorRT permits TF32 tactics for FP32 layers by default. If a strongly typed
+engine fails parity while its adapter and ONNX both pass, rebuild the unchanged
+ONNX with `--disable-tf32`. The builder records this as native `trtexec
+--noTF32`; it is an accuracy fallback, not permission to change tolerances or
+skip the failing report. Retain both build attempts and rerun engine inspection,
+execution, and parity on the new engine.
+
 ## Inspect and execute the engine
 
 Run these commands in the same locked environment used to build the engine, with

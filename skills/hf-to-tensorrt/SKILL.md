@@ -50,12 +50,15 @@ Read [references/workflow.md](references/workflow.md) and follow its gates in
 order. Persist the evidence from each gate so a later run can resume at the
 first failed boundary rather than starting over.
 
-Start by attempting the largest sensible model boundary. When the whole model
-cannot form one static engine, or when the source contains Python control flow,
-modality-specific towers, implicit state, or input-dependent graph construction,
-read [references/decomposition.md](references/decomposition.md) before choosing
-cuts. The agent owns the boundary decision; do not require the user to name
-exportable submodules.
+Start by attempting the largest sensible model boundary. Before accepting it,
+check whether the public inference path deliberately exposes an expensive
+reusable tensor result that remains invariant while later inputs change, such as
+image embeddings reused across point prompts. When that is true—or when the
+whole model contains Python control flow, modality-specific towers, implicit
+state, or input-dependent graph construction—read
+[references/decomposition.md](references/decomposition.md) before choosing cuts.
+The agent owns the boundary decision; do not require the user to name exportable
+submodules.
 
 For a concrete example of those decisions on a multimodal generation model,
 read [references/lfm-vl-case-study.md](references/lfm-vl-case-study.md) and inspect

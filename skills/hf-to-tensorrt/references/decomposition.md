@@ -1,9 +1,12 @@
 # Static engine decomposition
 
-The goal is the smallest number of independently verifiable static engines, not
-the largest number of accelerator-covered operations. Preserve the whole model
-when it exports and validates cleanly. Split only to remove a concrete obstacle
-or to make implicit runtime state explicit.
+The goal is the smallest number of independently verifiable static engines that
+preserves the source model's meaningful reuse boundaries, not the largest number
+of accelerator-covered operations. Preserve the whole model when it exports and
+validates cleanly and does not recompute an expensive source result that is
+designed to remain invariant across repeated calls. Split only to remove a
+concrete obstacle, make implicit runtime state explicit, or expose such a proven
+reusable tensor boundary.
 
 ## Preferred cut points
 
@@ -15,13 +18,19 @@ Consider boundaries in this order:
 2. **Modality towers:** Vision encoders, projectors, audio encoders, and language
    towers often already have meaningful tensor interfaces and different static
    sizing constraints.
-3. **State transitions:** Separate prefill from single-step decode when a source
+3. **Reusable invariant computation:** If the public source computes a large
+   representation once and intentionally reuses it while later tensor inputs
+   vary, consider that representation as a cut. For example, an image encoder's
+   features may remain fixed across several point prompts. Require a static,
+   independently capturable tensor contract; do not encode cache ownership or
+   invocation ordering in the engine bundle.
+4. **State transitions:** Separate prefill from single-step decode when a source
    model hides KV state or grows a cache dynamically. Make old and new state
    explicit tensor bindings.
-4. **Input-dependent graph construction:** Move mask construction, position
+5. **Input-dependent graph construction:** Move mask construction, position
    lookup/interpolation, tiling, ragged packing, and similar shape-varying work
    outside when it can be supplied as a fixed-shape tensor input.
-5. **Unsupported but equivalent operations:** Rewrite a localized operation in
+6. **Unsupported but equivalent operations:** Rewrite a localized operation in
    supported tensor math before splitting around individual transformer layers.
 
 Avoid layer-by-layer cuts unless a demonstrated TensorRT or memory constraint

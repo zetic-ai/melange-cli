@@ -54,6 +54,19 @@ class BuildEngineTest(unittest.TestCase):
                 timing_cache=None,
             )
 
+    def test_disable_tf32_is_recorded_in_command(self) -> None:
+        command = build_engine.build_command(
+            trtexec=Path("trtexec"),
+            onnx_path=Path("model.onnx"),
+            engine_path=Path("model.engine"),
+            typing="strongly_typed",
+            timing_cache=None,
+            disable_tf32=True,
+        )
+
+        self.assertIn("--noTF32", command)
+        self.assertLess(command.index("--stronglyTyped"), command.index("--noTF32"))
+
 
 if __name__ == "__main__":
     unittest.main()
