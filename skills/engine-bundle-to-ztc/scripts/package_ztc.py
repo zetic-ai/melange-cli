@@ -216,18 +216,15 @@ def load_binding() -> ModuleType:
     native_python_path = os.environ.get("ZETIC_MLANGE_ZTC_PYTHONPATH")
     if native_python_path and native_python_path not in sys.path:
         sys.path.insert(0, native_python_path)
-    errors = []
-    for name in ("mlange_ztc", "third_party.mlange_ztc"):
-        try:
-            return importlib.import_module(name)
-        except ImportError as exc:
-            errors.append(f"{name}: {exc}")
-    raise RuntimeError(
-        "Zetic's native mlange_ztc binding is not installed for this platform; "
-        "use the supported packaging environment or set "
-        "ZETIC_MLANGE_ZTC_PYTHONPATH to its Python package directory. "
-        + "; ".join(errors)
-    )
+    try:
+        return importlib.import_module("mlange_ztc")
+    except ImportError as exc:
+        raise RuntimeError(
+            "Zetic's native mlange_ztc binding is not installed for this platform; "
+            "use the supported packaging environment or set "
+            "ZETIC_MLANGE_ZTC_PYTHONPATH to its Python package directory. "
+            f"mlange_ztc: {exc}"
+        ) from exc
 
 
 def _write_private_json(path: Path, payload: dict[str, Any]) -> None:
@@ -293,8 +290,12 @@ def package_and_validate(
 
     wrong_loader = binding.ZtcLoader(str(ztc_path))
     wrong_loader.set_key(_different_key(key_bytes))
-    if wrong_loader.open() == binding.ZtcStatus.SUCCESS:
-        raise RuntimeError("ZTC unexpectedly opened with the wrong encryption key")
+    wrong_key_status = wrong_loader.open()
+    if wrong_key_status != binding.ZtcStatus.ERROR_DECRYPTION_FAIL:
+        raise RuntimeError(
+            "wrong-key ZTC open must fail with ERROR_DECRYPTION_FAIL; "
+            f"got {wrong_key_status}"
+        )
 
     with tempfile.TemporaryDirectory(prefix=".ztc-roundtrip-", dir=output_dir) as temp:
         restored = Path(temp) / engine_path.name

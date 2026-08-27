@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import json
 import stat
@@ -21,10 +22,12 @@ SPEC.loader.exec_module(package_ztc)
 class FakeStatus:
     SUCCESS = "success"
     ERROR_DECRYPTION_FAIL = "decrypt-failed"
+    ERROR_FILE_OPEN = "file-open-failed"
 
 
 class FakeLoader:
     records: dict[str, dict] = {}
+    wrong_key_status = FakeStatus.ERROR_DECRYPTION_FAIL
 
     def __init__(self, path: str):
         self.path = path
@@ -51,7 +54,7 @@ class FakeLoader:
         return (
             FakeStatus.SUCCESS
             if self.key == record["key"]
-            else FakeStatus.ERROR_DECRYPTION_FAIL
+            else self.wrong_key_status
         )
 
     def get_metadata_json(self) -> str:
@@ -108,6 +111,7 @@ def bundle(engine_path: Path) -> dict:
 class PackageZtcTest(unittest.TestCase):
     def setUp(self) -> None:
         FakeLoader.records.clear()
+        FakeLoader.wrong_key_status = FakeStatus.ERROR_DECRYPTION_FAIL
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.engine = self.root / "model.engine"
@@ -162,22 +166,43 @@ class PackageZtcTest(unittest.TestCase):
         self.assertEqual(metadata["modules"][0]["module_name"], "image_encoder")
         self.assertEqual(metadata["modules"][0]["io"]["inputs"][0]["name"], "pixel_values")
 
+    def test_rejects_non_decryption_error_during_wrong_key_check(self) -> None:
+        engine, engine_path = package_ztc.select_engine(self.bundle, self.root)
+        FakeLoader.wrong_key_status = FakeStatus.ERROR_FILE_OPEN
+
+        with self.assertRaisesRegex(RuntimeError, "ERROR_DECRYPTION_FAIL"):
+            package_ztc.package_and_validate(
+                bundle=self.bundle,
+                engine=engine,
+                engine_path=engine_path,
+                output_dir=self.root / "output",
+                package_base_key="sam21_image_encoder",
+                binding=FakeBinding,
+                key_bytes=b"k" * 32,
+            )
+
     def test_binding_path_can_be_supplied_by_supported_environment(self) -> None:
-        native_path = str(self.root / "native-python")
-        sentinel = object()
+        native_dir = self.root / "native-python"
+        native_dir.mkdir()
+        (native_dir / "mlange_ztc.py").write_text(
+            "PUBLIC_BINDING = True\n", encoding="utf-8"
+        )
+        native_path = str(native_dir)
         try:
             sys.path.remove(native_path)
         except ValueError:
             pass
-        with (
-            patch.dict(
-                package_ztc.os.environ,
-                {"ZETIC_MLANGE_ZTC_PYTHONPATH": native_path},
-            ),
-            patch.object(package_ztc.importlib, "import_module", return_value=sentinel),
+        sys.modules.pop("mlange_ztc", None)
+        importlib.invalidate_caches()
+        with patch.dict(
+            package_ztc.os.environ,
+            {"ZETIC_MLANGE_ZTC_PYTHONPATH": native_path},
         ):
-            self.assertIs(package_ztc.load_binding(), sentinel)
+            binding = package_ztc.load_binding()
+            self.assertTrue(binding.PUBLIC_BINDING)
+            self.assertEqual(Path(binding.__file__).parent, native_dir)
             self.assertEqual(sys.path[0], native_path)
+        sys.modules.pop("mlange_ztc", None)
         sys.path.remove(native_path)
 
 
