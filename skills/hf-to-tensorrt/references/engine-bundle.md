@@ -7,7 +7,8 @@ normative JSON Schema is `engine-bundle.schema.json` in this directory.
 The manifest contains only independent TensorRT engines and the evidence needed
 to identify and package them. It does not describe engine ordering, loops,
 preprocessing, postprocessing, cache ownership across engines, or application
-semantics.
+semantics. Reproducible processor-contract sidecars may accompany the export
+workspace, but they are deliberately not bundle fields.
 
 ## Required evidence
 
@@ -50,6 +51,13 @@ Repeat `--engine-dir` for additional independent engines. The assembler checks
 that ONNX/build contracts, deserialized engine bindings, engine bytes, and
 parity measurements agree, then atomically writes a manifest only if the bundle
 validator passes.
+
+When each engine will become a separate single-module package, also invoke the
+assembler once per engine directory, giving each output a distinct name such as
+`engine-bundle-vision_encoder.json`. Each such manifest must contain exactly one
+engine entry and must pass `validate_bundle.py` independently. An optional
+multi-entry `engine-bundle.json` may still be produced as an aggregate inventory,
+but it does not replace the one-entry packaging inputs.
 
 The manifest deliberately omits ZTC chunk IDs, target model IDs, package IDs,
 secrets, and internal compatibility objects. Those belong to the private

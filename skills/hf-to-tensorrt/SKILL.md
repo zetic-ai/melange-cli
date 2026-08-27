@@ -21,8 +21,13 @@ in a valid `zetic.engine_bundle.v1` manifest.
 - Use the canonical path `PyTorch reference -> adapter -> static ONNX ->
   TensorRT FP16 or strongly typed FP16/FP32 engine`.
 - Treat each engine as an independent artifact. Do not validate or describe
-  ordering, loops, cache ownership across engines, preprocessing, postprocessing,
-  or end-to-end application behavior.
+  ordering, loops, cache ownership across engines, or end-to-end application
+  behavior in the engine bundle.
+- When a pinned public processor is required to reproduce an engine boundary,
+  record its preprocessing, coordinate transform, or postprocessing contract as
+  a workspace sidecar and compare the sidecar implementation with that pinned
+  processor. Keep this evidence outside the engine bundle and do not present it
+  as multi-engine or application-level validation.
 - Do not create custom TensorRT plugins. An engine must deserialize using only
   TensorRT itself and plugins already allowlisted in the target profile.
 - Do not add dynamic shapes, optimization profiles, FP8, INT8, INT4, calibration,
@@ -76,8 +81,11 @@ adapter-to-engine parity. Never claim success for an unverified approximation.
 ## Output contract
 
 Keep generated adapters, export scripts, tests, ONNX files, engines, `uv.lock`,
-and decision notes in a reproducible export workspace. The handoff manifest is
-`engine-bundle.json` beside the files it references.
+decision notes, and any processor-contract sidecars in a reproducible export
+workspace. The aggregate handoff manifest is `engine-bundle.json` beside the
+files it references. When the downstream packager creates one single-module
+package per engine, also generate and validate one one-entry manifest per engine;
+do not make the packager infer a split from the aggregate manifest.
 
 Read [references/engine-bundle.md](references/engine-bundle.md) before assembling
 the handoff. Generate it from build, engine inspection, target, and parity

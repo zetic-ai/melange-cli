@@ -30,6 +30,14 @@ Capture:
   work surrounding the model;
 - operations likely to depend on input content or create dynamic shapes.
 
+If a pinned public processor produces the boundary tensors, capture its exact
+tensor outputs for the real fixture. A hand-written equivalent must be checked
+against those outputs, including operation order, coordinate conventions,
+candidate selection, resize semantics, threshold comparison, dtypes, and shapes.
+Preserve a failed comparison before changing the equivalent implementation.
+This is a host-contract check only, not permission to run or claim a multi-engine
+end-to-end validation.
+
 Use one real representative invocation as the required v1 fixture. Random
 tensors may supplement structural debugging but cannot replace the real fixture.
 
@@ -121,11 +129,17 @@ Use `scripts/inspect_engine.py` and `scripts/run_engine.py` for this gate.
 ## Gate 7: handoff
 
 Place each engine's evidence in one directory using the filenames described in
-`engine-bundle.md`. Generate `engine-bundle.json` with
+`engine-bundle.md`. Generate aggregate `engine-bundle.json` with
 `scripts/assemble_bundle.py`; do not transcribe bindings, hashes, build settings,
 or parity measurements by hand. Include independent engine entries only; do not
 include engine ordering or application orchestration. Run
 `scripts/validate_bundle.py` and treat any error as a failed gate.
+
+If the requested packaging unit is one engine, run the assembler separately for
+each engine directory and validate every one-entry manifest. The aggregate is a
+convenience index in that case, not the input a single-module packager should
+silently split. Keep processor-contract sidecars in the reproducible workspace;
+they are not fields in `zetic.engine_bundle.v1`.
 
 Output: a validated `zetic.engine_bundle.v1` handoff plus the reproducible local
 export workspace.
