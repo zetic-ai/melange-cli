@@ -979,8 +979,7 @@
               "android-kotlin",
               "android-java",
               "ios-swift",
-              "flutter",
-              "cpp"
+              "flutter"
             ],
             "title": "Default Language",
             "type": "string"

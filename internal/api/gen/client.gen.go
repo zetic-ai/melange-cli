@@ -408,7 +408,6 @@ func (e DeploymentOptionsResponseDefaultInferenceMode) Valid() bool {
 const (
 	DeploymentOptionsResponseDefaultLanguageAndroidJava   DeploymentOptionsResponseDefaultLanguage = "android-java"
 	DeploymentOptionsResponseDefaultLanguageAndroidKotlin DeploymentOptionsResponseDefaultLanguage = "android-kotlin"
-	DeploymentOptionsResponseDefaultLanguageCpp           DeploymentOptionsResponseDefaultLanguage = "cpp"
 	DeploymentOptionsResponseDefaultLanguageFlutter       DeploymentOptionsResponseDefaultLanguage = "flutter"
 	DeploymentOptionsResponseDefaultLanguageIosSwift      DeploymentOptionsResponseDefaultLanguage = "ios-swift"
 )
@@ -419,8 +418,6 @@ func (e DeploymentOptionsResponseDefaultLanguage) Valid() bool {
 	case DeploymentOptionsResponseDefaultLanguageAndroidJava:
 		return true
 	case DeploymentOptionsResponseDefaultLanguageAndroidKotlin:
-		return true
-	case DeploymentOptionsResponseDefaultLanguageCpp:
 		return true
 	case DeploymentOptionsResponseDefaultLanguageFlutter:
 		return true
