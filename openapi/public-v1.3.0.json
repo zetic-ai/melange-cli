@@ -729,7 +729,8 @@
               "android-kotlin",
               "android-java",
               "ios-swift",
-              "flutter"
+              "flutter",
+              "cpp"
             ],
             "title": "Language",
             "type": "string"
@@ -762,6 +763,11 @@
       },
       "DeploymentGuideSDK": {
         "properties": {
+          "download_url": {
+            "nullable": true,
+            "title": "Download Url",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -840,7 +846,8 @@
               "android-kotlin",
               "android-java",
               "ios-swift",
-              "flutter"
+              "flutter",
+              "cpp"
             ],
             "title": "Id",
             "type": "string"
@@ -2032,8 +2039,36 @@
         "title": "MeAccount",
         "type": "object"
       },
+      "MeProgram": {
+        "description": "Partner program (access group) the user joined by redeeming an\naccess code and still belongs to.",
+        "properties": {
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "joined_at"
+        ],
+        "title": "MeProgram",
+        "type": "object"
+      },
       "MeResponse": {
         "properties": {
+          "access_programs": {
+            "items": {
+              "$ref": "#/components/schemas/MeProgram"
+            },
+            "nullable": true,
+            "title": "Access Programs",
+            "type": "array"
+          },
           "account": {
             "$ref": "#/components/schemas/MeAccount"
           },
@@ -5542,7 +5577,8 @@
                 "android-kotlin",
                 "android-java",
                 "ios-swift",
-                "flutter"
+                "flutter",
+                "cpp"
               ],
               "title": "Language",
               "type": "string"

@@ -631,7 +631,8 @@
             "android-kotlin",
             "android-java",
             "ios-swift",
-            "flutter"
+            "flutter",
+            "cpp"
           ],
           "type": "string"
         },
@@ -719,7 +720,8 @@
                       "android-kotlin",
                       "android-java",
                       "ios-swift",
-                      "flutter"
+                      "flutter",
+                      "cpp"
                     ],
                     "title": "Id",
                     "type": "string"
@@ -775,7 +777,8 @@
                 "android-kotlin",
                 "android-java",
                 "ios-swift",
-                "flutter"
+                "flutter",
+                "cpp"
               ],
               "title": "Language",
               "type": "string"
@@ -830,6 +833,13 @@
             },
             "sdk": {
               "properties": {
+                "download_url": {
+                  "title": "Download Url",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "name": {
                   "title": "Name",
                   "type": "string"
@@ -4032,6 +4042,33 @@
     "outputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "access_programs": {
+          "items": {
+            "description": "Partner program (access group) the user joined by redeeming an\naccess code and still belongs to.",
+            "properties": {
+              "joined_at": {
+                "format": "date-time",
+                "title": "Joined At",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "joined_at"
+            ],
+            "title": "MeProgram",
+            "type": "object"
+          },
+          "title": "Access Programs",
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "account": {
           "properties": {
             "name": {

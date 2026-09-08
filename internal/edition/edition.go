@@ -65,9 +65,9 @@ func (p Policy) IsQualcomm() bool { return p.qualcomm }
 // DeploymentLanguages returns the guide languages exposed by this edition.
 func (p Policy) DeploymentLanguages() []string {
 	if p.qualcomm {
-		return []string{"android-kotlin", "android-java", "flutter"}
+		return []string{"android-kotlin", "android-java", "flutter", "cpp"}
 	}
-	return []string{"android-kotlin", "android-java", "ios-swift", "flutter"}
+	return []string{"android-kotlin", "android-java", "ios-swift", "flutter", "cpp"}
 }
 
 // AllowsDeploymentLanguage reports whether a guide language belongs to this
@@ -82,7 +82,7 @@ func (p Policy) AllowsDeploymentLanguage(language string) bool {
 }
 
 // FilterDeploymentOptions keeps standard response bytes exact and narrows the
-// Qualcomm catalog to Android and Flutter guide choices.
+// Qualcomm catalog to Android, Flutter, and C++ guide choices.
 func (p Policy) FilterDeploymentOptions(body []byte) ([]byte, error) {
 	if !p.qualcomm {
 		return body, nil

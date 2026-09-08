@@ -57,4 +57,4 @@ decimals and memory to one decimal.
 ## Deployment
 
 Name the selected Qualcomm or device-unscoped target, then provide the exact
-Android or Flutter guide from `melange-qcom deploy guide`.
+Android, Flutter, or C++ guide from `melange-qcom deploy guide`.

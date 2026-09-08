@@ -47,6 +47,11 @@
           "code_language": "dart",
           "id": "flutter",
           "label": "Flutter"
+        },
+        {
+          "code_language": "cpp",
+          "id": "cpp",
+          "label": "C++ (Android arm64)"
         }
       ]
     },

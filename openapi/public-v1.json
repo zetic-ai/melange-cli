@@ -821,7 +821,8 @@
               "android-kotlin",
               "android-java",
               "ios-swift",
-              "flutter"
+              "flutter",
+              "cpp"
             ],
             "title": "Language",
             "type": "string"
@@ -854,6 +855,17 @@
       },
       "DeploymentGuideSDK": {
         "properties": {
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -932,7 +944,8 @@
               "android-kotlin",
               "android-java",
               "ios-swift",
-              "flutter"
+              "flutter",
+              "cpp"
             ],
             "title": "Id",
             "type": "string"
@@ -2328,8 +2341,42 @@
         "title": "MeAccount",
         "type": "object"
       },
+      "MeProgram": {
+        "description": "Partner program (access group) the user joined by redeeming an\naccess code and still belongs to.",
+        "properties": {
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "joined_at"
+        ],
+        "title": "MeProgram",
+        "type": "object"
+      },
       "MeResponse": {
         "properties": {
+          "access_programs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MeProgram"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Programs"
+          },
           "account": {
             "$ref": "#/components/schemas/MeAccount"
           },
@@ -6108,7 +6155,8 @@
                 "android-kotlin",
                 "android-java",
                 "ios-swift",
-                "flutter"
+                "flutter",
+                "cpp"
               ],
               "title": "Language",
               "type": "string"

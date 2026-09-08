@@ -217,6 +217,15 @@ var fixtureRoundTrips = map[string]fixtureRoundTrip{
 			return args
 		},
 	},
+	"get_deployment_guide_cpp": {
+		args: func(t *testing.T, fx fixturetest.Fixture) map[string]any {
+			q := queryOf(t, fx)
+			args := repoAndModel(t, fx)
+			args["language"] = q.Get("language")
+			args["inference_mode"] = q.Get("inference_mode")
+			return args
+		},
+	},
 	"get_general_report": {args: reportArgs},
 	"get_llm_report":     {args: reportArgs},
 	"get_package_report": {args: reportArgs},
