@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -132,7 +133,7 @@ func TestGetDeploymentInfoRejectsUnsupportedSelectorsBeforeCallingTheAPI(t *test
 	schema, err := json.Marshal(toolNamed(t, cs, "get_deployment_info").InputSchema)
 	require.NoError(t, err)
 	assert.Contains(t, string(schema),
-		`"enum":["android-kotlin","android-java","ios-swift","flutter"]`,
+		`"enum":["android-kotlin","android-java","ios-swift","flutter","cpp"]`,
 		"the supported SDK languages are advertised")
 	assert.Contains(t, string(schema), `"enum":["auto","speed","accuracy"]`,
 		"the supported inference modes are advertised")
@@ -165,7 +166,7 @@ func TestGetDeploymentInfoRejectsUnsupportedSelectorsBeforeCallingTheAPI(t *test
 	}
 }
 
-func TestQualcommDeploymentToolAdvertisesAndroidAndFlutterButNotIOS(t *testing.T) {
+func TestQualcommDeploymentToolAdvertisesAndroidFlutterAndCppButNotIOS(t *testing.T) {
 	cs, _ := connectDeps(t, Deps{
 		Clients: registryProvider(t, &httpmock.Registry{}), Version: "test", Edition: edition.Qualcomm(),
 	})
@@ -173,12 +174,12 @@ func TestQualcommDeploymentToolAdvertisesAndroidAndFlutterButNotIOS(t *testing.T
 	schema, err := json.Marshal(toolNamed(t, cs, "get_deployment_info").InputSchema)
 	require.NoError(t, err)
 	assert.Contains(t, string(schema),
-		`"enum":["android-kotlin","android-java","flutter"]`)
+		`"enum":["android-kotlin","android-java","flutter","cpp"]`)
 	assert.NotContains(t, string(schema), "ios-swift")
 }
 
 func TestQualcommDeploymentOptionsFilterIOSFromToolResult(t *testing.T) {
-	body := `{"languages":[{"id":"android-kotlin","label":"Android (Kotlin)","code_language":"kotlin"},{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"},{"id":"flutter","label":"Flutter","code_language":"dart"}],` +
+	body := `{"languages":[{"id":"android-kotlin","label":"Android (Kotlin)","code_language":"kotlin"},{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"},{"id":"flutter","label":"Flutter","code_language":"dart"},{"id":"cpp","label":"C++","code_language":"cpp"}],` +
 		`"inference_modes":[{"id":"auto","label":"Auto","description":"pick per device"}],"default_language":"android-kotlin","default_inference_mode":"auto","guide_version":1}`
 	reg := &httpmock.Registry{}
 	reg.Register(httpmock.REST("GET", "/v1/deployment/options"),
@@ -189,6 +190,7 @@ func TestQualcommDeploymentOptionsFilterIOSFromToolResult(t *testing.T) {
 
 	assert.False(t, res.IsError)
 	assert.Contains(t, textOf(t, res), "flutter")
+	assert.Contains(t, textOf(t, res), `"id":"cpp"`)
 	assert.NotContains(t, textOf(t, res), "ios-swift")
 }
 
@@ -218,4 +220,24 @@ func TestGetDeploymentInfoAdvertisesItsTwoModesAndCredentialSafety(t *testing.T)
 	assert.Contains(t, tool.Description, "YOUR_PERSONAL_KEY")
 
 	assertReadOnlyAnnotations(t, cs, "get_deployment_info")
+}
+
+func TestCppDeploymentToolForwardsLanguageInBothEditions(t *testing.T) {
+	body := strings.ReplaceAll(deployGuideBody, "ios-swift", "cpp")
+	for _, policy := range []edition.Policy{edition.Standard(), edition.Qualcomm()} {
+		t.Run(policy.ProgramName(), func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			reg.Register(httpmock.REST("GET", guidePath),
+				httpmock.JSONResponse(200, json.RawMessage(body)))
+			cs, _ := connectDeps(t, Deps{Clients: registryProvider(t, reg), Version: "test", Edition: policy})
+			res := callTool(t, cs, "get_deployment_info", map[string]any{
+				"repo": "zetic/whisper-tiny", "model_key": "whisper-tiny-1",
+				"language": "cpp", "inference_mode": "auto",
+			})
+			assert.False(t, res.IsError)
+			assert.Equal(t, body, textOf(t, res))
+			assert.Equal(t, "cpp", reg.Requests[0].URL.Query().Get("language"))
+			reg.Verify(t)
+		})
+	}
 }

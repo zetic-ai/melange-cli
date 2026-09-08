@@ -62,6 +62,7 @@ func withDeploymentEnums(props map[string]*jsonschema.Schema) {
 		gen.GetDeploymentGuideParamsLanguageAndroidJava,
 		gen.GetDeploymentGuideParamsLanguageIosSwift,
 		gen.GetDeploymentGuideParamsLanguageFlutter,
+		gen.GetDeploymentGuideParamsLanguageCpp,
 	)
 	withInferenceModeEnum(props)
 }
@@ -71,6 +72,7 @@ func withQualcommDeploymentEnums(props map[string]*jsonschema.Schema) {
 		gen.GetDeploymentGuideParamsLanguageAndroidKotlin,
 		gen.GetDeploymentGuideParamsLanguageAndroidJava,
 		gen.GetDeploymentGuideParamsLanguageFlutter,
+		gen.GetDeploymentGuideParamsLanguageCpp,
 	)
 	withInferenceModeEnum(props)
 }

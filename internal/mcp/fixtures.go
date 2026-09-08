@@ -26,6 +26,7 @@ var FixtureTool = map[string]string{
 	"import_model":                  "import_model",
 	"get_deployment_options":        "get_deployment_info",
 	"get_deployment_guide":          "get_deployment_info",
+	"get_deployment_guide_cpp":      "get_deployment_info",
 	"get_general_report":            "get_model_report",
 	"get_llm_report":                "get_model_report",
 	"get_package_report":            "get_model_report",

@@ -216,12 +216,13 @@ func TestContractFixturesConformToToolOutputSchemas(t *testing.T) {
 				"targets": unmarshalAny(t, body),
 			}
 		},
-		"get_deployment_options": passthrough,
-		"get_deployment_guide":   passthrough,
-		"get_general_report":     passthrough,
-		"get_llm_report":         passthrough,
-		"get_package_report":     passthrough,
-		"list_library_models":    passthrough,
+		"get_deployment_options":   passthrough,
+		"get_deployment_guide":     passthrough,
+		"get_deployment_guide_cpp": passthrough,
+		"get_general_report":       passthrough,
+		"get_llm_report":           passthrough,
+		"get_package_report":       passthrough,
+		"list_library_models":      passthrough,
 		// The provider list only ever reaches a caller inside the
 		// include_providers envelope, next to a model page.
 		"list_library_providers": func(t *testing.T, body json.RawMessage) any {

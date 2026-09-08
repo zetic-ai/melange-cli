@@ -183,7 +183,7 @@ melange-qcom model download "$model_key" -R "$repo" \
 
 ## Generate deployment code
 
-The Qualcomm edition supports `android-kotlin`, `android-java`, and `flutter`.
+The Qualcomm edition supports `android-kotlin`, `android-java`, `flutter`, and `cpp`.
 It rejects `ios-swift`. Kotlin and `auto` are defaults.
 
 ```sh
@@ -192,7 +192,14 @@ melange-qcom deploy guide "$model_key" -R "$repo" \
   --language android-kotlin --mode auto
 melange-qcom deploy guide "$model_key" -R "$repo" \
   --language flutter --mode speed --json
+melange-qcom deploy guide "$model_key" -R "$repo" \
+  --language cpp --mode auto
 ```
+
+Use `cpp` for a standalone Android arm64 executable on the wearable. Its guide
+includes the SDK ZIP download link and build instructions. Deploy an existing
+library model without importing it again; the agent needs board access and the
+board needs HTTPS connectivity for SDK model downloads.
 
 Use the guide's exact SDK fields and callbacks. Keep `YOUR_PERSONAL_KEY` as the
 placeholder; never interpolate, print, or persist the active credential.

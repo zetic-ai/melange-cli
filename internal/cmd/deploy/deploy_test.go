@@ -3,6 +3,7 @@ package deploy_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/zetic-ai/melange-cli/internal/cmd/root"
 	"github.com/zetic-ai/melange-cli/internal/cmdutil"
 	"github.com/zetic-ai/melange-cli/internal/edition"
+	"github.com/zetic-ai/melange-cli/internal/fixturetest"
 	"github.com/zetic-ai/melange-cli/internal/httpmock"
 	"github.com/zetic-ai/melange-cli/internal/iostreams"
 )
@@ -81,17 +83,18 @@ func TestDeployOptionsHumanShowsDefaultsAndAllSelectors(t *testing.T) {
 	assert.Contains(t, out, "default")
 }
 
-func TestQualcommDeployOptionsHideIOSAndKeepFlutter(t *testing.T) {
+func TestQualcommDeployOptionsHideIOSAndKeepFlutterAndCpp(t *testing.T) {
 	e := setup(t)
 	e.f.Edition = edition.Qualcomm()
 	body := strings.Replace(optionsBody,
 		`{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"}`,
-		`{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"},{"id":"flutter","label":"Flutter","code_language":"dart"}`, 1)
+		`{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"},{"id":"flutter","label":"Flutter","code_language":"dart"},{"id":"cpp","label":"C++","code_language":"cpp"}`, 1)
 	e.reg.Register(httpmock.REST("GET", "/v1/deployment/options"), jsonStub(200, body))
 
 	require.NoError(t, run(t, e, "deploy", "options", "--json"))
 	assert.Contains(t, e.out.String(), `"id":"android-kotlin"`)
 	assert.Contains(t, e.out.String(), `"id":"flutter"`)
+	assert.Contains(t, e.out.String(), `"id":"cpp"`)
 	assert.NotContains(t, e.out.String(), "ios-swift")
 }
 
@@ -103,7 +106,7 @@ func TestQualcommDeployGuideRejectsIOSLocally(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, 2, cmdutil.ExitCode(err))
-	assert.Contains(t, err.Error(), "android-kotlin, android-java, or flutter")
+	assert.Contains(t, err.Error(), "android-kotlin, android-java, flutter, or cpp")
 	assert.Empty(t, e.reg.Requests)
 }
 
@@ -112,12 +115,12 @@ func TestQualcommDeployGuideHelpOnlyOffersApprovedLanguages(t *testing.T) {
 	e.f.Edition = edition.Qualcomm()
 
 	require.NoError(t, run(t, e, "deploy", "guide", "--help"))
-	assert.Contains(t, e.out.String(), "android-kotlin, android-java, or flutter")
+	assert.Contains(t, e.out.String(), "android-kotlin, android-java, flutter, or cpp")
 	assert.NotContains(t, e.out.String(), "ios-swift")
 }
 
-func TestQualcommDeployGuideAllowsAndroidAndFlutter(t *testing.T) {
-	for _, language := range []string{"android-kotlin", "android-java", "flutter"} {
+func TestQualcommDeployGuideAllowsAndroidFlutterAndCpp(t *testing.T) {
+	for _, language := range []string{"android-kotlin", "android-java", "flutter", "cpp"} {
 		t.Run(language, func(t *testing.T) {
 			e := setup(t)
 			e.f.Edition = edition.Qualcomm()
@@ -255,4 +258,39 @@ func TestDeployGuideHumanOutputNeutralizesOSC52ButJSONStaysExact(t *testing.T) {
 	require.NoError(t, run(t, structured, "deploy", "guide", "abc123", "-R", "acme/chat", "--json"))
 	assert.Equal(t, body+"\n", structured.out.String(),
 		"terminal sanitization must not mutate structured JSON")
+}
+
+func TestCppDeployGuideRendersSDKDownloadAndPreservesJSON(t *testing.T) {
+	fixture := fixturetest.Load(t, "get_deployment_guide_cpp")
+	body := string(fixture.Response.Body)
+	for _, policy := range []edition.Policy{edition.Standard(), edition.Qualcomm()} {
+		for _, structured := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/json=%t", policy.ProgramName(), structured), func(t *testing.T) {
+				e := setup(t)
+				e.f.Edition = policy
+				e.reg.Register(
+					httpmock.REST("GET", "/v1/repos/acme/chat/models/abc123/deployment-guide"),
+					jsonStub(200, body),
+				)
+				args := []string{"deploy", "guide", "abc123", "-R", "acme/chat", "--language", "cpp", "--mode", "auto"}
+				if structured {
+					args = append(args, "--json")
+				}
+				require.NoError(t, run(t, e, args...))
+				assert.Equal(t, "cpp", e.reg.Requests[0].URL.Query().Get("language"))
+				assert.Equal(t, "auto", e.reg.Requests[0].URL.Query().Get("inference_mode"))
+				out := e.out.String()
+				assert.Contains(t, out, "https://github.com/zetic-ai/melange-cpp-python/releases/download/v0.1.6/zetic-mlange-cpp-0.1.6-android-arm64.zip")
+				assert.Contains(t, out, "fromModelKey")
+				assert.Contains(t, out, "YOUR_PERSONAL_KEY")
+				assert.NotContains(t, out, "ztp_test")
+				if structured {
+					assert.Equal(t, body+"\n", out)
+				} else {
+					assert.Contains(t, out, "```cpp\n")
+					assert.Contains(t, out, "SDK download: https://github.com/")
+				}
+			})
+		}
+	}
 }

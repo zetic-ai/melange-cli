@@ -26,6 +26,9 @@ melange deploy guide MODEL_KEY [flags]
   # iOS Swift, prefer speed
   melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language ios-swift --mode speed
 
+  # Standalone C++ on Android arm64
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language cpp --mode auto
+
   # Structured guide for an agent
   melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language flutter --mode accuracy --json
 ```
@@ -36,7 +39,7 @@ melange deploy guide MODEL_KEY [flags]
   -h, --help                help for guide
       --jq expression       Filter JSON output using a jq expression (implies --json)
       --json                Output the full result as JSON
-      --language string     SDK language: android-kotlin, android-java, ios-swift, or flutter (default "android-kotlin")
+      --language string     SDK language: android-kotlin, android-java, ios-swift, flutter, or cpp (default "android-kotlin")
       --mode string         Inference mode: auto, speed, or accuracy (default "auto")
   -R, --repo ACCOUNT/REPO   Repository as ACCOUNT/REPO (required)
       --template string     Format JSON output using a Go template (implies --json)

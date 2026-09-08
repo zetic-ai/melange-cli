@@ -1,0 +1,46 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/repos/verifiedusertestaccount2/fixturerepo/models/<uuid>/deployment-guide?language=cpp&inference_mode=auto"
+  },
+  "response": {
+    "body": {
+      "credential_placeholder": "YOUR_PERSONAL_KEY",
+      "guide_version": 1,
+      "inference_mode": "auto",
+      "language": "cpp",
+      "model": {
+        "download_ready": true,
+        "key": "<uuid>",
+        "repository": "verifiedusertestaccount2/fixturerepo",
+        "state": "ready",
+        "type": "general",
+        "version": 1
+      },
+      "sdk": {
+        "download_url": "https://github.com/zetic-ai/melange-cpp-python/releases/download/v0.1.6/zetic-mlange-cpp-0.1.6-android-arm64.zip",
+        "name": "ZeticMLange",
+        "version": "0.1.6"
+      },
+      "steps": [
+        {
+          "code": "# Download and extract the Android arm64 C++ SDK:\n# https://github.com/zetic-ai/melange-cpp-python/releases/download/v0.1.6/zetic-mlange-cpp-0.1.6-android-arm64.zip\n# Set ZeticMlange_DIR to <SDK>/lib/cmake/ZeticMlange.\n# Build with the Android NDK toolchain, -DANDROID_ABI=arm64-v8a\n# and -DANDROID_STL=c++_shared.\ncmake_minimum_required(VERSION 3.24)\nproject(my_app LANGUAGES CXX)\nfind_package(ZeticMlange CONFIG REQUIRED)\nadd_executable(my_app main.cpp)\ntarget_link_libraries(my_app PRIVATE zetic::mlange)",
+          "code_language": "cmake",
+          "title": "Download the SDK and add ZeticMLange in CMake"
+        },
+        {
+          "code": "#include <zetic_model.h>\n#include <zetic_selection.h>\n\nusing namespace zetic::mlange;\n\n// Use a writable cache and the SDK's lib directory.\n// Add that directory to LD_LIBRARY_PATH before running.\n// The device needs HTTPS access. Place the following in your main() function.\nGeneralFetchOptions fetch;\nfetch.cache_dir = \"/path/to/cache\";\nfetch.version = 1;\nfetch.selection_mode = \"AUTO\";\nauto model = Model::fromModelKey(\n    \"verifiedusertestaccount2/fixturerepo\", \"YOUR_PERSONAL_KEY\",\n    \"/path/to/zetic-sdk/lib\", fetch);\n\n// Fill inputs using model.inputShape(i) and model.inputDtype(i).\nstd::vector<Model::Tensor> inputs;\n// Keep input data alive until run() returns.\nstd::vector<Model::Tensor> outputs = model.run(inputs);",
+          "code_language": "cpp",
+          "title": "Load and run the model"
+        }
+      ]
+    },
+    "headers": {
+      "Cache-Control": "private, no-store",
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}

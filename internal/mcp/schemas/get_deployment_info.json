@@ -17,7 +17,8 @@
             "android-kotlin",
             "android-java",
             "ios-swift",
-            "flutter"
+            "flutter",
+            "cpp"
           ],
           "title": "Default Language",
           "type": "string"
@@ -70,7 +71,8 @@
                   "android-kotlin",
                   "android-java",
                   "ios-swift",
-                  "flutter"
+                  "flutter",
+                  "cpp"
                 ],
                 "title": "Id",
                 "type": "string"
@@ -126,7 +128,8 @@
             "android-kotlin",
             "android-java",
             "ios-swift",
-            "flutter"
+            "flutter",
+            "cpp"
           ],
           "title": "Language",
           "type": "string"
@@ -181,6 +184,13 @@
         },
         "sdk": {
           "properties": {
+            "download_url": {
+              "title": "Download Url",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "name": {
               "title": "Name",
               "type": "string"

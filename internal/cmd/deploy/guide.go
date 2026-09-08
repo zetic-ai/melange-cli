@@ -18,6 +18,7 @@ var supportedLanguages = map[string]gen.GetDeploymentGuideParamsLanguage{
 	"android-java":   gen.GetDeploymentGuideParamsLanguageAndroidJava,
 	"ios-swift":      gen.GetDeploymentGuideParamsLanguageIosSwift,
 	"flutter":        gen.GetDeploymentGuideParamsLanguageFlutter,
+	"cpp":            gen.GetDeploymentGuideParamsLanguageCpp,
 }
 
 var supportedModes = map[string]gen.GetDeploymentGuideParamsInferenceMode{
@@ -39,9 +40,12 @@ func newCmdGuide(f *cmdutil.Factory) *cobra.Command {
   # iOS Swift, prefer speed
   melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language ios-swift --mode speed
 
+  # Standalone C++ on Android arm64
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language cpp --mode auto
+
   # Structured guide for an agent
   melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language flutter --mode accuracy --json`
-	languageHelp := "SDK language: android-kotlin, android-java, ios-swift, or flutter"
+	languageHelp := "SDK language: android-kotlin, android-java, ios-swift, flutter, or cpp"
 	if f.Edition.IsQualcomm() {
 		examples = `  # Android Kotlin, automatic target selection
   melange deploy guide MODEL_KEY -R ACCOUNT/REPO
@@ -49,9 +53,12 @@ func newCmdGuide(f *cmdutil.Factory) *cobra.Command {
   # Android Java, prefer speed
   melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language android-java --mode speed
 
+  # Standalone C++ on Android arm64
+  melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language cpp --mode auto
+
   # Structured Flutter guide for an agent
   melange deploy guide MODEL_KEY -R ACCOUNT/REPO --language flutter --mode accuracy --json`
-		languageHelp = "SDK language: android-kotlin, android-java, or flutter"
+		languageHelp = "SDK language: android-kotlin, android-java, flutter, or cpp"
 	}
 	cmd := &cobra.Command{
 		Use:   "guide MODEL_KEY",
@@ -73,9 +80,9 @@ are model-specific.`,
 			}
 			languageValue, ok := supportedLanguages[language]
 			if !ok || !f.Edition.AllowsDeploymentLanguage(language) {
-				expected := "android-kotlin, android-java, ios-swift, or flutter"
+				expected := "android-kotlin, android-java, ios-swift, flutter, or cpp"
 				if f.Edition.IsQualcomm() {
-					expected = "android-kotlin, android-java, or flutter"
+					expected = "android-kotlin, android-java, flutter, or cpp"
 				}
 				return cmdutil.FlagError{Err: fmt.Errorf(
 					"invalid --language %q; expected %s", language, expected)}
@@ -129,6 +136,9 @@ func printGuide(f *cmdutil.Factory, guide *gen.DeploymentGuideResponse) error {
 	fmt.Fprintf(&b, "# Deployment guide: %s\n\n", guide.Model.Repository)
 	fmt.Fprintf(&b, "Model: %s (version %d, %s, %s)\n", guide.Model.Key, guide.Model.Version, guide.Model.Type, guide.Model.State)
 	fmt.Fprintf(&b, "Language: %s\nInference mode: %s\nSDK: %s %s\n", guide.Language, guide.InferenceMode, guide.Sdk.Name, guide.Sdk.Version)
+	if guide.Sdk.DownloadUrl != nil && *guide.Sdk.DownloadUrl != "" {
+		fmt.Fprintf(&b, "SDK download: %s\n", *guide.Sdk.DownloadUrl)
+	}
 	if !guide.Model.DownloadReady {
 		fmt.Fprintln(&b, "Status: model artifacts are not download-ready yet")
 	}

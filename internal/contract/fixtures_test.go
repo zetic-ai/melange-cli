@@ -335,6 +335,25 @@ func cases() []contractCase {
 			},
 		},
 		{
+			name:         "get_deployment_guide_cpp",
+			responseBody: func() any { return &gen.DeploymentGuideResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				a, r := fixturetest.RepoCoords(fx.Request.Path)
+				query, err := url.Parse(fx.Request.Path)
+				if err != nil {
+					return err
+				}
+				language := gen.GetDeploymentGuideParamsLanguage(query.Query().Get("language"))
+				mode := gen.GetDeploymentGuideParamsInferenceMode(query.Query().Get("inference_mode"))
+				_, err = c.GetDeploymentGuideWithResponse(
+					ctx, a, r, afterModels(fx.Request.Path), &gen.GetDeploymentGuideParams{
+						Language: &language, InferenceMode: &mode,
+					},
+				)
+				return err
+			},
+		},
+		{
 			name:         "list_model_targets",
 			responseBody: func() any { return &gen.ListModelTargetsResponse{} },
 			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {

@@ -312,6 +312,7 @@ func (e DeploymentGuideResponseInferenceMode) Valid() bool {
 const (
 	DeploymentGuideResponseLanguageAndroidJava   DeploymentGuideResponseLanguage = "android-java"
 	DeploymentGuideResponseLanguageAndroidKotlin DeploymentGuideResponseLanguage = "android-kotlin"
+	DeploymentGuideResponseLanguageCpp           DeploymentGuideResponseLanguage = "cpp"
 	DeploymentGuideResponseLanguageFlutter       DeploymentGuideResponseLanguage = "flutter"
 	DeploymentGuideResponseLanguageIosSwift      DeploymentGuideResponseLanguage = "ios-swift"
 )
@@ -322,6 +323,8 @@ func (e DeploymentGuideResponseLanguage) Valid() bool {
 	case DeploymentGuideResponseLanguageAndroidJava:
 		return true
 	case DeploymentGuideResponseLanguageAndroidKotlin:
+		return true
+	case DeploymentGuideResponseLanguageCpp:
 		return true
 	case DeploymentGuideResponseLanguageFlutter:
 		return true
@@ -357,6 +360,7 @@ func (e DeploymentInferenceModeOptionId) Valid() bool {
 const (
 	DeploymentLanguageOptionIdAndroidJava   DeploymentLanguageOptionId = "android-java"
 	DeploymentLanguageOptionIdAndroidKotlin DeploymentLanguageOptionId = "android-kotlin"
+	DeploymentLanguageOptionIdCpp           DeploymentLanguageOptionId = "cpp"
 	DeploymentLanguageOptionIdFlutter       DeploymentLanguageOptionId = "flutter"
 	DeploymentLanguageOptionIdIosSwift      DeploymentLanguageOptionId = "ios-swift"
 )
@@ -367,6 +371,8 @@ func (e DeploymentLanguageOptionId) Valid() bool {
 	case DeploymentLanguageOptionIdAndroidJava:
 		return true
 	case DeploymentLanguageOptionIdAndroidKotlin:
+		return true
+	case DeploymentLanguageOptionIdCpp:
 		return true
 	case DeploymentLanguageOptionIdFlutter:
 		return true
@@ -402,6 +408,7 @@ func (e DeploymentOptionsResponseDefaultInferenceMode) Valid() bool {
 const (
 	DeploymentOptionsResponseDefaultLanguageAndroidJava   DeploymentOptionsResponseDefaultLanguage = "android-java"
 	DeploymentOptionsResponseDefaultLanguageAndroidKotlin DeploymentOptionsResponseDefaultLanguage = "android-kotlin"
+	DeploymentOptionsResponseDefaultLanguageCpp           DeploymentOptionsResponseDefaultLanguage = "cpp"
 	DeploymentOptionsResponseDefaultLanguageFlutter       DeploymentOptionsResponseDefaultLanguage = "flutter"
 	DeploymentOptionsResponseDefaultLanguageIosSwift      DeploymentOptionsResponseDefaultLanguage = "ios-swift"
 )
@@ -412,6 +419,8 @@ func (e DeploymentOptionsResponseDefaultLanguage) Valid() bool {
 	case DeploymentOptionsResponseDefaultLanguageAndroidJava:
 		return true
 	case DeploymentOptionsResponseDefaultLanguageAndroidKotlin:
+		return true
+	case DeploymentOptionsResponseDefaultLanguageCpp:
 		return true
 	case DeploymentOptionsResponseDefaultLanguageFlutter:
 		return true
@@ -1140,6 +1149,7 @@ func (e ListLibraryModelsParamsTask) Valid() bool {
 const (
 	GetDeploymentGuideParamsLanguageAndroidJava   GetDeploymentGuideParamsLanguage = "android-java"
 	GetDeploymentGuideParamsLanguageAndroidKotlin GetDeploymentGuideParamsLanguage = "android-kotlin"
+	GetDeploymentGuideParamsLanguageCpp           GetDeploymentGuideParamsLanguage = "cpp"
 	GetDeploymentGuideParamsLanguageFlutter       GetDeploymentGuideParamsLanguage = "flutter"
 	GetDeploymentGuideParamsLanguageIosSwift      GetDeploymentGuideParamsLanguage = "ios-swift"
 )
@@ -1150,6 +1160,8 @@ func (e GetDeploymentGuideParamsLanguage) Valid() bool {
 	case GetDeploymentGuideParamsLanguageAndroidJava:
 		return true
 	case GetDeploymentGuideParamsLanguageAndroidKotlin:
+		return true
+	case GetDeploymentGuideParamsLanguageCpp:
 		return true
 	case GetDeploymentGuideParamsLanguageFlutter:
 		return true
@@ -1360,8 +1372,9 @@ type DeploymentGuideResponseLanguage string
 
 // DeploymentGuideSDK defines model for DeploymentGuideSDK.
 type DeploymentGuideSDK struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	DownloadUrl *string `json:"download_url,omitempty"`
+	Name        string  `json:"name"`
+	Version     string  `json:"version"`
 }
 
 // DeploymentGuideStep defines model for DeploymentGuideStep.
@@ -1739,11 +1752,19 @@ type MeAccount struct {
 	Type string `json:"type"`
 }
 
+// MeProgram Partner program (access group) the user joined by redeeming an
+// access code and still belongs to.
+type MeProgram struct {
+	JoinedAt time.Time `json:"joined_at"`
+	Name     string    `json:"name"`
+}
+
 // MeResponse defines model for MeResponse.
 type MeResponse struct {
-	Account MeAccount `json:"account"`
-	Token   MeToken   `json:"token"`
-	User    MeUser    `json:"user"`
+	AccessPrograms *[]MeProgram `json:"access_programs,omitempty"`
+	Account        MeAccount    `json:"account"`
+	Token          MeToken      `json:"token"`
+	User           MeUser       `json:"user"`
 }
 
 // MeToken defines model for MeToken.
