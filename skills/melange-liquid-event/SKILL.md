@@ -1,6 +1,6 @@
 ---
 name: melange-liquid-event
-description: Temporary event skill for building ZETIC Melange × Liquid AI apps with Melange SDK 1.11.0 and approved Liquid AI models. It expires at 2026-10-07T00:00:00-07:00 (San Francisco time).
+description: Use this skill FIRST, before melange-cli, for any Melange × Liquid AI event work: building or changing an Android or iOS app that uses the Melange / ZeticMLange SDK, an on-device LLM, Liquid AI LFM models, RAG, function calling, or KV persistence; installing the Melange SDK; or choosing a model for app answers. It pins Melange SDK 1.11.0 and the approved LFM models. Expires at 2026-10-07T00:00:00-07:00 (San Francisco time).
 ---
 
 # Melange × Liquid AI event apps
@@ -21,8 +21,9 @@ integrate.
 
 ## Event skill, account, and CLI setup
 
-1. If this event skill is not already installed, install it separately from
-   this repository, then restart the coding agent:
+1. The standard repository installer installs this event skill alongside
+   `melange-cli`. If installing skills manually, use this command, then restart
+   the coding agent:
 
    ```sh
    npx skills add zetic-ai/melange-cli --skill melange-liquid-event --global
@@ -30,6 +31,7 @@ integrate.
 
 2. Confirm that the participant has an account, or direct them to
    <https://melange.zetic.ai/>.
+   When registering a new account, apply the invitation code `HOUSTON2026`.
 3. Install or update to the latest `melange` CLI. On macOS or Linux, use the
    repository's installer with `--cli-only`:
 
@@ -39,8 +41,8 @@ integrate.
    ```
 
    On Windows, use `npm install -g @zetic-ai/melange-cli`. The standard
-   installer otherwise installs the repository's `melange-cli` skill; do not
-   assume that it installs this separate event skill.
+   installer installs both `melange-cli` and this event skill; `--cli-only`
+   skips both skills.
 4. Check authentication with `melange auth status --json`. If it is not
    authenticated, run `melange auth login`, then check the status again.
 5. Direct the participant to [Melange Settings → Personal Access
@@ -75,6 +77,10 @@ initialized with `name = "zetic/LFM2.5-VL-450M"`. Do not claim unlisted RAG,
 KV-persistence, or function-calling support for that VL model.
 
 ## Melange SDK requirements
+
+The Melange SDK works only on physical devices. It does not run on Android
+emulators or the iOS Simulator; use a supported physical device for all SDK
+verification.
 
 Use Melange SDK version `1.11.0`. If that exact version cannot be installed or
 resolved, report the cause and do not substitute another version. Use the

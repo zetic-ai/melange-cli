@@ -18,6 +18,10 @@ curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/in
 Restart your coding agent afterward so it can discover the skill. Re-run the
 same line any time to update both.
 
+> **Melange × Liquid AI event participants:** use this `install.sh` one-liner, not
+> Homebrew/npm/Go. It also installs the `melange-liquid-event` skill, which your
+> agent must follow for all Melange SDK work during the event.
+
 The installer downloads the release binary for your platform, verifies its
 SHA-256 checksum, and installs the skill for universal agents and Claude Code.
 When [`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/) is

@@ -1,5 +1,5 @@
 #!/bin/sh
-# One-line installer for the melange CLI and its agent skill.
+# One-line installer for the melange CLI and its agent skills.
 # https://github.com/zetic-ai/melange-cli
 #
 # Usage:
@@ -9,9 +9,9 @@
 #   --version VERSION     MELANGE_VERSION       install a specific release (e.g. v1.2.3); default: latest
 #   --install-dir DIR     MELANGE_INSTALL_DIR   binary directory; default /usr/local/bin,
 #                                               falling back to ~/.local/bin when not writable
-#   --skill-only          MELANGE_SKIP_CLI=1    install only the agent skill
+#   --skill-only          MELANGE_SKIP_CLI=1    install only the agent skills
 #   --cli-only            MELANGE_SKIP_SKILL=1  install only the CLI
-#   --agent "A B"         MELANGE_SKILL_AGENTS  agents to install the skill for;
+#   --agent "A B"         MELANGE_SKILL_AGENTS  agents to install skills for;
 #                                               default "universal claude-code"
 #   --require-signature   MELANGE_REQUIRE_SIGNATURE=1
 #                                               fail unless the release signature is verified
@@ -34,7 +34,7 @@ fi
 
 REPO="zetic-ai/melange-cli"
 BINARY="melange"
-SKILL="melange-cli"
+SKILLS="melange-cli melange-liquid-event"
 
 # --- Output -----------------------------------------------------------------
 # Everything the installer says goes to stderr, so `curl … | sh` leaves stdout
@@ -53,7 +53,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # script has no path on disk to read the comment header back from.
 usage() {
     cat >&2 <<'USAGE'
-Install the melange CLI and its agent skill.
+Install the melange CLI and its agent skills.
 
   curl -fsSL https://raw.githubusercontent.com/zetic-ai/melange-cli/main/script/install.sh | sh
 
@@ -61,9 +61,9 @@ Options (append with `| sh -s -- <flags>`, or use the environment variable):
   --version VERSION     MELANGE_VERSION       release to install (e.g. v1.2.3); default: latest
   --install-dir DIR     MELANGE_INSTALL_DIR   binary directory; default /usr/local/bin,
                                               falling back to ~/.local/bin when not writable
-  --skill-only          MELANGE_SKIP_CLI=1    install only the agent skill
+  --skill-only          MELANGE_SKIP_CLI=1    install only the agent skills
   --cli-only            MELANGE_SKIP_SKILL=1  install only the CLI
-  --agent "A B"         MELANGE_SKILL_AGENTS  agents to install the skill for;
+  --agent "A B"         MELANGE_SKILL_AGENTS  agents to install skills for;
                                               default "universal claude-code"
   --require-signature   MELANGE_REQUIRE_SIGNATURE=1
                                               fail unless the release signature is verified
@@ -322,10 +322,10 @@ if [ -z "$skip_cli" ]; then
     info "Installed ${installed_bin} (${version})."
 fi
 
-# --- Install the agent skill ------------------------------------------------
+# --- Install the agent skills ----------------------------------------------
 # Global skill directories, per agent. `npx skills` owns these paths; the
-# fallback below reproduces the layout for the two it can place without
-# guessing, so a machine without Node still ends up with a working skill.
+# fallback below reproduces the known layouts for the two supported agent
+# types, so a machine without Node still ends up with working skills.
 skill_dir_for() {
     case "$1" in
         universal) printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/agents/skills" ;;
@@ -335,67 +335,83 @@ skill_dir_for() {
 }
 
 copy_skill_to() {
-    # $1 = parent skills directory, $2 = agent label
-    [ -n "$1" ] || err "empty skill directory for $2"
+    # $1 = parent skills directory, $2 = skill name, $3 = agent label, $4 = source
+    [ -n "$1" ] || err "empty skill directory for $3"
     mkdir -p "$1" || err "could not create $1"
     # Remove first: `cp -R` onto an existing directory merges into it, which
     # would strand files from a previous version. This also clears a symlink
     # left behind by an earlier `npx skills add`.
-    rm -rf "$1/$SKILL"
-    cp -R "$skill_src" "$1/$SKILL" || err "could not install the skill into $1"
-    info "Installed skill '$SKILL' for ${2}: $1/$SKILL"
+    rm -rf "$1/$2"
+    cp -R "$4" "$1/$2" || err "could not install the skill into $1"
+    info "Installed skill '$2' for ${3}: $1/$2"
 }
 
 fetch_skill_source() {
-    [ -f "${tmpdir}/src/skills/${SKILL}/SKILL.md" ] && return 0
+    _all_skills_present=1
+    for _source_skill in $SKILLS; do
+        [ -f "${tmpdir}/src/skills/${_source_skill}/SKILL.md" ] || _all_skills_present=""
+    done
+    [ -n "$_all_skills_present" ] && return 0
     mkdir -p "${tmpdir}/src"
     curl -fsSL -o "${tmpdir}/source.tar.gz" \
         "https://github.com/${REPO}/archive/refs/tags/${version}.tar.gz" ||
         err "could not download the skill source for ${version}"
     tar -xzf "${tmpdir}/source.tar.gz" -C "${tmpdir}/src" --strip-components=1 ||
         err "could not extract the skill source"
-    [ -f "${tmpdir}/src/skills/${SKILL}/SKILL.md" ] ||
-        err "release ${version} does not contain skills/${SKILL}"
+    for _source_skill in $SKILLS; do
+        [ -f "${tmpdir}/src/skills/${_source_skill}/SKILL.md" ] ||
+            err "release ${version} does not contain skills/${_source_skill}"
+    done
 }
 
 skill_installed=""
 skill_note=""
 if [ -z "$skip_skill" ]; then
-    step "Installing the ${SKILL} agent skill"
     skill_done=""
     if have npx; then
         # The published `skills` CLI is the supported path: it knows every agent
         # layout and records the install, so `npx skills update` works later. It
         # needs a recent Node, so its failure is routine rather than fatal — the
         # output is captured and only surfaced when it does fail.
-        # shellcheck disable=SC2086 # skill_agents is a deliberate word list
-        if npx --yes skills add "$REPO" --skill "$SKILL" \
-            --agent $skill_agents --global --yes >"${tmpdir}/npx.log" 2>&1; then
-            skill_done=1
-            skill_installed="$skill_agents"
-            info "Installed skill '$SKILL' via 'npx skills add'."
-        else
-            warn "'npx skills add' failed (it needs a recent Node); copying the skill files directly instead."
-            tail -n 3 "${tmpdir}/npx.log" | sed 's/^/  | /' >&2
-        fi
+        skill_done=1
+        for skill in $SKILLS; do
+            step "Installing the ${skill} agent skill"
+            # shellcheck disable=SC2086 # skill_agents is a deliberate word list
+            if npx --yes skills add "$REPO" --skill "$skill" \
+                --agent $skill_agents --global --yes >"${tmpdir}/npx.log" 2>&1; then
+                info "Installed skill '$skill' via 'npx skills add'."
+            else
+                skill_done=""
+                warn "'npx skills add' failed (it needs a recent Node); copying the skill files directly instead."
+                tail -n 3 "${tmpdir}/npx.log" | sed 's/^/  | /' >&2
+                break
+            fi
+        done
     else
         info "Node/npx not found; copying the skill files directly."
     fi
 
     if [ -z "$skill_done" ]; then
         fetch_skill_source
-        skill_src="${tmpdir}/src/skills/${SKILL}"
-        for agent in $skill_agents; do
-            if agent_dir=$(skill_dir_for "$agent"); then
-                copy_skill_to "$agent_dir" "$agent"
-                skill_installed="${skill_installed} ${agent}"
-            else
-                warn "cannot place the skill for '${agent}' without a working 'npx skills'; install Node 22+ and run: npx skills add ${REPO} --skill ${SKILL} --agent ${agent} --global --yes"
-            fi
+        for skill in $SKILLS; do
+            skill_src="${tmpdir}/src/skills/${skill}"
+            for agent in $skill_agents; do
+                if agent_dir=$(skill_dir_for "$agent"); then
+                    copy_skill_to "$agent_dir" "$skill" "$agent" "$skill_src"
+                    case " ${skill_installed} " in
+                        *" ${agent} "*) ;;
+                        *) skill_installed="${skill_installed} ${agent}" ;;
+                    esac
+                else
+                    warn "cannot place the skill for '${agent}' without a working 'npx skills'; install Node 22+ and run: npx skills add ${REPO} --skill ${skill} --agent ${agent} --global --yes"
+                fi
+            done
         done
         [ -n "$skill_installed" ] ||
-            err "no skill was installed; install Node 22+ and run: npx skills add ${REPO} --skill ${SKILL} --global --yes"
+            err "no skills were installed; install Node 22+ and re-run this installer"
         skill_note="installed by copy — re-run this installer to update it"
+    else
+        skill_installed="$skill_agents"
     fi
 fi
 
@@ -519,7 +535,7 @@ step "Done."
 if [ -n "$skill_installed" ]; then
     # Squeeze the separator the fallback loop accumulates into single spaces.
     agent_list=$(printf '%s' "$skill_installed" | tr -s ' ' | sed 's/^ //; s/ $//')
-    info "  Skill: ${SKILL} → ${agent_list}${skill_note:+ (${skill_note})}"
+    info "  Skills: ${SKILLS} → ${agent_list}${skill_note:+ (${skill_note})}"
 fi
 info ""
 info "Next steps:"
@@ -530,6 +546,6 @@ info "  1. Authenticate: ${next_cmd} auth login   (opens your browser)"
 info "     Headless, CI or agents: ${next_cmd} auth login --with-token < token.txt"
 info "     (create a token at https://melange.zetic.ai/settings?tab=pat, or set MELANGE_API_KEY)"
 [ -n "$skill_installed" ] &&
-    info "  2. Restart your coding agent so it discovers the ${SKILL} skill."
+    info "  2. Restart your coding agent so it discovers the installed skills."
 
 exit 0
