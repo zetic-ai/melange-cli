@@ -59,7 +59,7 @@ func jsonStub(status int, body string) httpmock.Responder {
 
 const optionsBody = `{"guide_version":1,"default_language":"android-kotlin","default_inference_mode":"auto","languages":[{"id":"android-kotlin","label":"Android (Kotlin)","code_language":"kotlin"},{"id":"ios-swift","label":"iOS (Swift)","code_language":"swift"}],"inference_modes":[{"id":"auto","label":"Auto","description":"Balanced"},{"id":"speed","label":"Speed","description":"Fast"}]}`
 
-const guideBody = `{"guide_version":1,"language":"ios-swift","inference_mode":"speed","model":{"repository":"acme/chat","key":"abc123","version":7,"type":"llm","state":"ready","download_ready":true},"sdk":{"name":"ZeticMLange","version":"1.9.0"},"credential_placeholder":"YOUR_PERSONAL_KEY","steps":[{"title":"Add package","code_language":"swift","code":"package line"},{"title":"Load and run","code_language":"swift","code":"let model = try await ZeticMLangeLLMModel()"}]}`
+const guideBody = `{"guide_version":1,"language":"ios-swift","inference_mode":"speed","model":{"repository":"acme/chat","key":"abc123","version":7,"type":"llm","state":"ready","download_ready":true},"sdk":{"name":"ZeticMLange","version":"1.11.0"},"credential_placeholder":"YOUR_PERSONAL_KEY","steps":[{"title":"Add package","code_language":"swift","code":"package line"},{"title":"Load and run","code_language":"swift","code":"let model = try await ZeticMLangeLLMModel()"}]}`
 
 func TestDeployOptionsJSONIsExact(t *testing.T) {
 	e := setup(t)
