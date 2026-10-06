@@ -30,6 +30,7 @@ integrate.
 
 2. Confirm that the participant has an account, or direct them to
    <https://melange.zetic.ai/>.
+   When registering a new account, apply the invitation code `HOUSTON2026`.
 3. Install or update to the latest `melange` CLI. On macOS or Linux, use the
    repository's installer with `--cli-only`:
 
