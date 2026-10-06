@@ -130,17 +130,20 @@ list only for dependencies outside the GitHub Release. If the GitHub Release
 repository cannot resolve that exact version, report the cause instead of
 substituting another repository or SDK version.
 
-### iOS availability
+### iOS installation
 
-The public iOS Swift Package distribution is
-[ZeticMLangeiOS](https://github.com/zetic-ai/ZeticMLangeiOS). Its current
-public `Package.swift` points to the public `1.10.0` release, and no public
-`1.11.0` tag or release exists. Until a public `1.11.0` release and package
-manifest are available, treat iOS installation as blocked for this event. Do
-not use the repository's `main` branch or `1.10.0` release as though either
-were SDK `1.11.0`, and do not substitute another version. State this blocker
-for an iOS request rather than reporting the integration as complete or
-silently changing the target platform.
+Add [ZeticMLangeiOS](https://github.com/zetic-ai/ZeticMLangeiOS) through Swift
+Package Manager with the repository URL
+`https://github.com/zetic-ai/ZeticMLangeiOS.git`, exact version `1.11.0`, and
+product `ZeticMLange`. In a `Package.swift` manifest, use:
+
+```swift
+.package(url: "https://github.com/zetic-ai/ZeticMLangeiOS.git", exact: "1.11.0")
+```
+
+Use `ZeticMLange` from the `ZeticMLangeiOS` package as the target dependency.
+Do not use the repository's `main` branch or substitute another SDK version. If
+the exact version cannot resolve, report the cause rather than falling back.
 
 On Android, add this setting in the application module's Gradle configuration:
 
@@ -200,14 +203,3 @@ For an implemented RAG feature, completion requires both of the following:
 
 Use a test question whose answer is present in the indexed documents. If either
 condition is not verified, do not report the RAG implementation as complete.
-
-## TODO before final event-skill distribution
-
-- [ ] Verify that ZeticMLangeiOS has a public, non-draft `1.11.0` tag and
-  release; do not treat a planned release or an unreleased branch as evidence.
-- [ ] Verify that its public `Package.swift` points to the `1.11.0` binary
-  asset with its final checksum, then resolve it from a fresh Swift Package
-  Manager project.
-- [ ] Only after both checks pass, replace the temporary **iOS availability**
-  blocker above with the exact verified iOS installation instructions. Keep
-  the requirement to use SDK `1.11.0` unchanged.
