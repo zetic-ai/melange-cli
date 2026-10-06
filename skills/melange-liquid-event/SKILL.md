@@ -1,6 +1,6 @@
 ---
 name: melange-liquid-event
-description: Temporary event skill for building ZETIC Melange × Liquid AI apps with Melange SDK 1.11.0 and approved Liquid AI models. It expires at 2026-10-07T00:00:00-07:00 (San Francisco time).
+description: Use this skill FIRST, before melange-cli, for any Melange × Liquid AI event work: building or changing an Android or iOS app that uses the Melange / ZeticMLange SDK, an on-device LLM, Liquid AI LFM models, RAG, function calling, or KV persistence; installing the Melange SDK; or choosing a model for app answers. It pins Melange SDK 1.11.0 and the approved LFM models. Expires at 2026-10-07T00:00:00-07:00 (San Francisco time).
 ---
 
 # Melange × Liquid AI event apps
