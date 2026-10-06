@@ -467,6 +467,11 @@ creation is left an explicit TODO — shapes and preprocessing are model-specifi
 so inspect the tensor I/O metadata rather than inventing inputs. Ship the guide's
 own SDK fields and callbacks; do not add ones it does not name.
 
+For an `ios-swift` guide, add `Accelerate.framework` to the app target before
+building: **Link Binary With Libraries**. It is an Apple system framework, so
+link it but do not embed it. This is a target-linking requirement, not an extra
+SDK field or callback.
+
 For a standalone C++ program on Android arm64 (including Qualcomm SW6100),
 request `--language cpp --mode auto`. The guide includes the SDK ZIP download
 link, build instructions, and inference code. Find the existing model with

@@ -151,6 +151,10 @@ Use `ZeticMLange` from the `ZeticMLangeiOS` package as the target dependency.
 Do not use the repository's `main` branch or substitute another SDK version. If
 the exact version cannot resolve, report the cause rather than falling back.
 
+Also add `Accelerate.framework` to the app target under **Link Binary With
+Libraries** before building. It is an Apple system framework: link it, do not
+embed it.
+
 On Android, add this setting in the application module's Gradle configuration:
 
 ```kotlin

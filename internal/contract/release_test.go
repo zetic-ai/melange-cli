@@ -473,6 +473,8 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 	assert.Contains(t, skillWorkflow,
 		`model_key="$(printf '%s\n' "$upload_json" | jq -er .model.key)"`)
 	assert.NotContains(t, skillWorkflow, "acme/")
+	assert.Contains(t, skill, "Accelerate.framework")
+	assert.Contains(t, skill, "Link Binary With Libraries")
 
 	// A Hugging Face repo id imports only into an llm repository, and model type
 	// is fixed at repo create. Both skills must route on that before creating a
