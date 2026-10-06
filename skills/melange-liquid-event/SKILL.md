@@ -78,6 +78,10 @@ KV-persistence, or function-calling support for that VL model.
 
 ## Melange SDK requirements
 
+The Melange SDK works only on physical devices. It does not run on Android
+emulators or the iOS Simulator; use a supported physical device for all SDK
+verification.
+
 Use Melange SDK version `1.11.0`. If that exact version cannot be installed or
 resolved, report the cause and do not substitute another version. Use the
 [Melange API Reference](https://docs.zetic.ai/) together with the installed
