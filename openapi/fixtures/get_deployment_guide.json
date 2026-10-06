@@ -22,11 +22,11 @@
       "sdk": {
         "download_url": null,
         "name": "ZeticMLange",
-        "version": "1.9.0"
+        "version": "1.11.0"
       },
       "steps": [
         {
-          "code": "// In your module (app-level) Gradle file (usually <project>/<app-module>/build.gradle.kts)\nandroid {\n    // ...\n    packaging {\n        jniLibs {\n            useLegacyPackaging = true\n        }\n    }\n}\n\ndependencies {\n    // ...\n    implementation(\"com.zeticai.mlange:mlange:1.9.0\")\n    // ...\n}",
+          "code": "// In settings.gradle.kts, add the public MLange repository\ndependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)\n    repositories {\n        google()\n        mavenCentral()\n        ivy {\n            name = \"ZeticMLangeAndroidGitHubRelease\"\n            url = uri(\"https://github.com/zetic-ai/ZeticMLangeAndroid/releases/download\")\n            patternLayout {\n                artifact(\"[revision]/[artifact]-[revision](-[classifier]).[ext]\")\n            }\n            metadataSources { gradleMetadata() }\n            content {\n                includeGroup(\"com.zeticai.mlange\")\n                includeGroup(\"com.zeticai.mlange.backend\")\n            }\n        }\n    }\n}\n\n// In your module (app-level) Gradle file (usually <project>/<app-module>/build.gradle.kts)\nandroid {\n    // ...\n    packaging {\n        jniLibs {\n            useLegacyPackaging = true\n        }\n    }\n}\n\ndependencies {\n    // ...\n    implementation(\"com.zeticai.mlange:mlange:1.11.0\")\n    // ...\n}",
           "code_language": "kotlin",
           "title": "Add ZeticMLange in the app Gradle file"
         },
