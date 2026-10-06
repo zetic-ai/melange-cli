@@ -21,8 +21,9 @@ integrate.
 
 ## Event skill, account, and CLI setup
 
-1. If this event skill is not already installed, install it separately from
-   this repository, then restart the coding agent:
+1. The standard repository installer installs this event skill alongside
+   `melange-cli`. If installing skills manually, use this command, then restart
+   the coding agent:
 
    ```sh
    npx skills add zetic-ai/melange-cli --skill melange-liquid-event --global
@@ -40,8 +41,8 @@ integrate.
    ```
 
    On Windows, use `npm install -g @zetic-ai/melange-cli`. The standard
-   installer otherwise installs the repository's `melange-cli` skill; do not
-   assume that it installs this separate event skill.
+   installer installs both `melange-cli` and this event skill; `--cli-only`
+   skips both skills.
 4. Check authentication with `melange auth status --json`. If it is not
    authenticated, run `melange auth login`, then check the status again.
 5. Direct the participant to [Melange Settings → Personal Access
