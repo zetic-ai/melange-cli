@@ -177,7 +177,7 @@ type installerFixture struct {
 	env                []string
 }
 
-func newInstallerFixture(t *testing.T, npxMode string, includeEventSkill bool) installerFixture {
+func newInstallerFixture(t *testing.T, npxMode string, includeCLISkill bool) installerFixture {
 	t.Helper()
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
@@ -201,10 +201,9 @@ func newInstallerFixture(t *testing.T, npxMode string, includeEventSkill bool) i
 		[]byte(fmt.Sprintf("%x  %s\n", digest, filepath.Base(archive))), 0o644))
 
 	sourceRoot := filepath.Join(root, "source", "melange-cli-1.2.3", "skills")
-	for _, skill := range []string{"melange-cli", "melange-liquid-event"} {
-		if skill == "melange-liquid-event" && !includeEventSkill {
-			continue
-		}
+	require.NoError(t, os.MkdirAll(sourceRoot, 0o755))
+	if includeCLISkill {
+		skill := "melange-cli"
 		skillDir := filepath.Join(sourceRoot, skill)
 		require.NoError(t, os.MkdirAll(skillDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"),
@@ -272,7 +271,7 @@ func runInstallerFixture(t *testing.T, fixture installerFixture, args ...string)
 	return string(output), err
 }
 
-func TestInstallerInstallsBothSkillsThroughNpxAndFallback(t *testing.T) {
+func TestInstallerInstallsSkillThroughNpxAndFallback(t *testing.T) {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		t.Skip("installer supports macOS and Linux")
 	}
@@ -311,7 +310,6 @@ func TestInstallerInstallsBothSkillsThroughNpxAndFallback(t *testing.T) {
 				require.NoError(t, readErr)
 				assert.Contains(t, string(log), "--skill melange-cli")
 				if !tc.wantFallback {
-					assert.Contains(t, string(log), "--skill melange-liquid-event")
 					assert.NotContains(t, output, "installed by copy")
 				}
 			} else {
@@ -319,26 +317,21 @@ func TestInstallerInstallsBothSkillsThroughNpxAndFallback(t *testing.T) {
 			}
 
 			if tc.wantFallback {
-				for _, skill := range []string{"melange-cli", "melange-liquid-event"} {
-					assert.FileExists(t, filepath.Join(fixture.xdgDir, "agents", "skills", skill, "SKILL.md"))
-				}
+				assert.FileExists(t, filepath.Join(fixture.xdgDir, "agents", "skills", "melange-cli", "SKILL.md"))
 				assert.FileExists(t, fixture.sourceMark)
 			} else {
 				assert.NoFileExists(t, fixture.sourceMark)
 			}
 
 			if tc.name == "cli-only" {
-				for _, skill := range []string{"melange-cli", "melange-liquid-event"} {
-					assert.NoFileExists(t, filepath.Join(fixture.xdgDir, "agents", "skills", skill, "SKILL.md"))
-				}
+				assert.NoFileExists(t, filepath.Join(fixture.xdgDir, "agents", "skills", "melange-cli", "SKILL.md"))
 				assert.NotContains(t, output, "Installing the melange-cli agent skill")
-				assert.NotContains(t, output, "Installing the melange-liquid-event agent skill")
 			}
 		})
 	}
 }
 
-func TestInstallerFallbackValidatesBothSkillSourcesBeforeCopying(t *testing.T) {
+func TestInstallerFallbackValidatesSkillSourceBeforeCopying(t *testing.T) {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		t.Skip("installer supports macOS and Linux")
 	}
@@ -349,7 +342,7 @@ func TestInstallerFallbackValidatesBothSkillSourcesBeforeCopying(t *testing.T) {
 	fixture := newInstallerFixture(t, "failure", false)
 	output, err := runInstallerFixture(t, fixture, "--skill-only")
 	require.Error(t, err)
-	assert.Contains(t, output, "release v1.2.3 does not contain skills/melange-liquid-event")
+	assert.Contains(t, output, "release v1.2.3 does not contain skills/melange-cli")
 	assert.NoFileExists(t, filepath.Join(fixture.xdgDir, "agents", "skills", "melange-cli", "SKILL.md"),
 		"the fallback validates every needed skill before copying any of them")
 }
@@ -473,8 +466,6 @@ func TestPublishedDocumentationPreservesReleaseContracts(t *testing.T) {
 	assert.Contains(t, skillWorkflow,
 		`model_key="$(printf '%s\n' "$upload_json" | jq -er .model.key)"`)
 	assert.NotContains(t, skillWorkflow, "acme/")
-	assert.Contains(t, skill, "Accelerate.framework")
-	assert.Contains(t, skill, "Link Binary With Libraries")
 
 	// A Hugging Face repo id imports only into an llm repository, and model type
 	// is fixed at repo create. Both skills must route on that before creating a
