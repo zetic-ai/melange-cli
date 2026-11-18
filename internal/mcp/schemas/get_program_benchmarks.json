@@ -18,6 +18,11 @@
               "title": "Better",
               "type": "string"
             },
+            "category": {
+              "description": "How pages group the metric: `speed`, `memory`, `energy`, `size` or `accuracy`. Open vocabulary.",
+              "title": "Category",
+              "type": "string"
+            },
             "group": {
               "enum": [
                 "speed",
@@ -68,6 +73,7 @@
             "label",
             "unit",
             "better",
+            "category",
             "keyed_by",
             "summary",
             "approximate",
@@ -170,6 +176,14 @@
                         "title": "Label",
                         "type": "string"
                       },
+                      "modes": {
+                        "description": "Inference modes this build is shown for: `speed`, `accuracy`. Auto follows Speed. At most one build per mode per result (per variant).",
+                        "items": {
+                          "type": "string"
+                        },
+                        "title": "Modes",
+                        "type": "array"
+                      },
                       "notes": {
                         "items": {
                           "type": "string"
@@ -224,6 +238,7 @@
                       "label",
                       "runtime",
                       "status",
+                      "modes",
                       "highlight",
                       "baseline",
                       "speed",

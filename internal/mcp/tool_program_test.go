@@ -25,7 +25,7 @@ const (
 		`"revision":1,"updated_at":"2026-11-18T00:00:00Z","software":{},"method":{},` +
 		`"highlights":[],"notes":{"speed":[],"accuracy":[]},"tables":[],` +
 		`"builds":[{"key":"ours","label":"Ours & Co <v1>","runtime":"llama_cpp",` +
-		`"status":"measured","highlight":true,"baseline":false,"notes":[],` +
+		`"status":"measured","modes":["speed","accuracy"],"highlight":true,"baseline":false,"notes":[],` +
 		`"speed":{"real_time_factor":0.463},"accuracy":{}}]}]}],` +
 		`"metrics":{"tts":[]},"updated_at":"2026-11-18T00:00:00Z"}`
 )

@@ -2083,7 +2083,10 @@ type ProgramBuild struct {
 	Highlight bool                                                  `json:"highlight"`
 	Key       string                                                `json:"key"`
 	Label     string                                                `json:"label"`
-	Notes     []string                                              `json:"notes"`
+
+	// Modes Inference modes this build is shown for: `speed`, `accuracy`. Auto follows Speed. At most one build per mode per result (per variant).
+	Modes []string `json:"modes"`
+	Notes []string `json:"notes"`
 
 	// Runtime What the build runs on, for example `llama_cpp`; `float_reference` marks the accuracy-only float row. Open vocabulary.
 	Runtime string                                             `json:"runtime"`
@@ -2134,8 +2137,11 @@ type ProgramMetricDefinition struct {
 	// Approximate Rendered with "≈".
 	Approximate bool                          `json:"approximate"`
 	Better      ProgramMetricDefinitionBetter `json:"better"`
-	Group       ProgramMetricDefinitionGroup  `json:"group"`
-	Key         string                        `json:"key"`
+
+	// Category How pages group the metric: `speed`, `memory`, `energy`, `size` or `accuracy`. Open vocabulary.
+	Category string                       `json:"category"`
+	Group    ProgramMetricDefinitionGroup `json:"group"`
+	Key      string                       `json:"key"`
 
 	// KeyedBy Set for keyed metrics: `prompt_tokens` (keys are prompt lengths) or `test_set` (keys are dataset split names).
 	KeyedBy *string  `json:"keyed_by"`

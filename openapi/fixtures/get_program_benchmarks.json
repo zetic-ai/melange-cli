@@ -12,6 +12,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "per_clip_ms",
             "keyed_by": null,
@@ -23,6 +24,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "encoder_ms",
             "keyed_by": null,
@@ -34,6 +36,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "decoder_per_token_ms",
             "keyed_by": null,
@@ -45,6 +48,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "energy",
             "group": "speed",
             "key": "energy_per_30s_audio_j",
             "keyed_by": null,
@@ -56,6 +60,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "memory",
             "group": "speed",
             "key": "memory_mb",
             "keyed_by": null,
@@ -67,6 +72,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "wer_pct",
             "keyed_by": "test_set",
@@ -78,6 +84,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "float_token_match_pct",
             "keyed_by": null,
@@ -91,6 +98,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "latency_ms",
             "keyed_by": null,
@@ -102,6 +110,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "speed",
             "group": "speed",
             "key": "throughput_ips",
             "keyed_by": null,
@@ -113,6 +122,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "energy",
             "group": "speed",
             "key": "energy_per_image_mj",
             "keyed_by": null,
@@ -124,6 +134,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "memory",
             "group": "speed",
             "key": "memory_mb",
             "keyed_by": null,
@@ -135,6 +146,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "load_time_ms",
             "keyed_by": null,
@@ -146,6 +158,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "top1_pct",
             "keyed_by": null,
@@ -157,6 +170,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "top5_pct",
             "keyed_by": null,
@@ -168,6 +182,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "float_top1_agree_pct",
             "keyed_by": null,
@@ -181,6 +196,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "speed",
             "group": "speed",
             "key": "decode_tps",
             "keyed_by": null,
@@ -192,6 +208,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "ttft_ms",
             "keyed_by": "prompt_tokens",
@@ -203,6 +220,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "memory",
             "group": "speed",
             "key": "memory_mb",
             "keyed_by": null,
@@ -214,6 +232,7 @@
           {
             "approximate": true,
             "better": "lower",
+            "category": "energy",
             "group": "speed",
             "key": "energy_per_token_mj",
             "keyed_by": null,
@@ -225,6 +244,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "size",
             "group": "speed",
             "key": "package_size_mb",
             "keyed_by": null,
@@ -236,6 +256,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "ifeval",
             "keyed_by": null,
@@ -247,6 +268,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "ifeval_4way",
             "keyed_by": null,
@@ -258,6 +280,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "ifeval_prompt_strict",
             "keyed_by": null,
@@ -269,6 +292,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "ifeval_instruction_strict",
             "keyed_by": null,
@@ -280,6 +304,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "perplexity",
             "keyed_by": null,
@@ -293,6 +318,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "time_to_first_audio_ms",
             "keyed_by": null,
@@ -304,6 +330,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "speed",
             "group": "speed",
             "key": "real_time_factor",
             "keyed_by": null,
@@ -315,6 +342,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "energy",
             "group": "speed",
             "key": "energy_per_audio_second_mj",
             "keyed_by": null,
@@ -326,6 +354,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "memory",
             "group": "speed",
             "key": "memory_mb",
             "keyed_by": null,
@@ -337,6 +366,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "wer_pct",
             "keyed_by": null,
@@ -348,6 +378,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "utmos",
             "keyed_by": null,
@@ -359,6 +390,7 @@
           {
             "approximate": false,
             "better": "lower",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "wer_vs_float_pct",
             "keyed_by": null,
@@ -370,6 +402,7 @@
           {
             "approximate": false,
             "better": "higher",
+            "category": "accuracy",
             "group": "accuracy",
             "key": "float_exact_pct",
             "keyed_by": null,
@@ -401,6 +434,9 @@
                   "highlight": true,
                   "key": "small-a",
                   "label": "Build A",
+                  "modes": [
+                    "accuracy"
+                  ],
                   "notes": [],
                   "runtime": "qualcomm_qnn",
                   "speed": {
@@ -423,6 +459,9 @@
                   "highlight": true,
                   "key": "small-b",
                   "label": "Build B",
+                  "modes": [
+                    "speed"
+                  ],
                   "notes": [],
                   "runtime": "qualcomm_qnn",
                   "speed": {
@@ -445,6 +484,9 @@
                   "highlight": true,
                   "key": "large-a",
                   "label": "Build A",
+                  "modes": [
+                    "accuracy"
+                  ],
                   "notes": [],
                   "runtime": "qualcomm_qnn",
                   "speed": {
@@ -467,6 +509,9 @@
                   "highlight": true,
                   "key": "large-b",
                   "label": "Build B",
+                  "modes": [
+                    "speed"
+                  ],
                   "notes": [],
                   "runtime": "qualcomm_qnn",
                   "speed": {
@@ -489,6 +534,7 @@
                   "highlight": true,
                   "key": "small-float",
                   "label": "Float (reference)",
+                  "modes": [],
                   "notes": [],
                   "runtime": "float_reference",
                   "speed": {},
@@ -508,6 +554,7 @@
                   "highlight": true,
                   "key": "large-float",
                   "label": "Float (reference)",
+                  "modes": [],
                   "notes": [],
                   "runtime": "float_reference",
                   "speed": {},
@@ -571,6 +618,10 @@
                   "highlight": true,
                   "key": "a",
                   "label": "Build A",
+                  "modes": [
+                    "speed",
+                    "accuracy"
+                  ],
                   "notes": [
                     "The default recipe."
                   ],
@@ -591,6 +642,7 @@
                   "highlight": false,
                   "key": "c",
                   "label": "Build C (CPU)",
+                  "modes": [],
                   "notes": [],
                   "runtime": "llama_cpp",
                   "speed": {},
