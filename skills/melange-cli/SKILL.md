@@ -281,7 +281,7 @@ results per SoC for each of the program's models, measured by Zetic. Program
 members and Zetic staff read them; list your programs first.
 
 ```sh
-melange api /v1/me --jq '.access_programs[].name'
+melange api /v1/me --jq '.access_programs[]?.name'
 melange program benchmarks PROGRAM                     # Auto / Speed / Accuracy per model and SoC
 melange program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
 ```

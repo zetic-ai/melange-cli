@@ -9,7 +9,9 @@ the program's models, measured and published by Zetic. Only program members
 and Zetic staff can read a program.
 
 List the programs you belong to with:
-  melange api /v1/me --jq '.access_programs[].name'
+  melange api /v1/me --jq '.access_programs[]?.name'
+Zetic staff can read every program without joining one, so this list can be
+empty for them; staff pass the program name directly.
 
 Data is written to stdout; progress and messages go to stderr. All
 subcommands support --json, --jq, and --template for structured output.
@@ -22,7 +24,7 @@ melange program <command> [flags]
 
 ```
   # The programs you belong to
-  melange api /v1/me --jq '.access_programs[].name'
+  melange api /v1/me --jq '.access_programs[]?.name'
 
   # Every sheet of one of them
   melange program benchmarks PROGRAM

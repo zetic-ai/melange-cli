@@ -352,7 +352,8 @@ melange program benchmarks PROGRAM [--model SLUG] [--soc SOC] [--json|--jq|--tem
   model, task, variant, build, runtime, status, modes, metric, key, value,
   unit; modes comma-joined, empty when none); --json: the response, narrowed
   by the filters. PROGRAM comes from
-  `melange api /v1/me --jq '.access_programs[].name'`; a program you are not
+  `melange api /v1/me --jq '.access_programs[]?.name'` (empty for Zetic staff,
+  who read every program and pass its name directly); a program you are not
   a member of answers 404 like one that does not exist.
   Example: melange program benchmarks PROGRAM --soc SOC --json --jq '.models[].slug'
 

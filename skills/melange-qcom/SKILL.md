@@ -168,7 +168,7 @@ Members of a partner program (joined with an access code) read its benchmark
 sheets: results per SoC for each of the program's models, measured by Zetic.
 
 ```sh
-melange-qcom api /v1/me --jq '.access_programs[].name'
+melange-qcom api /v1/me --jq '.access_programs[]?.name'
 melange-qcom program benchmarks PROGRAM
 melange-qcom program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
 ```
