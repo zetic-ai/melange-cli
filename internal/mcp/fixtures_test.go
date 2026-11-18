@@ -259,6 +259,13 @@ var fixtureRoundTrips = map[string]fixtureRoundTrip{
 			return map[string]any{"library_model": account + "/" + name}
 		},
 	},
+	"get_program_benchmarks": {
+		args: func(t *testing.T, fx fixturetest.Fixture) map[string]any {
+			program := fixturetest.SegmentAfter(fx.Request.Path, "programs")
+			require.NotEmpty(t, program)
+			return map[string]any{"program": program}
+		},
+	},
 	// confirm passes the billing gate; include_urls keeps the response a
 	// verbatim passthrough of the fixture — the default redaction rewrites
 	// artifacts[].url and is pinned separately in tool_download_test.go.

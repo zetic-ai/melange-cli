@@ -573,13 +573,13 @@ else
     record FAIL "stdio initialize" "no initialize result: $(echo "$INIT" | head -c 160)"
 fi
 
-# S2: tools/list must be the frozen 18-tool stdio catalog.
-EXPECTED_STDIO_TOOLS="create_repo delete_repo get_account_info get_conversion_status get_deployment_info get_library_model get_model get_model_report get_repo import_model list_models list_repos request_model_download search_library set_default_model update_repo upload_model whoami"
+# S2: tools/list must be the frozen 19-tool stdio catalog.
+EXPECTED_STDIO_TOOLS="create_repo delete_repo get_account_info get_conversion_status get_deployment_info get_library_model get_model get_model_report get_program_benchmarks get_repo import_model list_models list_repos request_model_download search_library set_default_model update_repo upload_model whoami"
 LIST="$(stdio_rpc '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' 20)"
 GOT_TOOLS="$(echo "$LIST" | jq -r '.result.tools[].name' | sort | tr '\n' ' ' | sed 's/ $//')"
 COUNT="$(echo "$LIST" | jq '.result.tools | length')"
-if [ "$COUNT" = 18 ] && [ "$GOT_TOOLS" = "$EXPECTED_STDIO_TOOLS" ]; then
-    record PASS "stdio tools/list" "18 tools, catalog exact (upload_model present)"
+if [ "$COUNT" = 19 ] && [ "$GOT_TOOLS" = "$EXPECTED_STDIO_TOOLS" ]; then
+    record PASS "stdio tools/list" "19 tools, catalog exact (upload_model present)"
 else
     record FAIL "stdio tools/list" "count=$COUNT; got: $GOT_TOOLS"
 fi
@@ -813,14 +813,14 @@ else
     record FAIL "http /healthz" "$HEALTH"
 fi
 
-# H2: tools/list is the frozen 17-tool HTTP catalog — upload_model must be
+# H2: tools/list is the frozen 18-tool HTTP catalog — upload_model must be
 # absent (the server cannot see the caller's files).
-EXPECTED_HTTP_TOOLS="create_repo delete_repo get_account_info get_conversion_status get_deployment_info get_library_model get_model get_model_report get_repo import_model list_models list_repos request_model_download search_library set_default_model update_repo whoami"
+EXPECTED_HTTP_TOOLS="create_repo delete_repo get_account_info get_conversion_status get_deployment_info get_library_model get_model get_model_report get_program_benchmarks get_repo import_model list_models list_repos request_model_download search_library set_default_model update_repo whoami"
 HLIST="$(http_post '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' "$PAT")"
 HGOT="$(echo "$HLIST" | jq -r '.result.tools[].name' | sort | tr '\n' ' ' | sed 's/ $//')"
 HCOUNT="$(echo "$HLIST" | jq '.result.tools | length')"
-if [ "$HCOUNT" = 17 ] && [ "$HGOT" = "$EXPECTED_HTTP_TOOLS" ]; then
-    record PASS "http tools/list" "17 tools, catalog exact, upload_model absent"
+if [ "$HCOUNT" = 18 ] && [ "$HGOT" = "$EXPECTED_HTTP_TOOLS" ]; then
+    record PASS "http tools/list" "18 tools, catalog exact, upload_model absent"
 else
     record FAIL "http tools/list" "count=$HCOUNT; got: $HGOT"
 fi

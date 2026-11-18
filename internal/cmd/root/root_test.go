@@ -48,7 +48,7 @@ func TestQualcommRootUsesDedicatedBrandingAndNearFullCommandTree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "melange-qcom")
 	assert.Contains(t, out, "Qualcomm-focused")
-	for _, command := range []string{"api", "auth", "deploy", "library", "mcp", "model", "plan", "repo", "report", "usage", "version"} {
+	for _, command := range []string{"api", "auth", "deploy", "library", "mcp", "model", "plan", "program", "repo", "report", "usage", "version"} {
 		assert.Contains(t, out, command)
 	}
 	assert.NotContains(t, out, "  melange repo")
@@ -161,7 +161,7 @@ func TestHelpTopicsHiddenFromRootHelp(t *testing.T) {
 }
 
 func TestCommandGroupsRejectUnknownSubcommands(t *testing.T) {
-	for _, group := range []string{"auth", "repo", "model", "report", "library", "deploy"} {
+	for _, group := range []string{"auth", "repo", "model", "report", "library", "program", "deploy"} {
 		t.Run(group, func(t *testing.T) {
 			out, _, err := runRoot(t, group, "typoo")
 			require.Error(t, err)
@@ -173,7 +173,7 @@ func TestCommandGroupsRejectUnknownSubcommands(t *testing.T) {
 }
 
 func TestCommandGroupsWithoutSubcommandStillShowHelp(t *testing.T) {
-	for _, group := range []string{"auth", "repo", "model", "report", "library", "deploy"} {
+	for _, group := range []string{"auth", "repo", "model", "report", "library", "program", "deploy"} {
 		t.Run(group, func(t *testing.T) {
 			out, _, err := runRoot(t, group)
 			require.NoError(t, err)

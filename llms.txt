@@ -333,6 +333,23 @@ melange library providers [--json|--jq]
   non-TTY: TSV; --json: the envelope.
   Example: melange library providers --jq '.results[]|select(.model_count>=10)|.name'
 
+## melange program
+
+Partner program benchmark sheets (program members and Zetic staff only).
+
+melange program benchmarks PROGRAM [--model SLUG] [--soc SOC] [--json|--jq|--template]
+  The program's sheets: per model and SoC, the builds with speed and accuracy
+  metrics; "metrics" describes each metric per task (label, unit, better,
+  keyed_by). --model/--soc narrow the answer (case-insensitive; with --soc,
+  models without a result on it are left out); a model or SoC the program
+  does not list exits 1 naming the ones it does. TTY: per-result tables of the
+  summary metrics; non-TTY: TSV, one metric value per line (soc, model, task,
+  variant, build, runtime, status, metric, key, value, unit); --json: the
+  response, narrowed by the filters. PROGRAM comes from
+  `melange api /v1/me --jq '.access_programs[].name'`; a program you are not
+  a member of answers 404 like one that does not exist.
+  Example: melange program benchmarks PROGRAM --soc SOC --json --jq '.models[].slug'
+
 ## melange usage
 
 Current billing-period usage counters and plan quotas.
@@ -448,7 +465,7 @@ melange mcp --transport http [--listen ADDR] [--validate-tokens]
   after SIGINT/SIGTERM (http), 1 serve failure, 2 usage error, 130
   interrupted (stdio, or an http drain cut short by a second stop signal).
 
-Tool catalog — 18 tools on stdio, 17 over HTTP. upload_model is stdio-only:
+Tool catalog — 19 tools on stdio, 18 over HTTP. upload_model is stdio-only:
 its file paths are read by the SERVER process, which over HTTP cannot see the
 caller's machine. Grouped by workflow:
 
@@ -466,6 +483,11 @@ caller's machine. Grouped by workflow:
   result's full_name works directly with list_models, get_model_report, and
   get_deployment_info — never import a library model just to read its public
   benchmarks.
+- Partner programs, read-only: get_program_benchmarks (program from
+  whoami's access_programs; optional model slug and soc narrow it) — the
+  program's benchmark sheets per SoC, each build with speed/accuracy metrics
+  described by the response's per-task "metrics" vocabulary. Members and staff
+  only; anyone else gets not found.
 - Put a model on the platform: create_repo (pass NAME alone, never
   ACCOUNT/NAME; model_type is fixed at creation and only llm repositories
   accept import_model). import_model (public HuggingFace repo into an

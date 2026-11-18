@@ -189,7 +189,7 @@ Show throughput and peak memory for iPhone 16 and Galaxy S25 where available.
 ## MCP server
 
 The CLI ships a built-in [MCP](https://modelcontextprotocol.io) server:
-`melange mcp` serves 18 tools over stdio (17 over HTTP — `upload_model` needs
+`melange mcp` serves 19 tools over stdio (18 over HTTP — `upload_model` needs
 the caller's local files) so MCP clients call Melange directly instead of
 shelling out. The stdio server reuses the CLI's credentials (`MELANGE_API_KEY`
 or `melange auth login`), resolved lazily on the first tool call. Install the

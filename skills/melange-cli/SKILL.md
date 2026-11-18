@@ -274,6 +274,32 @@ A report covers the whole model across every device and precision the account
 can see. Filtering to one device is a slice, not the report — see "Report a
 model" below.
 
+## Partner program benchmarks: `melange program benchmarks`
+
+A partner program (joined with an access code) can publish benchmark sheets:
+results per SoC for each of the program's models, measured by Zetic. Program
+members and Zetic staff read them; list your programs first.
+
+```sh
+melange api /v1/me --jq '.access_programs[].name'
+melange program benchmarks PROGRAM                     # summary tables per model and SoC
+melange program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
+```
+
+The response's `metrics` object is the per-task vocabulary (`label`, `unit`,
+`better`, `keyed_by`); a keyed value is an object keyed by prompt length or
+test set. `baseline: true` marks the build the sheet compares against, and a
+target with `has_results: false` is a SoC still to be measured. Present the
+numbers with the result's `measured_on` device and `as_of` date. A program you
+are not a member of answers 404, the same as one that does not exist. The MCP
+tool is `get_program_benchmarks`.
+
+A partner repository whose numbers moved to a program sheet can have its
+reports retired from the API: `report view` then exits 1 with a 403
+`permission_error` naming `GET /v1/programs/PROGRAM/benchmarks`, for everyone
+but staff. Read the program sheet instead of retrying. Downloads and deployment
+guides of that repository keep working.
+
 ## Presenting results to the user
 
 These rules govern the answer you write for a human, not how you call the CLI.

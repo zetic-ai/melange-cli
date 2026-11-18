@@ -162,6 +162,32 @@ Read and fill the matching template before answering:
 Print the report in the reply. Preserve missing values as `-` in tables and
 `N/A` in cards. Never compare metrics from different accelerators as a speedup.
 
+## Read partner program benchmarks
+
+Members of a partner program (joined with an access code) read its benchmark
+sheets: results per SoC for each of the program's models, measured by Zetic.
+
+```sh
+melange-qcom api /v1/me --jq '.access_programs[].name'
+melange-qcom program benchmarks PROGRAM
+melange-qcom program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
+```
+
+The MCP tool is `get_program_benchmarks`. The sheets are not fleet-filtered:
+the program's SoC catalog is curated by Zetic and can name SoCs outside the
+reviewed fleet, and a target with `has_results: false` has no numbers yet. Do
+not describe sheet data as Qualcomm-filtered report output. The response's
+`metrics` object gives each metric's label, unit and better direction;
+`baseline: true` marks the build the sheet compares against. Present numbers
+with the result's `measured_on` device and `as_of` date. A program you are not
+a member of answers 404, the same as one that does not exist.
+
+A partner repository whose numbers moved to a program sheet can have its
+reports retired from the API: `report view` on it then exits 1 with a 403
+`permission_error` that names `GET /v1/programs/PROGRAM/benchmarks`, for
+everyone but staff. Read the program sheet instead of retrying; its downloads
+and deployment guides keep working.
+
 ## Select Qualcomm targets
 
 ```sh
