@@ -230,7 +230,7 @@
             "unit": "MB"
           },
           {
-            "approximate": true,
+            "approximate": false,
             "better": "lower",
             "category": "energy",
             "group": "speed",
