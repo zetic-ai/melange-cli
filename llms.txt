@@ -338,14 +338,20 @@ melange library providers [--json|--jq]
 Partner program benchmark sheets (program members and Zetic staff only).
 
 melange program benchmarks PROGRAM [--model SLUG] [--soc SOC] [--json|--jq|--template]
-  The program's sheets: per model and SoC, the builds with speed and accuracy
-  metrics; "metrics" describes each metric per task (label, unit, better,
-  keyed_by). --model/--soc narrow the answer (case-insensitive; with --soc,
-  models without a result on it are left out); a model or SoC the program
-  does not list exits 1 naming the ones it does. TTY: per-result tables of the
-  summary metrics; non-TTY: TSV, one metric value per line (soc, model, task,
-  variant, build, runtime, status, metric, key, value, unit); --json: the
-  response, narrowed by the filters. PROGRAM comes from
+  The program's sheets: per model and SoC, Zetic's builds by inference mode,
+  like a repository model page. A build's "modes" lists the modes it serves
+  (speed, accuracy; at most one build per mode, per variant); Auto follows
+  Speed; builds with no modes (a float reference) are context. "metrics"
+  describes each metric per task (label, unit, better, keyed_by, and category:
+  speed, memory, energy, size, accuracy). --model/--soc narrow the answer
+  (case-insensitive; with --soc, models without a result on it are left
+  out); a model or SoC the program does not list exits 1 naming the ones it
+  does. TTY: per result, rows Auto / Speed / Accuracy (per variant) with the
+  serving build and the summary metrics grouped by category, then builds
+  serving no mode as "-"; non-TTY: TSV, one metric value per line (soc,
+  model, task, variant, build, runtime, status, modes, metric, key, value,
+  unit; modes comma-joined, empty when none); --json: the response, narrowed
+  by the filters. PROGRAM comes from
   `melange api /v1/me --jq '.access_programs[].name'`; a program you are not
   a member of answers 404 like one that does not exist.
   Example: melange program benchmarks PROGRAM --soc SOC --json --jq '.models[].slug'
@@ -485,9 +491,11 @@ caller's machine. Grouped by workflow:
   benchmarks.
 - Partner programs, read-only: get_program_benchmarks (program from
   whoami's access_programs; optional model slug and soc narrow it) — the
-  program's benchmark sheets per SoC, each build with speed/accuracy metrics
-  described by the response's per-task "metrics" vocabulary. Members and staff
-  only; anyone else gets not found.
+  program's benchmark sheets per SoC: Zetic's builds by inference mode (each
+  build's "modes"; Auto follows Speed), with speed/accuracy metrics described
+  by the response's per-task "metrics" vocabulary (category groups them:
+  speed, memory, energy, size, accuracy). Members and staff only; anyone else
+  gets not found.
 - Put a model on the platform: create_repo (pass NAME alone, never
   ACCOUNT/NAME; model_type is fixed at creation and only llm repositories
   accept import_model). import_model (public HuggingFace repo into an

@@ -30,6 +30,7 @@ type page struct {
 type metricDef struct {
 	Key         string  `json:"key"`
 	Label       string  `json:"label"`
+	Category    string  `json:"category"`
 	Unit        *string `json:"unit"`
 	KeyedBy     *string `json:"keyed_by"`
 	Summary     bool    `json:"summary"`
@@ -76,8 +77,7 @@ type build struct {
 	Status     string       `json:"status"`
 	StatusNote *string      `json:"status_note"`
 	Variant    *string      `json:"variant"`
-	Baseline   bool         `json:"baseline"`
-	Highlight  bool         `json:"highlight"`
+	Modes      []string     `json:"modes"`
 	Speed      metricValues `json:"speed"`
 	Accuracy   metricValues `json:"accuracy"`
 }
@@ -244,7 +244,7 @@ func deref(s *string) string {
 // ---------------------------------------------------------------------------
 
 // renderTSV prints one metric value per line: soc, model, task, variant,
-// build, runtime, status, metric, key, value, unit.
+// build, runtime, status, modes, metric, key, value, unit.
 func renderTSV(ios *iostreams.IOStreams, p *page) error {
 	tp := tableprinter.New(ios)
 	for _, m := range p.Models {
@@ -254,7 +254,7 @@ func renderTSV(ios *iostreams.IOStreams, p *page) error {
 				row := func(metric, key, value, unit string) {
 					for _, cell := range []string{
 						r.Soc, m.Slug, m.Task, deref(b.Variant), b.Key, b.Runtime, b.Status,
-						metric, key, value, unit,
+						strings.Join(b.Modes, ","), metric, key, value, unit,
 					} {
 						tp.AddField(cell)
 					}
@@ -394,6 +394,118 @@ func deviceLabel(t target) string {
 	return t.Device.Name
 }
 
+// Inference modes. Auto has no build of its own: it runs the Speed build.
+const (
+	modeSpeed    = "speed"
+	modeAccuracy = "accuracy"
+)
+
+// categoryOrder is the column order of the summary metrics; categories the
+// vocabulary adds later go after these, in vocabulary order.
+var categoryOrder = []string{"speed", "memory", "energy", "size", "accuracy"}
+
+// row is one line of a result table: a mode (or, for a build that serves no
+// mode, "-") and the build shown for it.
+type row struct {
+	variant string
+	mode    string
+	build   build
+}
+
+// modeRows lists, per variant, Auto / Speed / Accuracy and the build serving
+// each, then that variant's builds that serve no mode (a float reference, an
+// unsupported build), so every build of the result is shown at least once.
+// A mode no build serves is left out.
+func modeRows(m model, r result) []row {
+	variants := []string{""}
+	if len(m.Variants) > 0 {
+		variants = variants[:0]
+		for _, v := range m.Variants {
+			variants = append(variants, v.Key)
+		}
+	}
+	var rows []row
+	shown := map[int]bool{}
+	for _, v := range variants {
+		serving := func(mode string) (int, bool) {
+			for i, b := range r.Builds {
+				if deref(b.Variant) == v && contains(b.Modes, mode) {
+					return i, true
+				}
+			}
+			return 0, false
+		}
+		if i, ok := serving(modeSpeed); ok {
+			rows = append(rows, row{v, "Auto", r.Builds[i]}, row{v, "Speed", r.Builds[i]})
+			shown[i] = true
+		}
+		if i, ok := serving(modeAccuracy); ok {
+			rows = append(rows, row{v, "Accuracy", r.Builds[i]})
+			shown[i] = true
+		}
+		rows = appendModeless(rows, r.Builds, shown, func(b build) bool { return deref(b.Variant) == v })
+	}
+	// Builds of a variant the model does not declare.
+	return appendModeless(rows, r.Builds, shown, func(build) bool { return true })
+}
+
+// appendModeless adds the builds not shown yet that match, with mode "-"
+// (or their modes as given, when none is speed or accuracy).
+func appendModeless(rows []row, builds []build, shown map[int]bool, match func(build) bool) []row {
+	for i, b := range builds {
+		if shown[i] || !match(b) {
+			continue
+		}
+		shown[i] = true
+		mode := "-"
+		if len(b.Modes) > 0 {
+			mode = strings.Join(b.Modes, ", ")
+		}
+		rows = append(rows, row{deref(b.Variant), mode, b})
+	}
+	return rows
+}
+
+func contains(values []string, want string) bool {
+	for _, v := range values {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
+// summaryColumns returns the task's summary metrics that some build of the
+// result carries, ordered by category (speed, memory, energy, size,
+// accuracy) and by vocabulary order within one. Without a vocabulary for the
+// task, every metric the builds carry is a column.
+func summaryColumns(defs []metricDef, builds []build) []metricDef {
+	var present []metricDef
+	for _, d := range metricOrder(defs, builds) {
+		if !d.Summary && defs != nil {
+			continue
+		}
+		for _, b := range builds {
+			if _, ok := b.metric(d.Key); ok {
+				present = append(present, d)
+				break
+			}
+		}
+	}
+	rank := func(category string) int {
+		for i, c := range categoryOrder {
+			if c == category {
+				return i
+			}
+		}
+		return len(categoryOrder)
+	}
+	sort.SliceStable(present, func(i, j int) bool {
+		return rank(present[i].Category) < rank(present[j].Category)
+	})
+	return present
+}
+
 func renderResult(ios *iostreams.IOStreams, p *page, m model, r result, t target) error {
 	heading := r.Soc
 	if t.Name != "" {
@@ -406,42 +518,30 @@ func renderResult(ios *iostreams.IOStreams, p *page, m model, r result, t target
 		heading += " · as of " + r.AsOf
 	}
 
-	// The task's summary metrics that some build of this result carries.
-	var columns []metricDef
-	for _, d := range metricOrder(p.Metrics[m.Task], r.Builds) {
-		if !d.Summary && p.Metrics[m.Task] != nil {
-			continue
-		}
-		for _, b := range r.Builds {
-			if _, ok := b.metric(d.Key); ok {
-				columns = append(columns, d)
-				break
-			}
-		}
-	}
+	columns := summaryColumns(p.Metrics[m.Task], r.Builds)
+	rows := modeRows(m, r)
 	variants := map[string]string{}
 	for _, v := range m.Variants {
 		variants[v.Key] = v.Label
 	}
 	showVariant := len(m.Variants) > 0
-	showStatus := false
-	someHighlighted, allHighlighted := false, true
-	for _, b := range r.Builds {
-		if b.Status != statusMeasured {
+	showStatus, showAuto := false, false
+	for _, rw := range rows {
+		if rw.build.Status != statusMeasured {
 			showStatus = true
 		}
-		someHighlighted = someHighlighted || b.Highlight
-		allHighlighted = allHighlighted && b.Highlight
+		if rw.mode == "Auto" {
+			showAuto = true
+		}
 	}
-	markHighlights := someHighlighted && !allHighlighted
 
 	tp := tableprinter.New(ios)
 	tp.Heading(heading)
-	header := []string{"build"}
+	var header []string
 	if showVariant {
 		header = append(header, "variant")
 	}
-	header = append(header, "runtime")
+	header = append(header, "mode", "build")
 	if showStatus {
 		header = append(header, "status")
 	}
@@ -450,23 +550,17 @@ func renderResult(ios *iostreams.IOStreams, p *page, m model, r result, t target
 	}
 	tp.HeaderRow(header...)
 
-	for _, b := range r.Builds {
-		label := b.Label
-		if b.Baseline {
-			label += " (baseline)"
-		}
-		if markHighlights && b.Highlight {
-			label = "* " + label
-		}
-		tp.AddField(label)
+	for _, rw := range rows {
+		b := rw.build
 		if showVariant {
-			v := deref(b.Variant)
+			v := rw.variant
 			if l, ok := variants[v]; ok {
 				v = l
 			}
 			tp.AddField(orDash(v))
 		}
-		tp.AddField(b.Runtime)
+		tp.AddField(rw.mode)
+		tp.AddField(b.Label)
 		if showStatus {
 			status := strings.ReplaceAll(b.Status, "_", " ")
 			if note := deref(b.StatusNote); note != "" && b.Status != statusMeasured {
@@ -484,8 +578,8 @@ func renderResult(ios *iostreams.IOStreams, p *page, m model, r result, t target
 		}
 		tp.EndRow()
 	}
-	if markHighlights {
-		tp.Caption("* in the program page's summary")
+	if showAuto {
+		tp.Caption("Auto runs the Speed build.")
 	}
 	if err := tp.Render(); err != nil {
 		return err

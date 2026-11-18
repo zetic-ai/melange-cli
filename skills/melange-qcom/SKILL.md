@@ -176,10 +176,13 @@ melange-qcom program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
 The MCP tool is `get_program_benchmarks`. The sheets are not fleet-filtered:
 the program's SoC catalog is curated by Zetic and can name SoCs outside the
 reviewed fleet, and a target with `has_results: false` has no numbers yet. Do
-not describe sheet data as Qualcomm-filtered report output. The response's
-`metrics` object gives each metric's label, unit and better direction;
-`baseline: true` marks the build the sheet compares against. Present numbers
-with the result's `measured_on` device and `as_of` date. A program you are not
+not describe sheet data as Qualcomm-filtered report output. The sheets show
+Zetic's builds by inference mode: each build's `modes` lists `speed` and/or
+`accuracy` (at most one build per mode, per variant), Auto follows Speed, and
+a build with no modes (a float reference) is context. The response's
+`metrics` object gives each metric's label, unit, better direction and
+`category` (speed, memory, energy, size, accuracy) for grouping. Present
+numbers per mode, with the result's `measured_on` device and `as_of` date. A program you are not
 a member of answers 404, the same as one that does not exist.
 
 A partner repository whose numbers moved to a program sheet can have its

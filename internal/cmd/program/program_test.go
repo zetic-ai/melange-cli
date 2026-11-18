@@ -66,13 +66,14 @@ const (
 const sheets = `{"schema_version":"program-benchmark/v1","program":"ACME-PROGRAM",` +
 	`"metrics":{` +
 	`"asr":[` +
-	`{"key":"per_clip_ms","group":"speed","label":"Per clip","unit":"ms","better":"lower","keyed_by":null,"summary":true,"approximate":false,"maximum":null},` +
-	`{"key":"encoder_ms","group":"speed","label":"Encoder","unit":"ms","better":"lower","keyed_by":null,"summary":false,"approximate":false,"maximum":null},` +
-	`{"key":"wer_pct","group":"accuracy","label":"WER","unit":"%","better":"lower","keyed_by":"test_set","summary":true,"approximate":false,"maximum":100}],` +
+	`{"key":"per_clip_ms","group":"speed","category":"speed","label":"Per clip","unit":"ms","better":"lower","keyed_by":null,"summary":true,"approximate":false,"maximum":null},` +
+	`{"key":"encoder_ms","group":"speed","category":"speed","label":"Encoder","unit":"ms","better":"lower","keyed_by":null,"summary":false,"approximate":false,"maximum":null},` +
+	`{"key":"wer_pct","group":"accuracy","category":"accuracy","label":"WER","unit":"%","better":"lower","keyed_by":"test_set","summary":true,"approximate":false,"maximum":100},` +
+	`{"key":"memory_mb","group":"speed","category":"memory","label":"Memory","unit":"MB","better":"lower","keyed_by":null,"summary":true,"approximate":false,"maximum":null}],` +
 	`"llm":[` +
-	`{"key":"decode_tps","group":"speed","label":"Decode","unit":"tokens/s","better":"higher","keyed_by":null,"summary":true,"approximate":false,"maximum":null},` +
-	`{"key":"ttft_ms","group":"speed","label":"Time to first token","unit":"ms","better":"lower","keyed_by":"prompt_tokens","summary":true,"approximate":false,"maximum":null},` +
-	`{"key":"energy_per_token_mj","group":"speed","label":"Energy per token","unit":"mJ","better":"lower","keyed_by":null,"summary":true,"approximate":true,"maximum":null}]},` +
+	`{"key":"decode_tps","group":"speed","category":"speed","label":"Decode","unit":"tokens/s","better":"higher","keyed_by":null,"summary":true,"approximate":false,"maximum":null},` +
+	`{"key":"ttft_ms","group":"speed","category":"speed","label":"Time to first token","unit":"ms","better":"lower","keyed_by":"prompt_tokens","summary":true,"approximate":false,"maximum":null},` +
+	`{"key":"energy_per_token_mj","group":"speed","category":"energy","label":"Energy per token","unit":"mJ","better":"lower","keyed_by":null,"summary":true,"approximate":true,"maximum":null}]},` +
 	`"targets":[` +
 	`{"soc":"SOC-A","name":"Chip A","npu":"NPU 1","form_factor":"wearable","has_results":true,"device":{"name":"Board A","model":null},"notes":[]},` +
 	`{"soc":"SOC-B","name":"Chip B","npu":"NPU 2","form_factor":"phone","has_results":false,"device":{"name":"Phone B","model":"PB-1"},"notes":[]}],` +
@@ -80,18 +81,20 @@ const sheets = `{"schema_version":"program-benchmark/v1","program":"ACME-PROGRAM
 	`{"slug":"speech","task":"asr","name":"Speech","vendor":"Vendor & Co","order":10,"description":null,` +
 	`"variants":[{"key":"tiny","label":"tiny"},{"key":"base","label":"base"}],` +
 	`"results":[{"soc":"SOC-A","measured_on":"Board A","as_of":"2026-11-18","revision":2,"updated_at":"2026-11-18T09:00:00Z",` +
-	`"software":{"SDK":"1.0"},"method":{"speed":"m","accuracy":"m"},"highlights":["Ours is 1.1x faster."],` +
+	`"software":{"SDK":"1.0"},"method":{"speed":"m","accuracy":"m"},"highlights":["Speed uses 20 % less memory."],` +
 	`"notes":{"speed":[],"accuracy":[]},"tables":[],"builds":[` +
-	`{"key":"tiny-ours","label":"Ours","runtime":"llama_cpp","variant":"tiny","status":"measured","status_note":null,"highlight":true,"baseline":false,"notes":[],` +
-	`"speed":{"encoder_ms":23.46,"per_clip_ms":93.7},"accuracy":{"wer_pct":{"test-other":14.16,"test-clean":5.74}}},` +
-	`{"key":"tiny-vendor","label":"Vendor","runtime":"qualcomm_qnn","variant":"tiny","status":"measured","status_note":null,"highlight":true,"baseline":true,"notes":[],` +
-	`"speed":{"per_clip_ms":105.4},"accuracy":{"wer_pct":{"test-other":13.6,"test-clean":6.1}}},` +
-	`{"key":"base-vendor","label":"Vendor","runtime":"qualcomm_qnn","variant":"base","status":"unsupported","status_note":"graph too large","highlight":false,"baseline":false,"notes":[],` +
+	`{"key":"tiny-fast","label":"W4","runtime":"llama_cpp","variant":"tiny","status":"measured","status_note":null,"modes":["speed"],"highlight":true,"baseline":false,"notes":[],` +
+	`"speed":{"encoder_ms":23.46,"per_clip_ms":93.7,"memory_mb":121.0},"accuracy":{"wer_pct":{"test-other":14.16,"test-clean":5.74}}},` +
+	`{"key":"tiny-exact","label":"W8","runtime":"llama_cpp","variant":"tiny","status":"measured","status_note":null,"modes":["accuracy"],"highlight":true,"baseline":false,"notes":[],` +
+	`"speed":{"per_clip_ms":105.4,"memory_mb":150.0},"accuracy":{"wer_pct":{"test-other":13.6,"test-clean":6.1}}},` +
+	`{"key":"tiny-float","label":"Float (reference)","runtime":"float_reference","variant":"tiny","status":"measured","status_note":null,"modes":[],"highlight":false,"baseline":false,"notes":[],` +
+	`"speed":{},"accuracy":{"wer_pct":{"test-other":13.5,"test-clean":6.0}}},` +
+	`{"key":"base-cpu","label":"CPU","runtime":"llama_cpp","variant":"base","status":"unsupported","status_note":"graph too large","modes":[],"highlight":false,"baseline":false,"notes":[],` +
 	`"speed":{},"accuracy":{}}]}]},` +
 	`{"slug":"chat","task":"llm","name":"Chat","vendor":null,"order":20,"description":null,"variants":[],` +
 	`"results":[{"soc":"SOC-A","measured_on":"Board A","as_of":"2026-11-17","revision":1,"updated_at":"2026-11-17T09:00:00Z",` +
 	`"software":{},"method":{},"highlights":[],"notes":{"speed":[],"accuracy":[]},"tables":[],"builds":[` +
-	`{"key":"ours","label":"Ours","runtime":"llama_cpp","variant":null,"status":"measured","status_note":null,"highlight":true,"baseline":false,"notes":[],` +
+	`{"key":"ours","label":"Q4","runtime":"llama_cpp","variant":null,"status":"measured","status_note":null,"modes":["speed","accuracy"],"highlight":true,"baseline":false,"notes":[],` +
 	`"speed":{"decode_tps":0.463,"ttft_ms":{"1024":194.5,"128":48.2},"energy_per_token_mj":3.452},"accuracy":{}}]}]}],` +
 	`"updated_at":"2026-11-18T09:00:00Z"}`
 
@@ -201,22 +204,27 @@ func TestBenchmarksTTY(t *testing.T) {
 		"ACME-PROGRAM benchmarks, updated 2026-11-18",
 		"Speech · ASR (speech to text) · Vendor & Co",
 		"SOC-A Chip A · measured on Board A · as of 2026-11-18",
-		// Variant, status and summary-metric columns, with units and keys.
-		"VARIANT",
-		"STATUS",
-		"PER CLIP (MS)",
-		"WER (%, BY TEST SET)",
-		"* Vendor (baseline)",
-		"unsupported: graph too large",
+		"Auto runs the Speed build.",
 		"test-other: 14.16, test-clean: 5.74",
-		// One build is outside the page summary, so highlights are marked.
-		"* Ours",
-		"* in the program page's summary",
-		"- Ours is 1.1x faster.",
+		"- Speed uses 20 % less memory.",
 	} {
 		assert.Contains(t, speech, want)
 	}
+	// Columns: variant, mode, build, status, then the summary metrics by
+	// category — speed, memory, accuracy — whatever the vocabulary order.
+	assert.Regexp(t, `VARIANT +MODE +BUILD +STATUS +PER CLIP \(MS\) +MEMORY \(MB\) +WER \(%, BY TEST SET\)`, speech)
 	assert.NotContains(t, speech, "ENCODER", "non-summary metrics stay out of the table")
+	// Per variant: Auto and Speed show the speed build, Accuracy its own;
+	// builds serving no mode follow with mode "-"; a mode nobody serves
+	// (base has none) is left out.
+	assert.Regexp(t, `(?s)tiny +Auto +W4 +measured +93\.7 +121\.0 .*`+
+		`tiny +Speed +W4 +measured +93\.7 .*`+
+		`tiny +Accuracy +W8 +measured +105\.4 +150\.0 .*`+
+		`tiny +- +Float \(reference\) +measured +- +- +test-other: 13\.5.*`+
+		`base +- +CPU +unsupported: graph too large`, speech)
+	assert.NotRegexp(t, `base +(Auto|Speed|Accuracy)`, speech)
+	assert.NotContains(t, speech, "baseline")
+	assert.NotContains(t, speech, "* ")
 
 	chat := out[strings.Index(out, "\nChat · LLM"):]
 	for _, want := range []string{
@@ -229,9 +237,10 @@ func TestBenchmarksTTY(t *testing.T) {
 	} {
 		assert.Contains(t, chat, want)
 	}
+	// One build serving both modes fills all three rows.
+	assert.Regexp(t, `(?s)Auto +Q4 .*Speed +Q4 .*Accuracy +Q4 `, chat)
 	assert.NotContains(t, chat, "VARIANT", "no variant column for a model without variants")
 	assert.NotContains(t, chat, "STATUS", "no status column when every build is measured")
-	assert.NotContains(t, chat, "* ", "no marks when every build is in the summary")
 }
 
 func TestBenchmarksTSVIsOneMetricValuePerLine(t *testing.T) {
@@ -243,20 +252,25 @@ func TestBenchmarksTSVIsOneMetricValuePerLine(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(e.out.String(), "\n"), "\n")
 	assert.Equal(t, []string{
 		// Vocabulary order (every metric, not only the summary ones), keys in
-		// API order except prompt lengths, which sort numerically.
-		"SOC-A\tspeech\tasr\ttiny\ttiny-ours\tllama_cpp\tmeasured\tper_clip_ms\t\t93.7\tms",
-		"SOC-A\tspeech\tasr\ttiny\ttiny-ours\tllama_cpp\tmeasured\tencoder_ms\t\t23.46\tms",
-		"SOC-A\tspeech\tasr\ttiny\ttiny-ours\tllama_cpp\tmeasured\twer_pct\ttest-other\t14.16\t%",
-		"SOC-A\tspeech\tasr\ttiny\ttiny-ours\tllama_cpp\tmeasured\twer_pct\ttest-clean\t5.74\t%",
-		"SOC-A\tspeech\tasr\ttiny\ttiny-vendor\tqualcomm_qnn\tmeasured\tper_clip_ms\t\t105.4\tms",
-		"SOC-A\tspeech\tasr\ttiny\ttiny-vendor\tqualcomm_qnn\tmeasured\twer_pct\ttest-other\t13.6\t%",
-		"SOC-A\tspeech\tasr\ttiny\ttiny-vendor\tqualcomm_qnn\tmeasured\twer_pct\ttest-clean\t6.1\t%",
+		// API order except prompt lengths, which sort numerically; modes
+		// comma-joined right after status.
+		"SOC-A\tspeech\tasr\ttiny\ttiny-fast\tllama_cpp\tmeasured\tspeed\tper_clip_ms\t\t93.7\tms",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-fast\tllama_cpp\tmeasured\tspeed\tencoder_ms\t\t23.46\tms",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-fast\tllama_cpp\tmeasured\tspeed\twer_pct\ttest-other\t14.16\t%",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-fast\tllama_cpp\tmeasured\tspeed\twer_pct\ttest-clean\t5.74\t%",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-fast\tllama_cpp\tmeasured\tspeed\tmemory_mb\t\t121.0\tMB",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-exact\tllama_cpp\tmeasured\taccuracy\tper_clip_ms\t\t105.4\tms",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-exact\tllama_cpp\tmeasured\taccuracy\twer_pct\ttest-other\t13.6\t%",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-exact\tllama_cpp\tmeasured\taccuracy\twer_pct\ttest-clean\t6.1\t%",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-exact\tllama_cpp\tmeasured\taccuracy\tmemory_mb\t\t150.0\tMB",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-float\tfloat_reference\tmeasured\t\twer_pct\ttest-other\t13.5\t%",
+		"SOC-A\tspeech\tasr\ttiny\ttiny-float\tfloat_reference\tmeasured\t\twer_pct\ttest-clean\t6.0\t%",
 		// A build without metrics still says what its status is.
-		"SOC-A\tspeech\tasr\tbase\tbase-vendor\tqualcomm_qnn\tunsupported\t\t\t\t",
-		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tdecode_tps\t\t0.463\ttokens/s",
-		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tttft_ms\t128\t48.2\tms",
-		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tttft_ms\t1024\t194.5\tms",
-		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tenergy_per_token_mj\t\t3.452\tmJ",
+		"SOC-A\tspeech\tasr\tbase\tbase-cpu\tllama_cpp\tunsupported\t\t\t\t\t",
+		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tspeed,accuracy\tdecode_tps\t\t0.463\ttokens/s",
+		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tspeed,accuracy\tttft_ms\t128\t48.2\tms",
+		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tspeed,accuracy\tttft_ms\t1024\t194.5\tms",
+		"SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tspeed,accuracy\tenergy_per_token_mj\t\t3.452\tmJ",
 	}, lines)
 }
 
@@ -285,5 +299,5 @@ func TestQualcommEditionRendersTheSameSheets(t *testing.T) {
 	stubSheets(t, e)
 
 	require.NoError(t, run(t, e, "program", "benchmarks", program, "--model", "chat"))
-	assert.Contains(t, e.out.String(), "SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tdecode_tps\t\t0.463\ttokens/s")
+	assert.Contains(t, e.out.String(), "SOC-A\tchat\tllm\t\tours\tllama_cpp\tmeasured\tspeed,accuracy\tdecode_tps\t\t0.463\ttokens/s")
 }

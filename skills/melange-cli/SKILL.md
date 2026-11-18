@@ -282,15 +282,20 @@ members and Zetic staff read them; list your programs first.
 
 ```sh
 melange api /v1/me --jq '.access_programs[].name'
-melange program benchmarks PROGRAM                     # summary tables per model and SoC
+melange program benchmarks PROGRAM                     # Auto / Speed / Accuracy per model and SoC
 melange program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
 ```
 
-The response's `metrics` object is the per-task vocabulary (`label`, `unit`,
-`better`, `keyed_by`); a keyed value is an object keyed by prompt length or
-test set. `baseline: true` marks the build the sheet compares against, and a
-target with `has_results: false` is a SoC still to be measured. Present the
-numbers with the result's `measured_on` device and `as_of` date. A program you
+The sheets show Zetic's builds by inference mode, like a repository model
+page: each build's `modes` lists the modes it serves (`speed`, `accuracy`; at
+most one build per mode, per variant), and Auto follows Speed. A build with no
+modes, such as a float reference, is context rather than a mode. The
+response's `metrics` object is the per-task vocabulary (`label`, `unit`,
+`better`, `keyed_by`, and `category`: speed, memory, energy, size or accuracy,
+which is how to group the columns); a keyed value is an object keyed by prompt
+length or test set. A target with `has_results: false` is a SoC still to be
+measured. Present the numbers per mode, with the result's `measured_on` device
+and `as_of` date. A program you
 are not a member of answers 404, the same as one that does not exist. The MCP
 tool is `get_program_benchmarks`.
 
