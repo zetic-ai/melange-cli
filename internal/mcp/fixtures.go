@@ -48,4 +48,5 @@ var FixtureSkipped = map[string]string{
 	"error_402_credit":             "error envelope: failures surface as IsError text, not structuredContent",
 	"error_422":                    "error envelope: failures surface as IsError text, not structuredContent",
 	"error_422_enum":               "error envelope: failures surface as IsError text, not structuredContent",
+	"get_program_benchmarks":       "no MCP tool reads partner program sheets yet",
 }

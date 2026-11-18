@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for BillingPlanResponseBillingGeneration.
@@ -1082,6 +1083,42 @@ func (e PackageReportRecordUnit) Valid() bool {
 	}
 }
 
+// Defines values for ProgramMetricDefinitionBetter.
+const (
+	Higher ProgramMetricDefinitionBetter = "higher"
+	Lower  ProgramMetricDefinitionBetter = "lower"
+)
+
+// Valid indicates whether the value is a known member of the ProgramMetricDefinitionBetter enum.
+func (e ProgramMetricDefinitionBetter) Valid() bool {
+	switch e {
+	case Higher:
+		return true
+	case Lower:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProgramMetricDefinitionGroup.
+const (
+	ProgramMetricDefinitionGroupAccuracy ProgramMetricDefinitionGroup = "accuracy"
+	ProgramMetricDefinitionGroupSpeed    ProgramMetricDefinitionGroup = "speed"
+)
+
+// Valid indicates whether the value is a known member of the ProgramMetricDefinitionGroup enum.
+func (e ProgramMetricDefinitionGroup) Valid() bool {
+	switch e {
+	case ProgramMetricDefinitionGroupAccuracy:
+		return true
+	case ProgramMetricDefinitionGroupSpeed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpdateRepoRequestUseCase.
 const (
 	UpdateRepoRequestUseCaseLlm      UpdateRepoRequestUseCase = "llm"
@@ -1442,7 +1479,7 @@ type ErrorEnvelope struct {
 		// ActiveUploadId Blocking upload-session id on the create-model-upload active-session conflict (409 only).
 		ActiveUploadId *string `json:"active_upload_id,omitempty"`
 
-		// Code Specific machine-readable reason within the `type` category (e.g. `credit_balance_exhausted`, `custom_model_too_large`, `sdk_upgrade_required`). Present on Pricing-v3 and SDK-gate refusals; branch on `code` when it is present, on `type` otherwise.
+		// Code Specific machine-readable reason within the `type` category (e.g. `credit_balance_exhausted`, `custom_model_too_large`). Present on Pricing-v3 refusals; branch on `code` when it is present, on `type` otherwise.
 		Code *string `json:"code,omitempty"`
 
 		// Fields Per-field validation details (422 only).
@@ -2025,6 +2062,168 @@ type PagedRepoResponse struct {
 	Results []RepoResponse `json:"results"`
 }
 
+// ProgramBenchmarksResponse defines model for ProgramBenchmarksResponse.
+type ProgramBenchmarksResponse struct {
+	// Metrics Metric vocabulary per task.
+	Metrics       map[string][]ProgramMetricDefinition `json:"metrics"`
+	Models        []ProgramModel                       `json:"models"`
+	Program       string                               `json:"program"`
+	SchemaVersion string                               `json:"schema_version"`
+
+	// Targets The SoC catalog, in page order.
+	Targets   []ProgramTarget `json:"targets"`
+	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
+}
+
+// ProgramBuild defines model for ProgramBuild.
+type ProgramBuild struct {
+	Accuracy  map[string]ProgramBuild_Accuracy_AdditionalProperties `json:"accuracy"`
+	Artifact  *ProgramBuildArtifact                                 `json:"artifact,omitempty"`
+	Baseline  bool                                                  `json:"baseline"`
+	Highlight bool                                                  `json:"highlight"`
+	Key       string                                                `json:"key"`
+	Label     string                                                `json:"label"`
+	Notes     []string                                              `json:"notes"`
+
+	// Runtime What the build runs on, for example `llama_cpp`; `float_reference` marks the accuracy-only float row. Open vocabulary.
+	Runtime string                                             `json:"runtime"`
+	Speed   map[string]ProgramBuild_Speed_AdditionalProperties `json:"speed"`
+
+	// Status `measured`, `unsupported` or `not_measured`.
+	Status     string  `json:"status"`
+	StatusNote *string `json:"status_note,omitempty"`
+	Variant    *string `json:"variant,omitempty"`
+}
+
+// ProgramBuildAccuracy0 defines model for ProgramBuild.Accuracy.0.
+type ProgramBuildAccuracy0 = float32
+
+// ProgramBuildAccuracy1 defines model for ProgramBuild.Accuracy.1.
+type ProgramBuildAccuracy1 map[string]float32
+
+// ProgramBuild_Accuracy_AdditionalProperties defines model for ProgramBuild.accuracy.AdditionalProperties.
+type ProgramBuild_Accuracy_AdditionalProperties struct {
+	union json.RawMessage
+}
+
+// ProgramBuildSpeed0 defines model for ProgramBuild.Speed.0.
+type ProgramBuildSpeed0 = float32
+
+// ProgramBuildSpeed1 defines model for ProgramBuild.Speed.1.
+type ProgramBuildSpeed1 map[string]float32
+
+// ProgramBuild_Speed_AdditionalProperties defines model for ProgramBuild.speed.AdditionalProperties.
+type ProgramBuild_Speed_AdditionalProperties struct {
+	union json.RawMessage
+}
+
+// ProgramBuildArtifact defines model for ProgramBuildArtifact.
+type ProgramBuildArtifact struct {
+	ArtifactKey string `json:"artifact_key"`
+	Repo        string `json:"repo"`
+}
+
+// ProgramMethod defines model for ProgramMethod.
+type ProgramMethod struct {
+	Accuracy *string `json:"accuracy,omitempty"`
+	Speed    *string `json:"speed,omitempty"`
+}
+
+// ProgramMetricDefinition defines model for ProgramMetricDefinition.
+type ProgramMetricDefinition struct {
+	// Approximate Rendered with "≈".
+	Approximate bool                          `json:"approximate"`
+	Better      ProgramMetricDefinitionBetter `json:"better"`
+	Group       ProgramMetricDefinitionGroup  `json:"group"`
+	Key         string                        `json:"key"`
+
+	// KeyedBy Set for keyed metrics: `prompt_tokens` (keys are prompt lengths) or `test_set` (keys are dataset split names).
+	KeyedBy *string  `json:"keyed_by"`
+	Label   string   `json:"label"`
+	Maximum *float32 `json:"maximum"`
+
+	// Summary Shown in the model's summary table.
+	Summary bool    `json:"summary"`
+	Unit    *string `json:"unit"`
+}
+
+// ProgramMetricDefinitionBetter defines model for ProgramMetricDefinition.Better.
+type ProgramMetricDefinitionBetter string
+
+// ProgramMetricDefinitionGroup defines model for ProgramMetricDefinition.Group.
+type ProgramMetricDefinitionGroup string
+
+// ProgramModel defines model for ProgramModel.
+type ProgramModel struct {
+	Description *string `json:"description,omitempty"`
+	Name        string  `json:"name"`
+	Order       int     `json:"order"`
+
+	// Results In catalog (SoC) order.
+	Results []ProgramResult `json:"results"`
+	Slug    string          `json:"slug"`
+
+	// Task `llm`, `asr`, `tts` or `image_classification`; keys `metrics`.
+	Task     string           `json:"task"`
+	Variants []ProgramVariant `json:"variants"`
+	Vendor   *string          `json:"vendor,omitempty"`
+}
+
+// ProgramNotes defines model for ProgramNotes.
+type ProgramNotes struct {
+	Accuracy []string `json:"accuracy"`
+	Speed    []string `json:"speed"`
+}
+
+// ProgramResult defines model for ProgramResult.
+type ProgramResult struct {
+	AsOf       openapi_types.Date `json:"as_of"`
+	Builds     []ProgramBuild     `json:"builds"`
+	Highlights []string           `json:"highlights"`
+	MeasuredOn string             `json:"measured_on"`
+	Method     ProgramMethod      `json:"method"`
+	Notes      ProgramNotes       `json:"notes"`
+	Revision   int                `json:"revision"`
+	Soc        string             `json:"soc"`
+	Software   map[string]string  `json:"software"`
+	Tables     []ProgramTable     `json:"tables"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
+// ProgramTable defines model for ProgramTable.
+type ProgramTable struct {
+	Columns []string    `json:"columns"`
+	Rows    [][]*string `json:"rows"`
+	Title   string      `json:"title"`
+}
+
+// ProgramTarget defines model for ProgramTarget.
+type ProgramTarget struct {
+	Device ProgramTargetDevice `json:"device"`
+
+	// FormFactor `wearable`, `phone` or `other`.
+	FormFactor string `json:"form_factor"`
+
+	// HasResults False for a SoC whose results are still to come.
+	HasResults bool     `json:"has_results"`
+	Name       string   `json:"name"`
+	Notes      []string `json:"notes"`
+	Npu        *string  `json:"npu,omitempty"`
+	Soc        string   `json:"soc"`
+}
+
+// ProgramTargetDevice defines model for ProgramTargetDevice.
+type ProgramTargetDevice struct {
+	Model *string `json:"model,omitempty"`
+	Name  string  `json:"name"`
+}
+
+// ProgramVariant defines model for ProgramVariant.
+type ProgramVariant struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
 // ProjectResponse defines model for ProjectResponse.
 type ProjectResponse struct {
 	Account     string  `json:"account"`
@@ -2259,9 +2458,6 @@ type ServiceUnavailable = ErrorEnvelope
 // Unauthorized Standard error envelope returned by every non-2xx response of the public API.
 type Unauthorized = ErrorEnvelope
 
-// UpgradeRequired Standard error envelope returned by every non-2xx response of the public API.
-type UpgradeRequired = ErrorEnvelope
-
 // ValidationError Standard error envelope returned by every non-2xx response of the public API.
 type ValidationError = ErrorEnvelope
 
@@ -2379,6 +2575,130 @@ type ReissueUploadFilesJSONRequestBody = ReissueUploadFilesRequest
 
 // ImportZtcPackageModelJSONRequestBody defines body for ImportZtcPackageModel for application/json ContentType.
 type ImportZtcPackageModelJSONRequestBody = ImportZtcPackageRequest
+
+// AsProgramBuildAccuracy0 returns the union data inside the ProgramBuild_Accuracy_AdditionalProperties as a ProgramBuildAccuracy0
+func (t ProgramBuild_Accuracy_AdditionalProperties) AsProgramBuildAccuracy0() (ProgramBuildAccuracy0, error) {
+	var body ProgramBuildAccuracy0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProgramBuildAccuracy0 overwrites any union data inside the ProgramBuild_Accuracy_AdditionalProperties as the provided ProgramBuildAccuracy0
+func (t *ProgramBuild_Accuracy_AdditionalProperties) FromProgramBuildAccuracy0(v ProgramBuildAccuracy0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProgramBuildAccuracy0 performs a merge with any union data inside the ProgramBuild_Accuracy_AdditionalProperties, using the provided ProgramBuildAccuracy0
+func (t *ProgramBuild_Accuracy_AdditionalProperties) MergeProgramBuildAccuracy0(v ProgramBuildAccuracy0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProgramBuildAccuracy1 returns the union data inside the ProgramBuild_Accuracy_AdditionalProperties as a ProgramBuildAccuracy1
+func (t ProgramBuild_Accuracy_AdditionalProperties) AsProgramBuildAccuracy1() (ProgramBuildAccuracy1, error) {
+	var body ProgramBuildAccuracy1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProgramBuildAccuracy1 overwrites any union data inside the ProgramBuild_Accuracy_AdditionalProperties as the provided ProgramBuildAccuracy1
+func (t *ProgramBuild_Accuracy_AdditionalProperties) FromProgramBuildAccuracy1(v ProgramBuildAccuracy1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProgramBuildAccuracy1 performs a merge with any union data inside the ProgramBuild_Accuracy_AdditionalProperties, using the provided ProgramBuildAccuracy1
+func (t *ProgramBuild_Accuracy_AdditionalProperties) MergeProgramBuildAccuracy1(v ProgramBuildAccuracy1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProgramBuild_Accuracy_AdditionalProperties) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ProgramBuild_Accuracy_AdditionalProperties) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsProgramBuildSpeed0 returns the union data inside the ProgramBuild_Speed_AdditionalProperties as a ProgramBuildSpeed0
+func (t ProgramBuild_Speed_AdditionalProperties) AsProgramBuildSpeed0() (ProgramBuildSpeed0, error) {
+	var body ProgramBuildSpeed0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProgramBuildSpeed0 overwrites any union data inside the ProgramBuild_Speed_AdditionalProperties as the provided ProgramBuildSpeed0
+func (t *ProgramBuild_Speed_AdditionalProperties) FromProgramBuildSpeed0(v ProgramBuildSpeed0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProgramBuildSpeed0 performs a merge with any union data inside the ProgramBuild_Speed_AdditionalProperties, using the provided ProgramBuildSpeed0
+func (t *ProgramBuild_Speed_AdditionalProperties) MergeProgramBuildSpeed0(v ProgramBuildSpeed0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProgramBuildSpeed1 returns the union data inside the ProgramBuild_Speed_AdditionalProperties as a ProgramBuildSpeed1
+func (t ProgramBuild_Speed_AdditionalProperties) AsProgramBuildSpeed1() (ProgramBuildSpeed1, error) {
+	var body ProgramBuildSpeed1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProgramBuildSpeed1 overwrites any union data inside the ProgramBuild_Speed_AdditionalProperties as the provided ProgramBuildSpeed1
+func (t *ProgramBuild_Speed_AdditionalProperties) FromProgramBuildSpeed1(v ProgramBuildSpeed1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProgramBuildSpeed1 performs a merge with any union data inside the ProgramBuild_Speed_AdditionalProperties, using the provided ProgramBuildSpeed1
+func (t *ProgramBuild_Speed_AdditionalProperties) MergeProgramBuildSpeed1(v ProgramBuildSpeed1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProgramBuild_Speed_AdditionalProperties) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ProgramBuild_Speed_AdditionalProperties) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -2511,6 +2831,18 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetProgramBenchmarks Get Program Benchmarks
+	//
+	// A partner program's benchmark sheets: its SoC catalog, the metric
+	// vocabulary per task, and every model's results per SoC (catalog order).
+	//
+	// Models are ordered by their `order`, then name. A SoC with
+	// `has_results: false` is listed but not measured yet. 404 unless the
+	// caller belongs to the program (staff see every program).
+	//
+	// Corresponds with GET /v1/programs/{program}/benchmarks (the `GetProgramBenchmarks` operationId).
+	GetProgramBenchmarks(ctx context.Context, program string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ZeticPublicProjectsCreateProjectWithBody Create Project
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
@@ -2616,7 +2948,7 @@ type ClientInterface interface {
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -2631,7 +2963,7 @@ type ClientInterface interface {
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -2740,6 +3072,14 @@ type ClientInterface interface {
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
 	//
+	// Conversion admission is checked here as well as at complete, so a
+	// client is refused BEFORE it uploads a model that cannot be admitted:
+	// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+	// conversion quota is exhausted, 409 `conflict_error` with
+	// `code="conversion_in_progress"` while another conversion for the
+	// account is running. An `Idempotency-Key` replay of an existing session
+	// is not re-checked; its complete reports the authoritative answer.
+	//
 	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 	//
 	// Takes any type of body and a specified content type.
@@ -2754,6 +3094,14 @@ type ClientInterface interface {
 	// Returns 201 with server-assigned canonical paths and resumable upload
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
+	//
+	// Conversion admission is checked here as well as at complete, so a
+	// client is refused BEFORE it uploads a model that cannot be admitted:
+	// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+	// conversion quota is exhausted, 409 `conflict_error` with
+	// `code="conversion_in_progress"` while another conversion for the
+	// account is running. An `Idempotency-Key` replay of an existing session
+	// is not re-checked; its complete reports the authoritative answer.
 	//
 	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 	//
@@ -2849,11 +3197,13 @@ type ClientInterface interface {
 	// re-checks state under a lock, so the race resolves to one winner).
 	//
 	// If the account's conversion quota is exhausted the request returns the
-	// standard 429 `rate_limit_error`: the conversion has NOT started and the
-	// session stays DISPATCH_PENDING — complete again after resolving the
-	// quota to retry the dispatch.
+	// standard 429 `rate_limit_error` (`code="quota_exhausted"`); while another
+	// conversion for the account is running it returns 409 `conflict_error`
+	// (`code="conversion_in_progress"`). In both cases the conversion has NOT
+	// started and the session stays DISPATCH_PENDING — complete again after
+	// resolving that to retry the dispatch.
 	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
 	CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, params *CompleteModelUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3007,19 +3357,16 @@ type ClientInterface interface {
 
 	// CreateDownloadAuthorization Create Download Authorization
 	//
-	// Authorize downloading a converted target's artifacts (BILLABLE).
+	// Authorize downloading a converted target's artifacts.
 	//
-	// Charges the target's aggregate `download_size` against the CALLER's
-	// bandwidth quota — also for public models owned by others. Over quota is
-	// a 429 with nothing charged and no row created. Returns signed GET URLs
-	// valid until `expires_at` (about one hour).
+	// Records the target's aggregate `download_size` for the CALLER — also for
+	// public models owned by others. The bytes do not gate authorization.
+	// Returns signed GET URLs valid until `expires_at` (about one hour).
 	//
 	// With an `Idempotency-Key`, replaying returns the original authorization
-	// (200) with fresh URLs and does NOT charge again; without one, EVERY
-	// call charges. The key is scoped to the caller's account; reusing it for
+	// (200) with fresh URLs and does NOT record usage again; without one, EVERY
+	// call records usage. The key is scoped to the caller's account; reusing it for
 	// a different target is a 409.
-	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 	//
 	// Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations (the `CreateDownloadAuthorization` operationId).
 	CreateDownloadAuthorization(ctx context.Context, accountName string, repoName string, modelKey string, targetId string, params *CreateDownloadAuthorizationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3160,6 +3507,28 @@ func (c *Client) ListLibraryProviders(ctx context.Context, reqEditors ...Request
 // Corresponds with GET /v1/me (the `GetMe` operationId).
 func (c *Client) GetMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetProgramBenchmarks Get Program Benchmarks
+//
+// A partner program's benchmark sheets: its SoC catalog, the metric
+// vocabulary per task, and every model's results per SoC (catalog order).
+//
+// Models are ordered by their `order`, then name. A SoC with
+// `has_results: false` is listed but not measured yet. 404 unless the
+// caller belongs to the program (staff see every program).
+//
+// Corresponds with GET /v1/programs/{program}/benchmarks (the `GetProgramBenchmarks` operationId).
+func (c *Client) GetProgramBenchmarks(ctx context.Context, program string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetProgramBenchmarksRequest(c.Server, program)
 	if err != nil {
 		return nil, err
 	}
@@ -3347,7 +3716,7 @@ func (c *Client) ZeticPublicUploadsGetUpload(ctx context.Context, projectName st
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 //
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -3371,7 +3740,7 @@ func (c *Client) ZeticPublicUploadsCompleteUploadWithBody(ctx context.Context, p
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 //
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -3587,6 +3956,14 @@ func (c *Client) ListModels(ctx context.Context, accountName string, repoName st
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
 //
+// Conversion admission is checked here as well as at complete, so a
+// client is refused BEFORE it uploads a model that cannot be admitted:
+// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+// conversion quota is exhausted, 409 `conflict_error` with
+// `code="conversion_in_progress"` while another conversion for the
+// account is running. An `Idempotency-Key` replay of an existing session
+// is not re-checked; its complete reports the authoritative answer.
+//
 // Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 //
 // Takes any type of body and a specified content type.
@@ -3611,6 +3988,14 @@ func (c *Client) CreateModelUploadWithBody(ctx context.Context, accountName stri
 // Returns 201 with server-assigned canonical paths and resumable upload
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
+//
+// Conversion admission is checked here as well as at complete, so a
+// client is refused BEFORE it uploads a model that cannot be admitted:
+// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+// conversion quota is exhausted, 409 `conflict_error` with
+// `code="conversion_in_progress"` while another conversion for the
+// account is running. An `Idempotency-Key` replay of an existing session
+// is not re-checked; its complete reports the authoritative answer.
 //
 // Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 //
@@ -3766,11 +4151,13 @@ func (c *Client) GetModelUpload(ctx context.Context, accountName string, repoNam
 // re-checks state under a lock, so the race resolves to one winner).
 //
 // If the account's conversion quota is exhausted the request returns the
-// standard 429 `rate_limit_error`: the conversion has NOT started and the
-// session stays DISPATCH_PENDING — complete again after resolving the
-// quota to retry the dispatch.
+// standard 429 `rate_limit_error` (`code="quota_exhausted"`); while another
+// conversion for the account is running it returns 409 `conflict_error`
+// (`code="conversion_in_progress"`). In both cases the conversion has NOT
+// started and the session stays DISPATCH_PENDING — complete again after
+// resolving that to retry the dispatch.
 //
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete (the `CompleteModelUpload` operationId).
 func (c *Client) CompleteModelUpload(ctx context.Context, accountName string, repoName string, uploadId string, params *CompleteModelUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -4054,19 +4441,16 @@ func (c *Client) ListModelTargets(ctx context.Context, accountName string, repoN
 
 // CreateDownloadAuthorization Create Download Authorization
 //
-// Authorize downloading a converted target's artifacts (BILLABLE).
+// Authorize downloading a converted target's artifacts.
 //
-// Charges the target's aggregate `download_size` against the CALLER's
-// bandwidth quota — also for public models owned by others. Over quota is
-// a 429 with nothing charged and no row created. Returns signed GET URLs
-// valid until `expires_at` (about one hour).
+// Records the target's aggregate `download_size` for the CALLER — also for
+// public models owned by others. The bytes do not gate authorization.
+// Returns signed GET URLs valid until `expires_at` (about one hour).
 //
 // With an `Idempotency-Key`, replaying returns the original authorization
-// (200) with fresh URLs and does NOT charge again; without one, EVERY
-// call charges. The key is scoped to the caller's account; reusing it for
+// (200) with fresh URLs and does NOT record usage again; without one, EVERY
+// call records usage. The key is scoped to the caller's account; reusing it for
 // a different target is a 409.
-//
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 //
 // Corresponds with POST /v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations (the `CreateDownloadAuthorization` operationId).
 func (c *Client) CreateDownloadAuthorization(ctx context.Context, accountName string, repoName string, modelKey string, targetId string, params *CreateDownloadAuthorizationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -4363,6 +4747,40 @@ func NewGetMeRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/v1/me")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetProgramBenchmarksRequest constructs an http.Request for the GetProgramBenchmarks method
+func NewGetProgramBenchmarksRequest(server string, program string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "program", program, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/programs/%s/benchmarks", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6187,6 +6605,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/me (the `GetMe` operationId).
 	GetMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMeResult, error)
 
+	// GetProgramBenchmarksWithResponse Get Program Benchmarks
+	//
+	// A partner program's benchmark sheets: its SoC catalog, the metric
+	// vocabulary per task, and every model's results per SoC (catalog order).
+	//
+	// Models are ordered by their `order`, then name. A SoC with
+	// `has_results: false` is listed but not measured yet. 404 unless the
+	// caller belongs to the program (staff see every program).
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/programs/{program}/benchmarks (the `GetProgramBenchmarks` operationId).
+	GetProgramBenchmarksWithResponse(ctx context.Context, program string, reqEditors ...RequestEditorFn) (*GetProgramBenchmarksResult, error)
+
 	// ZeticPublicProjectsCreateProjectWithBodyWithResponse Create Project
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
@@ -6300,7 +6732,7 @@ type ClientWithResponsesInterface interface {
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -6315,7 +6747,7 @@ type ClientWithResponsesInterface interface {
 	//
 	// Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 	//
@@ -6432,6 +6864,14 @@ type ClientWithResponsesInterface interface {
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
 	//
+	// Conversion admission is checked here as well as at complete, so a
+	// client is refused BEFORE it uploads a model that cannot be admitted:
+	// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+	// conversion quota is exhausted, 409 `conflict_error` with
+	// `code="conversion_in_progress"` while another conversion for the
+	// account is running. An `Idempotency-Key` replay of an existing session
+	// is not re-checked; its complete reports the authoritative answer.
+	//
 	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -6446,6 +6886,14 @@ type ClientWithResponsesInterface interface {
 	// Returns 201 with server-assigned canonical paths and resumable upload
 	// URLs; an `Idempotency-Key` replay of the same manifest returns the
 	// original session with 200.
+	//
+	// Conversion admission is checked here as well as at complete, so a
+	// client is refused BEFORE it uploads a model that cannot be admitted:
+	// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+	// conversion quota is exhausted, 409 `conflict_error` with
+	// `code="conversion_in_progress"` while another conversion for the
+	// account is running. An `Idempotency-Key` replay of an existing session
+	// is not re-checked; its complete reports the authoritative answer.
 	//
 	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 	//
@@ -6547,11 +6995,13 @@ type ClientWithResponsesInterface interface {
 	// re-checks state under a lock, so the race resolves to one winner).
 	//
 	// If the account's conversion quota is exhausted the request returns the
-	// standard 429 `rate_limit_error`: the conversion has NOT started and the
-	// session stays DISPATCH_PENDING — complete again after resolving the
-	// quota to retry the dispatch.
+	// standard 429 `rate_limit_error` (`code="quota_exhausted"`); while another
+	// conversion for the account is running it returns 409 `conflict_error`
+	// (`code="conversion_in_progress"`). In both cases the conversion has NOT
+	// started and the session stays DISPATCH_PENDING — complete again after
+	// resolving that to retry the dispatch.
 	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -6723,19 +7173,16 @@ type ClientWithResponsesInterface interface {
 
 	// CreateDownloadAuthorizationWithResponse Create Download Authorization
 	//
-	// Authorize downloading a converted target's artifacts (BILLABLE).
+	// Authorize downloading a converted target's artifacts.
 	//
-	// Charges the target's aggregate `download_size` against the CALLER's
-	// bandwidth quota — also for public models owned by others. Over quota is
-	// a 429 with nothing charged and no row created. Returns signed GET URLs
-	// valid until `expires_at` (about one hour).
+	// Records the target's aggregate `download_size` for the CALLER — also for
+	// public models owned by others. The bytes do not gate authorization.
+	// Returns signed GET URLs valid until `expires_at` (about one hour).
 	//
 	// With an `Idempotency-Key`, replaying returns the original authorization
-	// (200) with fresh URLs and does NOT charge again; without one, EVERY
-	// call charges. The key is scoped to the caller's account; reusing it for
+	// (200) with fresh URLs and does NOT record usage again; without one, EVERY
+	// call records usage. The key is scoped to the caller's account; reusing it for
 	// a different target is a 409.
-	//
-	// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -7329,6 +7776,104 @@ func (r GetMeResult) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetMeResult) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetProgramBenchmarksResult401Headers the declared response headers of an HTTP 401 response for GetProgramBenchmarks
+type GetProgramBenchmarksResult401Headers struct {
+	WWWAuthenticate *string
+	XRequestID      *string
+}
+
+// GetProgramBenchmarksResult403Headers the declared response headers of an HTTP 403 response for GetProgramBenchmarks
+type GetProgramBenchmarksResult403Headers struct {
+	XRequestID *string
+}
+
+// GetProgramBenchmarksResult404Headers the declared response headers of an HTTP 404 response for GetProgramBenchmarks
+type GetProgramBenchmarksResult404Headers struct {
+	XRequestID *string
+}
+
+// GetProgramBenchmarksResult500Headers the declared response headers of an HTTP 500 response for GetProgramBenchmarks
+type GetProgramBenchmarksResult500Headers struct {
+	XRequestID *string
+}
+
+type GetProgramBenchmarksResult struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProgramBenchmarksResponse
+	// JSON401 the response for an HTTP 401 `application/json` response
+	JSON401 *Unauthorized
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *Forbidden
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *NotFound
+	// JSON500 the response for an HTTP 500 `application/json` response
+	JSON500 *ServerError
+	// Headers401 the parsed response headers for an HTTP 401 response
+	Headers401 *GetProgramBenchmarksResult401Headers
+	// Headers403 the parsed response headers for an HTTP 403 response
+	Headers403 *GetProgramBenchmarksResult403Headers
+	// Headers404 the parsed response headers for an HTTP 404 response
+	Headers404 *GetProgramBenchmarksResult404Headers
+	// Headers500 the parsed response headers for an HTTP 500 response
+	Headers500 *GetProgramBenchmarksResult500Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetProgramBenchmarksResult) GetJSON200() *ProgramBenchmarksResponse {
+	return r.JSON200
+}
+
+// GetJSON401 returns the response for an HTTP 401 `application/json` response
+func (r GetProgramBenchmarksResult) GetJSON401() *Unauthorized {
+	return r.JSON401
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r GetProgramBenchmarksResult) GetJSON403() *Forbidden {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r GetProgramBenchmarksResult) GetJSON404() *NotFound {
+	return r.JSON404
+}
+
+// GetJSON500 returns the response for an HTTP 500 `application/json` response
+func (r GetProgramBenchmarksResult) GetJSON500() *ServerError {
+	return r.JSON500
+}
+
+// GetBody returns the raw response body bytes
+func (r GetProgramBenchmarksResult) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetProgramBenchmarksResult) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetProgramBenchmarksResult) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetProgramBenchmarksResult) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -8105,6 +8650,11 @@ type ZeticPublicUploadsCompleteUploadResult500Headers struct {
 	XRequestID *string
 }
 
+// ZeticPublicUploadsCompleteUploadResult503Headers the declared response headers of an HTTP 503 response for ZeticPublicUploadsCompleteUpload
+type ZeticPublicUploadsCompleteUploadResult503Headers struct {
+	XRequestID *string
+}
+
 type ZeticPublicUploadsCompleteUploadResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8130,6 +8680,8 @@ type ZeticPublicUploadsCompleteUploadResult struct {
 	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 	// Headers400 the parsed response headers for an HTTP 400 response
 	Headers400 *ZeticPublicUploadsCompleteUploadResult400Headers
 	// Headers401 the parsed response headers for an HTTP 401 response
@@ -8150,6 +8702,8 @@ type ZeticPublicUploadsCompleteUploadResult struct {
 	Headers429 *ZeticPublicUploadsCompleteUploadResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *ZeticPublicUploadsCompleteUploadResult500Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *ZeticPublicUploadsCompleteUploadResult503Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -8205,6 +8759,11 @@ func (r ZeticPublicUploadsCompleteUploadResult) GetJSON429() *RateLimited {
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
 func (r ZeticPublicUploadsCompleteUploadResult) GetJSON500() *ServerError {
 	return r.JSON500
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r ZeticPublicUploadsCompleteUploadResult) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -9845,6 +10404,11 @@ type CompleteModelUploadResult500Headers struct {
 	XRequestID *string
 }
 
+// CompleteModelUploadResult503Headers the declared response headers of an HTTP 503 response for CompleteModelUpload
+type CompleteModelUploadResult503Headers struct {
+	XRequestID *string
+}
+
 type CompleteModelUploadResult struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9868,6 +10432,8 @@ type CompleteModelUploadResult struct {
 	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *ServerError
+	// JSON503 the response for an HTTP 503 `application/json` response
+	JSON503 *ServiceUnavailable
 	// Headers401 the parsed response headers for an HTTP 401 response
 	Headers401 *CompleteModelUploadResult401Headers
 	// Headers402 the parsed response headers for an HTTP 402 response
@@ -9886,6 +10452,8 @@ type CompleteModelUploadResult struct {
 	Headers429 *CompleteModelUploadResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
 	Headers500 *CompleteModelUploadResult500Headers
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *CompleteModelUploadResult503Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -9936,6 +10504,11 @@ func (r CompleteModelUploadResult) GetJSON429() *RateLimited {
 // GetJSON500 returns the response for an HTTP 500 `application/json` response
 func (r CompleteModelUploadResult) GetJSON500() *ServerError {
 	return r.JSON500
+}
+
+// GetJSON503 returns the response for an HTTP 503 `application/json` response
+func (r CompleteModelUploadResult) GetJSON503() *ServiceUnavailable {
+	return r.JSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -11210,11 +11783,6 @@ type CreateDownloadAuthorizationResult422Headers struct {
 	XRequestID *string
 }
 
-// CreateDownloadAuthorizationResult426Headers the declared response headers of an HTTP 426 response for CreateDownloadAuthorization
-type CreateDownloadAuthorizationResult426Headers struct {
-	XRequestID *string
-}
-
 // CreateDownloadAuthorizationResult429Headers the declared response headers of an HTTP 429 response for CreateDownloadAuthorization
 type CreateDownloadAuthorizationResult429Headers struct {
 	RetryAfter *int
@@ -11248,8 +11816,6 @@ type CreateDownloadAuthorizationResult struct {
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ValidationError
-	// JSON426 the response for an HTTP 426 `application/json` response
-	JSON426 *UpgradeRequired
 	// JSON429 the response for an HTTP 429 `application/json` response
 	JSON429 *RateLimited
 	// JSON500 the response for an HTTP 500 `application/json` response
@@ -11270,8 +11836,6 @@ type CreateDownloadAuthorizationResult struct {
 	Headers409 *CreateDownloadAuthorizationResult409Headers
 	// Headers422 the parsed response headers for an HTTP 422 response
 	Headers422 *CreateDownloadAuthorizationResult422Headers
-	// Headers426 the parsed response headers for an HTTP 426 response
-	Headers426 *CreateDownloadAuthorizationResult426Headers
 	// Headers429 the parsed response headers for an HTTP 429 response
 	Headers429 *CreateDownloadAuthorizationResult429Headers
 	// Headers500 the parsed response headers for an HTTP 500 response
@@ -11313,11 +11877,6 @@ func (r CreateDownloadAuthorizationResult) GetJSON409() *Conflict {
 // GetJSON422 returns the response for an HTTP 422 `application/json` response
 func (r CreateDownloadAuthorizationResult) GetJSON422() *ValidationError {
 	return r.JSON422
-}
-
-// GetJSON426 returns the response for an HTTP 426 `application/json` response
-func (r CreateDownloadAuthorizationResult) GetJSON426() *UpgradeRequired {
-	return r.JSON426
 }
 
 // GetJSON429 returns the response for an HTTP 429 `application/json` response
@@ -11665,6 +12224,26 @@ func (c *ClientWithResponses) GetMeWithResponse(ctx context.Context, reqEditors 
 	return ParseGetMeResult(rsp)
 }
 
+// GetProgramBenchmarksWithResponse Get Program Benchmarks
+//
+// A partner program's benchmark sheets: its SoC catalog, the metric
+// vocabulary per task, and every model's results per SoC (catalog order).
+//
+// Models are ordered by their `order`, then name. A SoC with
+// `has_results: false` is listed but not measured yet. 404 unless the
+// caller belongs to the program (staff see every program).
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/programs/{program}/benchmarks (the `GetProgramBenchmarks` operationId).
+func (c *ClientWithResponses) GetProgramBenchmarksWithResponse(ctx context.Context, program string, reqEditors ...RequestEditorFn) (*GetProgramBenchmarksResult, error) {
+	rsp, err := c.GetProgramBenchmarks(ctx, program, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetProgramBenchmarksResult(rsp)
+}
+
 // ZeticPublicProjectsCreateProjectWithBodyWithResponse Create Project
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
@@ -11824,7 +12403,7 @@ func (c *ClientWithResponses) ZeticPublicUploadsGetUploadWithResponse(ctx contex
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 //
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -11845,7 +12424,7 @@ func (c *ClientWithResponses) ZeticPublicUploadsCompleteUploadWithBodyWithRespon
 //
 // Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.
 //
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Deprecated legacy endpoint: use the `/v1/repos` successor operations instead.
 //
@@ -12026,6 +12605,14 @@ func (c *ClientWithResponses) ListModelsWithResponse(ctx context.Context, accoun
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
 //
+// Conversion admission is checked here as well as at complete, so a
+// client is refused BEFORE it uploads a model that cannot be admitted:
+// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+// conversion quota is exhausted, 409 `conflict_error` with
+// `code="conversion_in_progress"` while another conversion for the
+// account is running. An `Idempotency-Key` replay of an existing session
+// is not re-checked; its complete reports the authoritative answer.
+//
 // Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -12046,6 +12633,14 @@ func (c *ClientWithResponses) CreateModelUploadWithBodyWithResponse(ctx context.
 // Returns 201 with server-assigned canonical paths and resumable upload
 // URLs; an `Idempotency-Key` replay of the same manifest returns the
 // original session with 200.
+//
+// Conversion admission is checked here as well as at complete, so a
+// client is refused BEFORE it uploads a model that cannot be admitted:
+// 429 `rate_limit_error` with `code="quota_exhausted"` when the account's
+// conversion quota is exhausted, 409 `conflict_error` with
+// `code="conversion_in_progress"` while another conversion for the
+// account is running. An `Idempotency-Key` replay of an existing session
+// is not re-checked; its complete reports the authoritative answer.
 //
 // Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.
 //
@@ -12183,11 +12778,13 @@ func (c *ClientWithResponses) GetModelUploadWithResponse(ctx context.Context, ac
 // re-checks state under a lock, so the race resolves to one winner).
 //
 // If the account's conversion quota is exhausted the request returns the
-// standard 429 `rate_limit_error`: the conversion has NOT started and the
-// session stays DISPATCH_PENDING — complete again after resolving the
-// quota to retry the dispatch.
+// standard 429 `rate_limit_error` (`code="quota_exhausted"`); while another
+// conversion for the account is running it returns 409 `conflict_error`
+// (`code="conversion_in_progress"`). In both cases the conversion has NOT
+// started and the session stays DISPATCH_PENDING — complete again after
+// resolving that to retry the dispatch.
 //
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.
+// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -12437,19 +13034,16 @@ func (c *ClientWithResponses) ListModelTargetsWithResponse(ctx context.Context, 
 
 // CreateDownloadAuthorizationWithResponse Create Download Authorization
 //
-// Authorize downloading a converted target's artifacts (BILLABLE).
+// Authorize downloading a converted target's artifacts.
 //
-// Charges the target's aggregate `download_size` against the CALLER's
-// bandwidth quota — also for public models owned by others. Over quota is
-// a 429 with nothing charged and no row created. Returns signed GET URLs
-// valid until `expires_at` (about one hour).
+// Records the target's aggregate `download_size` for the CALLER — also for
+// public models owned by others. The bytes do not gate authorization.
+// Returns signed GET URLs valid until `expires_at` (about one hour).
 //
 // With an `Idempotency-Key`, replaying returns the original authorization
-// (200) with fresh URLs and does NOT charge again; without one, EVERY
-// call charges. The key is scoped to the caller's account; reusing it for
+// (200) with fresh URLs and does NOT record usage again; without one, EVERY
+// call records usage. The key is scoped to the caller's account; reusing it for
 // a different target is a 409.
-//
-// Refusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -13083,6 +13677,110 @@ func ParseGetMeResult(rsp *http.Response) (*GetMeResult, error) {
 		response.Headers404 = &headers
 	case rsp.StatusCode == 500:
 		var headers GetMeResult500Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers500 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetProgramBenchmarksResult parses an HTTP response from a GetProgramBenchmarksWithResponse call
+func ParseGetProgramBenchmarksResult(rsp *http.Response) (*GetProgramBenchmarksResult, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetProgramBenchmarksResult{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProgramBenchmarksResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ServerError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 401:
+		var headers GetProgramBenchmarksResult401Headers
+		if values := rsp.Header.Values("WWW-Authenticate"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "WWW-Authenticate", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.WWWAuthenticate = &value
+		}
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers401 = &headers
+	case rsp.StatusCode == 403:
+		var headers GetProgramBenchmarksResult403Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers403 = &headers
+	case rsp.StatusCode == 404:
+		var headers GetProgramBenchmarksResult404Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers404 = &headers
+	case rsp.StatusCode == 500:
+		var headers GetProgramBenchmarksResult500Headers
 		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
@@ -13998,6 +14696,13 @@ func ParseZeticPublicUploadsCompleteUploadResult(rsp *http.Response) (*ZeticPubl
 		}
 		response.JSON500 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	switch {
@@ -14115,6 +14820,16 @@ func ParseZeticPublicUploadsCompleteUploadResult(rsp *http.Response) (*ZeticPubl
 			headers.XRequestID = &value
 		}
 		response.Headers500 = &headers
+	case rsp.StatusCode == 503:
+		var headers ZeticPublicUploadsCompleteUploadResult503Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -15973,6 +16688,13 @@ func ParseCompleteModelUploadResult(rsp *http.Response) (*CompleteModelUploadRes
 		}
 		response.JSON500 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	switch {
@@ -16080,6 +16802,16 @@ func ParseCompleteModelUploadResult(rsp *http.Response) (*CompleteModelUploadRes
 			headers.XRequestID = &value
 		}
 		response.Headers500 = &headers
+	case rsp.StatusCode == 503:
+		var headers CompleteModelUploadResult503Headers
+		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XRequestID = &value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -17484,13 +18216,6 @@ func ParseCreateDownloadAuthorizationResult(rsp *http.Response) (*CreateDownload
 		}
 		response.JSON422 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 426:
-		var dest UpgradeRequired
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON426 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest RateLimited
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17592,16 +18317,6 @@ func ParseCreateDownloadAuthorizationResult(rsp *http.Response) (*CreateDownload
 			headers.XRequestID = &value
 		}
 		response.Headers422 = &headers
-	case rsp.StatusCode == 426:
-		var headers CreateDownloadAuthorizationResult426Headers
-		if values := rsp.Header.Values("X-Request-ID"); len(values) > 0 {
-			var value string
-			if err := runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			}
-			headers.XRequestID = &value
-		}
-		response.Headers426 = &headers
 	case rsp.StatusCode == 429:
 		var headers CreateDownloadAuthorizationResult429Headers
 		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {

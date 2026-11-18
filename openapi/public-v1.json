@@ -111,10 +111,10 @@
             }
           }
         },
-        "description": "Rate limit or quota exceeded. Rate-limit responses include a `Retry-After` header; fixed quota exhaustion may omit it because there is no truthful retry delay.",
+        "description": "A rate limit or conversion quota was exceeded. The runtime includes a `Retry-After` header when it can provide a useful retry interval.",
         "headers": {
           "Retry-After": {
-            "description": "Seconds to wait before retrying, when the server has a truthful retry window. Optional for fixed quota exhaustion.",
+            "description": "Seconds to wait before retrying, when the server has a truthful retry interval.",
             "schema": {
               "type": "integer"
             }
@@ -197,24 +197,6 @@
               "type": "string"
             }
           },
-          "X-Request-ID": {
-            "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "UpgradeRequired": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorEnvelope"
-            }
-          }
-        },
-        "description": "The declared SDK version is past its delivery window (`error.code: sdk_upgrade_required`). Sent only to callers that supply an SDK version header; upgrade the SDK to restore delivery.",
-        "headers": {
           "X-Request-ID": {
             "description": "Correlation id echoed from the request's `X-Request-ID` (if sane) or generated server-side; identical to the body's `request_id`.",
             "schema": {
@@ -1091,7 +1073,7 @@
                 "type": "string"
               },
               "code": {
-                "description": "Specific machine-readable reason within the `type` category (e.g. `credit_balance_exhausted`, `custom_model_too_large`, `sdk_upgrade_required`). Present on Pricing-v3 and SDK-gate refusals; branch on `code` when it is present, on `type` otherwise.",
+                "description": "Specific machine-readable reason within the `type` category (e.g. `credit_balance_exhausted`, `custom_model_too_large`). Present on Pricing-v3 refusals; branch on `code` when it is present, on `type` otherwise.",
                 "type": "string"
               },
               "fields": {
@@ -3347,6 +3329,613 @@
         "title": "PagedRepoResponse",
         "type": "object"
       },
+      "ProgramBenchmarksResponse": {
+        "properties": {
+          "metrics": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ProgramMetricDefinition"
+              },
+              "type": "array"
+            },
+            "description": "Metric vocabulary per task.",
+            "title": "Metrics",
+            "type": "object"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ProgramModel"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "program": {
+            "title": "Program",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "targets": {
+            "description": "The SoC catalog, in page order.",
+            "items": {
+              "$ref": "#/components/schemas/ProgramTarget"
+            },
+            "title": "Targets",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "program",
+          "schema_version",
+          "metrics",
+          "targets",
+          "models"
+        ],
+        "title": "ProgramBenchmarksResponse",
+        "type": "object"
+      },
+      "ProgramBuild": {
+        "properties": {
+          "accuracy": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "title": "Accuracy",
+            "type": "object"
+          },
+          "artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgramBuildArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseline": {
+            "title": "Baseline",
+            "type": "boolean"
+          },
+          "highlight": {
+            "title": "Highlight",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "runtime": {
+            "description": "What the build runs on, for example `llama_cpp`; `float_reference` marks the accuracy-only float row. Open vocabulary.",
+            "title": "Runtime",
+            "type": "string"
+          },
+          "speed": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "title": "Speed",
+            "type": "object"
+          },
+          "status": {
+            "description": "`measured`, `unsupported` or `not_measured`.",
+            "title": "Status",
+            "type": "string"
+          },
+          "status_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Note"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "runtime",
+          "status",
+          "highlight",
+          "baseline",
+          "speed",
+          "accuracy",
+          "notes"
+        ],
+        "title": "ProgramBuild",
+        "type": "object"
+      },
+      "ProgramBuildArtifact": {
+        "properties": {
+          "artifact_key": {
+            "title": "Artifact Key",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "artifact_key"
+        ],
+        "title": "ProgramBuildArtifact",
+        "type": "object"
+      },
+      "ProgramMethod": {
+        "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed"
+          }
+        },
+        "title": "ProgramMethod",
+        "type": "object"
+      },
+      "ProgramMetricDefinition": {
+        "properties": {
+          "approximate": {
+            "description": "Rendered with \"\u2248\".",
+            "title": "Approximate",
+            "type": "boolean"
+          },
+          "better": {
+            "enum": [
+              "higher",
+              "lower"
+            ],
+            "title": "Better",
+            "type": "string"
+          },
+          "group": {
+            "enum": [
+              "speed",
+              "accuracy"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "keyed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for keyed metrics: `prompt_tokens` (keys are prompt lengths) or `test_set` (keys are dataset split names).",
+            "title": "Keyed By"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "summary": {
+            "description": "Shown in the model's summary table.",
+            "title": "Summary",
+            "type": "boolean"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "key",
+          "group",
+          "label",
+          "unit",
+          "better",
+          "keyed_by",
+          "summary",
+          "approximate",
+          "maximum"
+        ],
+        "title": "ProgramMetricDefinition",
+        "type": "object"
+      },
+      "ProgramModel": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "results": {
+            "description": "In catalog (SoC) order.",
+            "items": {
+              "$ref": "#/components/schemas/ProgramResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "task": {
+            "description": "`llm`, `asr`, `tts` or `image_classification`; keys `metrics`.",
+            "title": "Task",
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/ProgramVariant"
+            },
+            "title": "Variants",
+            "type": "array"
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor"
+          }
+        },
+        "required": [
+          "slug",
+          "task",
+          "name",
+          "order",
+          "variants",
+          "results"
+        ],
+        "title": "ProgramModel",
+        "type": "object"
+      },
+      "ProgramNotes": {
+        "properties": {
+          "accuracy": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accuracy",
+            "type": "array"
+          },
+          "speed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Speed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "speed",
+          "accuracy"
+        ],
+        "title": "ProgramNotes",
+        "type": "object"
+      },
+      "ProgramResult": {
+        "properties": {
+          "as_of": {
+            "format": "date",
+            "title": "As Of",
+            "type": "string"
+          },
+          "builds": {
+            "items": {
+              "$ref": "#/components/schemas/ProgramBuild"
+            },
+            "title": "Builds",
+            "type": "array"
+          },
+          "highlights": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "measured_on": {
+            "title": "Measured On",
+            "type": "string"
+          },
+          "method": {
+            "$ref": "#/components/schemas/ProgramMethod"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/ProgramNotes"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "soc": {
+            "title": "Soc",
+            "type": "string"
+          },
+          "software": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Software",
+            "type": "object"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/ProgramTable"
+            },
+            "title": "Tables",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "soc",
+          "measured_on",
+          "as_of",
+          "software",
+          "method",
+          "highlights",
+          "builds",
+          "notes",
+          "tables",
+          "revision",
+          "updated_at"
+        ],
+        "title": "ProgramResult",
+        "type": "object"
+      },
+      "ProgramTable": {
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "columns",
+          "rows"
+        ],
+        "title": "ProgramTable",
+        "type": "object"
+      },
+      "ProgramTarget": {
+        "properties": {
+          "device": {
+            "$ref": "#/components/schemas/ProgramTargetDevice"
+          },
+          "form_factor": {
+            "description": "`wearable`, `phone` or `other`.",
+            "title": "Form Factor",
+            "type": "string"
+          },
+          "has_results": {
+            "description": "False for a SoC whose results are still to come.",
+            "title": "Has Results",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "npu": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Npu"
+          },
+          "soc": {
+            "title": "Soc",
+            "type": "string"
+          }
+        },
+        "required": [
+          "soc",
+          "name",
+          "form_factor",
+          "device",
+          "notes",
+          "has_results"
+        ],
+        "title": "ProgramTarget",
+        "type": "object"
+      },
+      "ProgramTargetDevice": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProgramTargetDevice",
+        "type": "object"
+      },
+      "ProgramVariant": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ProgramVariant",
+        "type": "object"
+      },
       "ProjectResponse": {
         "properties": {
           "account": {
@@ -4333,6 +4922,56 @@
         ]
       }
     },
+    "/v1/programs/{program}/benchmarks": {
+      "get": {
+        "description": "A partner program's benchmark sheets: its SoC catalog, the metric\nvocabulary per task, and every model's results per SoC (catalog order).\n\nModels are ordered by their `order`, then name. A SoC with\n`has_results: false` is listed but not measured yet. 404 unless the\ncaller belongs to the program (staff see every program).",
+        "operationId": "get_program_benchmarks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "program",
+            "required": true,
+            "schema": {
+              "title": "Program",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgramBenchmarksResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "security": [
+          {
+            "PublicAuthorizationHeader": []
+          }
+        ],
+        "summary": "Get Program Benchmarks",
+        "tags": [
+          "programs"
+        ]
+      }
+    },
     "/v1/projects": {
       "post": {
         "deprecated": true,
@@ -4698,7 +5337,7 @@
     "/v1/projects/{project_name}/uploads/{upload_id}/complete": {
       "post": {
         "deprecated": true,
-        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
+        "description": "Complete the upload: validates files arrived, transitions to CONVERTING, and kicks off the pipeline.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.\n\nDeprecated legacy endpoint: use the `/v1/repos` successor operations instead.",
         "operationId": "zetic_public_uploads_complete_upload",
         "parameters": [
           {
@@ -4770,6 +5409,9 @@
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
         "security": [
@@ -5278,7 +5920,7 @@
         ]
       },
       "post": {
-        "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.",
+        "description": "Open an upload session from a v2 manifest.\n\nReturns 201 with server-assigned canonical paths and resumable upload\nURLs; an `Idempotency-Key` replay of the same manifest returns the\noriginal session with 200.\n\nConversion admission is checked here as well as at complete, so a\nclient is refused BEFORE it uploads a model that cannot be admitted:\n429 `rate_limit_error` with `code=\"quota_exhausted\"` when the account's\nconversion quota is exhausted, 409 `conflict_error` with\n`code=\"conversion_in_progress\"` while another conversion for the\naccount is running. An `Idempotency-Key` replay of an existing session\nis not re-checked; its complete reports the authoritative answer.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `413 custom_model_too_large`. Branch on `error.code`.",
         "operationId": "create_model_upload",
         "parameters": [
           {
@@ -5705,7 +6347,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/uploads/{upload_id}/complete": {
       "post": {
-        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed \u2014 not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.\n\nSession expiry is deliberately not checked here: an expired session the\ncleanup sweep has not processed yet may still complete (the sweep\nre-checks state under a lock, so the race resolves to one winner).\n\nIf the account's conversion quota is exhausted the request returns the\nstandard 429 `rate_limit_error`: the conversion has NOT started and the\nsession stays DISPATCH_PENDING \u2014 complete again after resolving the\nquota to retry the dispatch.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`. Branch on `error.code`.",
+        "description": "Complete an upload session: verify -> promote -> register -> dispatch.\n\nContract: a 200 means the COMPLETE REQUEST was processed \u2014 not that the\nsession succeeded. Verification/promotion failures are session state:\nthe response carries `state=\"FAILED\"` plus a machine `failure_code`\n(`file_missing:<id>`, `size_mismatch:<id>`, `crc32c_mismatch:<id>`,\n`staging_mutated:<id>`). Request-level errors are reserved for sessions\nthat cannot accept a complete at all (CANCELED/EXPIRED/FAILED -> 409).\n\nIdempotent: repeating the call (same `Idempotency-Key` or not) while the\nsession is VERIFYING/DISPATCH_PENDING/CONVERTING replays the current\nstate without re-verifying and without double-dispatching; a replay on\nDISPATCH_PENDING retries a failed conversion trigger.\n\nSession expiry is deliberately not checked here: an expired session the\ncleanup sweep has not processed yet may still complete (the sweep\nre-checks state under a lock, so the race resolves to one winner).\n\nIf the account's conversion quota is exhausted the request returns the\nstandard 429 `rate_limit_error` (`code=\"quota_exhausted\"`); while another\nconversion for the account is running it returns 409 `conflict_error`\n(`code=\"conversion_in_progress\"`). In both cases the conversion has NOT\nstarted and the session stays DISPATCH_PENDING \u2014 complete again after\nresolving that to retry the dispatch.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `402 credit_balance_exhausted`, `402 subscription_past_due`, `409 credit_debt_outstanding`, `413 custom_model_too_large`, `413 credit_model_too_large`, `503 custom_model_size_unverified`. Branch on `error.code`.",
         "operationId": "complete_model_upload",
         "parameters": [
           {
@@ -5776,6 +6418,9 @@
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
         "security": [
@@ -6581,7 +7226,7 @@
     },
     "/v1/repos/{account_name}/{repo_name}/models/{model_key}/targets/{target_id}/download-authorizations": {
       "post": {
-        "description": "Authorize downloading a converted target's artifacts (BILLABLE).\n\nCharges the target's aggregate `download_size` against the CALLER's\nbandwidth quota \u2014 also for public models owned by others. Over quota is\na 429 with nothing charged and no row created. Returns signed GET URLs\nvalid until `expires_at` (about one hour).\n\nWith an `Idempotency-Key`, replaying returns the original authorization\n(200) with fresh URLs and does NOT charge again; without one, EVERY\ncall charges. The key is scoped to the caller's account; reusing it for\na different target is a 409.\n\nRefusals carrying a machine-readable `error.code`, and the only ones reachable on this operation: `426 sdk_upgrade_required`. Branch on `error.code`.",
+        "description": "Authorize downloading a converted target's artifacts.\n\nRecords the target's aggregate `download_size` for the CALLER \u2014 also for\npublic models owned by others. The bytes do not gate authorization.\nReturns signed GET URLs valid until `expires_at` (about one hour).\n\nWith an `Idempotency-Key`, replaying returns the original authorization\n(200) with fresh URLs and does NOT record usage again; without one, EVERY\ncall records usage. The key is scoped to the caller's account; reusing it for\na different target is a 409.",
         "operationId": "create_download_authorization",
         "parameters": [
           {
@@ -6681,9 +7326,6 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "426": {
-            "$ref": "#/components/responses/UpgradeRequired"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -6828,6 +7470,10 @@
     {
       "description": "Credential-safe SDK deployment options and code guides.",
       "name": "deployment"
+    },
+    {
+      "description": "Partner program benchmark sheets.",
+      "name": "programs"
     },
     {
       "description": "Legacy project endpoints.",
