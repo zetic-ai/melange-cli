@@ -305,6 +305,43 @@ reports retired from the API: `report view` then exits 1 with a 403
 but staff. Read the program sheet instead of retrying. Downloads and deployment
 guides of that repository keep working.
 
+### Build an app from a program repository
+
+A program's builds live in repositories of the program's own account and load
+with the program's Android library (an AAR), not the Melange SDK. Each such
+repository holds one model; take its key from `melange model list -R ACCOUNT/REPO`.
+Its deployment guide is Kotlin only (any other language answers 409):
+
+```sh
+melange deploy guide "$model_key" -R ACCOUNT/REPO --language android-kotlin --mode auto
+```
+
+What agents building an app from that guide alone needed to know:
+
+- **The library file.** The install step links the AAR with a signed URL that
+  lives one hour (`download_url`; in `--json` output and as a code comment).
+  When it has expired, ask for the guide again. Check the SHA-256 the guide
+  prints. No GitHub access is needed.
+- **The manifest step.** Keep `android:extractNativeLibs="true"` and
+  `useLegacyPackaging = true` as the guide shows. Recent Android Gradle plugins
+  warn that the attribute "should not be specified in this source
+  AndroidManifest.xml file"; that is a warning, the build and the app work, and
+  older projects need the attribute. The merged manifest must not say `false`.
+- **The personal key.** The code has a placeholder for it. Never put a key in
+  source, resources, Gradle files or the APK; read it at runtime.
+- **Threads.** Creating and running a model block, and the library refuses the
+  main thread: use a background thread or a coroutine on `Dispatchers.IO`.
+- **Lifetime.** `use { }` closes the model when the block ends. To run it more
+  than once (a chat screen), keep the model and call `close()` when done. The
+  first load downloads the model; later loads open the stored file, offline too.
+- **Wearables.** Wear OS blocks an app's network while the screen is off, so a
+  first load on a dozing watch fails with a no-network error. Set
+  `FLAG_KEEP_SCREEN_ON` on the window that starts the load until the model is
+  stored.
+- **Inputs and outputs.** Read the run step's code comments before opening the
+  library's classes: they name the other inputs a task takes and the fields of
+  its result (for speech output, the sample rate a WAV file needs).
+
 ## Presenting results to the user
 
 These rules govern the answer you write for a human, not how you call the CLI.
