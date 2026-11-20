@@ -29,8 +29,9 @@ metrics print every key (prompt length or test set). The measurement
 method, notes and extra tables are in --json.
 
 When stdout is not a terminal it prints one metric value per line as
-tab-separated values: soc, model, task, variant, build, runtime, status,
-modes, metric, key, value, unit. modes is the build's modes comma-joined
+tab-separated values with no header, stable for scripts: soc, model, task,
+variant, build, runtime, status, modes, metric, key, value, unit. modes is
+the build's modes comma-joined
 (empty when it serves none); key is empty for unkeyed metrics; a build with
 no metrics (status unsupported or not_measured) prints one line with empty
 metric, key, value and unit. Values are the API's numbers verbatim.
