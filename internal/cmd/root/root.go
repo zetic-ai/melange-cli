@@ -14,6 +14,7 @@ import (
 	mcpcmd "github.com/zetic-ai/melange-cli/internal/cmd/mcp"
 	"github.com/zetic-ai/melange-cli/internal/cmd/model"
 	"github.com/zetic-ai/melange-cli/internal/cmd/plan"
+	programcmd "github.com/zetic-ai/melange-cli/internal/cmd/program"
 	"github.com/zetic-ai/melange-cli/internal/cmd/repo"
 	"github.com/zetic-ai/melange-cli/internal/cmd/report"
 	"github.com/zetic-ai/melange-cli/internal/cmd/usage"
@@ -119,6 +120,7 @@ melange-qcom help exit-codes, melange-qcom help formatting.`
 	cmd.AddCommand(deploy.NewCmdDeploy(f))
 	cmd.AddCommand(report.NewCmdReport(f))
 	cmd.AddCommand(library.NewCmdLibrary(f))
+	cmd.AddCommand(programcmd.NewCmdProgram(f))
 	cmd.AddCommand(usage.NewCmdUsage(f))
 	cmd.AddCommand(plan.NewCmdPlan(f))
 	cmd.AddCommand(apicmd.NewCmdAPI(f))

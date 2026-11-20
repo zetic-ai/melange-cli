@@ -199,6 +199,7 @@ var catalog = []tool{
 			page, withProviders)
 	}},
 	{"get_library_model", op("get_library_model")},
+	{"get_program_benchmarks", op("get_program_benchmarks")},
 	{"request_model_download", op("create_download_authorization")},
 	{"upload_model", func(g *generator) (map[string]any, error) {
 		session, err := g.op("complete_model_upload")

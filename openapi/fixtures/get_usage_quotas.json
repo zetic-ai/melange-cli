@@ -13,8 +13,8 @@
         "used": 3
       },
       "bandwidth": {
-        "limit": 53687091200,
-        "remaining": 53687089966,
+        "limit": null,
+        "remaining": null,
         "used": 1234
       },
       "credits": {
@@ -31,8 +31,8 @@
         "used": 2
       },
       "prompts": {
-        "limit": 3,
-        "remaining": 2,
+        "limit": null,
+        "remaining": null,
         "used": 1
       }
     },

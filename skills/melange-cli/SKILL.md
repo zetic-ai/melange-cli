@@ -274,6 +274,74 @@ A report covers the whole model across every device and precision the account
 can see. Filtering to one device is a slice, not the report — see "Report a
 model" below.
 
+## Partner program benchmarks: `melange program benchmarks`
+
+A partner program (joined with an access code) can publish benchmark sheets:
+results per SoC for each of the program's models, measured by Zetic. Program
+members and Zetic staff read them; list your programs first.
+
+```sh
+melange api /v1/me --jq '.access_programs[]?.name'
+melange program benchmarks PROGRAM                     # Auto / Speed / Accuracy per model and SoC
+melange program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
+```
+
+The sheets show Zetic's builds by inference mode, like a repository model
+page: each build's `modes` lists the modes it serves (`speed`, `accuracy`; at
+most one build per mode, per variant), and Auto follows Speed. A build with no
+modes, such as a float reference, is context rather than a mode. The
+response's `metrics` object is the per-task vocabulary (`label`, `unit`,
+`better`, `keyed_by`, and `category`: speed, memory, energy, size or accuracy,
+which is how to group the columns); a keyed value is an object keyed by prompt
+length or test set. A target with `has_results: false` is a SoC still to be
+measured. Present the numbers per mode, with the result's `measured_on` device
+and `as_of` date. A program you
+are not a member of answers 404, the same as one that does not exist. The MCP
+tool is `get_program_benchmarks`.
+
+A partner repository whose numbers moved to a program sheet can have its
+reports retired from the API: `report view` then exits 1 with a 403
+`permission_error` naming `GET /v1/programs/PROGRAM/benchmarks`, for everyone
+but staff. Read the program sheet instead of retrying. Downloads and deployment
+guides of that repository keep working.
+
+### Build an app from a program repository
+
+A program's builds live in repositories of the program's own account and load
+with the program's Android library (an AAR), not the Melange SDK. Each such
+repository holds one model; take its key from `melange model list -R ACCOUNT/REPO`.
+Its deployment guide is Kotlin only (any other language answers 409):
+
+```sh
+melange deploy guide "$model_key" -R ACCOUNT/REPO --language android-kotlin --mode auto
+```
+
+What agents building an app from that guide alone needed to know:
+
+- **The library file.** The install step links the AAR with a signed URL that
+  lives one hour (`download_url`; in `--json` output and as a code comment).
+  When it has expired, ask for the guide again. Check the SHA-256 the guide
+  prints. No GitHub access is needed.
+- **The manifest step.** Keep `android:extractNativeLibs="true"` and
+  `useLegacyPackaging = true` as the guide shows. Recent Android Gradle plugins
+  warn that the attribute "should not be specified in this source
+  AndroidManifest.xml file"; that is a warning, the build and the app work, and
+  older projects need the attribute. The merged manifest must not say `false`.
+- **The personal key.** The code has a placeholder for it. Never put a key in
+  source, resources, Gradle files or the APK; read it at runtime.
+- **Threads.** Creating and running a model block, and the library refuses the
+  main thread: use a background thread or a coroutine on `Dispatchers.IO`.
+- **Lifetime.** `use { }` closes the model when the block ends. To run it more
+  than once (a chat screen), keep the model and call `close()` when done. The
+  first load downloads the model; later loads open the stored file, offline too.
+- **Wearables.** Wear OS blocks an app's network while the screen is off, so a
+  first load on a dozing watch fails with a no-network error. Set
+  `FLAG_KEEP_SCREEN_ON` on the window that starts the load until the model is
+  stored.
+- **Inputs and outputs.** Read the run step's code comments before opening the
+  library's classes: they name the other inputs a task takes and the fields of
+  its result (for speech output, the sample rate a WAV file needs).
+
 ## Presenting results to the user
 
 These rules govern the answer you write for a human, not how you call the CLI.

@@ -162,6 +162,72 @@ Read and fill the matching template before answering:
 Print the report in the reply. Preserve missing values as `-` in tables and
 `N/A` in cards. Never compare metrics from different accelerators as a speedup.
 
+## Read partner program benchmarks
+
+Members of a partner program (joined with an access code) read its benchmark
+sheets: results per SoC for each of the program's models, measured by Zetic.
+
+```sh
+melange-qcom api /v1/me --jq '.access_programs[]?.name'
+melange-qcom program benchmarks PROGRAM
+melange-qcom program benchmarks PROGRAM --model MODEL_SLUG --soc SOC --json
+```
+
+The MCP tool is `get_program_benchmarks`. The sheets are not fleet-filtered:
+the program's SoC catalog is curated by Zetic and can name SoCs outside the
+reviewed fleet, and a target with `has_results: false` has no numbers yet. Do
+not describe sheet data as Qualcomm-filtered report output. The sheets show
+Zetic's builds by inference mode: each build's `modes` lists `speed` and/or
+`accuracy` (at most one build per mode, per variant), Auto follows Speed, and
+a build with no modes (a float reference) is context. The response's
+`metrics` object gives each metric's label, unit, better direction and
+`category` (speed, memory, energy, size, accuracy) for grouping. Present
+numbers per mode, with the result's `measured_on` device and `as_of` date. A program you are not
+a member of answers 404, the same as one that does not exist.
+
+A partner repository whose numbers moved to a program sheet can have its
+reports retired from the API: `report view` on it then exits 1 with a 403
+`permission_error` that names `GET /v1/programs/PROGRAM/benchmarks`, for
+everyone but staff. Read the program sheet instead of retrying; its downloads
+and deployment guides keep working.
+
+### Build an app from a program repository
+
+A program's builds live in repositories of the program's own account and load
+with the program's Android library (an AAR), not the Melange SDK. Each such
+repository holds one model; take its key from `melange-qcom model list -R ACCOUNT/REPO`.
+Its deployment guide is Kotlin only (any other language answers 409):
+
+```sh
+melange-qcom deploy guide "$model_key" -R ACCOUNT/REPO --language android-kotlin --mode auto
+```
+
+What agents building an app from that guide alone needed to know:
+
+- **The library file.** The install step links the AAR with a signed URL that
+  lives one hour (`download_url`; in `--json` output and as a code comment).
+  When it has expired, ask for the guide again. Check the SHA-256 the guide
+  prints. No GitHub access is needed.
+- **The manifest step.** Keep `android:extractNativeLibs="true"` and
+  `useLegacyPackaging = true` as the guide shows. Recent Android Gradle plugins
+  warn that the attribute "should not be specified in this source
+  AndroidManifest.xml file"; that is a warning, the build and the app work, and
+  older projects need the attribute. The merged manifest must not say `false`.
+- **The personal key.** The code has a placeholder for it. Never put a key in
+  source, resources, Gradle files or the APK; read it at runtime.
+- **Threads.** Creating and running a model block, and the library refuses the
+  main thread: use a background thread or a coroutine on `Dispatchers.IO`.
+- **Lifetime.** `use { }` closes the model when the block ends. To run it more
+  than once (a chat screen), keep the model and call `close()` when done. The
+  first load downloads the model; later loads open the stored file, offline too.
+- **Wearables.** Wear OS blocks an app's network while the screen is off, so a
+  first load on a dozing watch fails with a no-network error. Set
+  `FLAG_KEEP_SCREEN_ON` on the window that starts the load until the model is
+  stored.
+- **Inputs and outputs.** Read the run step's code comments before opening the
+  library's classes: they name the other inputs a task takes and the fields of
+  its result (for speech output, the sample rate a WAV file needs).
+
 ## Select Qualcomm targets
 
 ```sh

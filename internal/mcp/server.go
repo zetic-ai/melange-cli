@@ -25,6 +25,7 @@ func New(deps Deps, opts Options) *mcp.Server {
 	registerDeploy(s, deps)
 	registerReport(s, deps)
 	registerLibrary(s, deps)
+	registerProgram(s, deps)
 	registerDownload(s, deps)
 	if opts.EnableLocalTools {
 		registerUpload(s, deps)

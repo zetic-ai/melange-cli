@@ -45,6 +45,7 @@ melange help formatting.
 * [melange mcp](melange_mcp.md)	 - Serve the Melange MCP server
 * [melange model](melange_model.md)	 - Upload, browse, and download models
 * [melange plan](melange_plan.md)	 - Show the account's billing plan
+* [melange program](melange_program.md)	 - Read partner program benchmark sheets
 * [melange repo](melange_repo.md)	 - Manage model repositories
 * [melange report](melange_report.md)	 - Read model benchmark reports
 * [melange usage](melange_usage.md)	 - Show current usage counters

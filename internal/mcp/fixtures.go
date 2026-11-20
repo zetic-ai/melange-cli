@@ -33,6 +33,7 @@ var FixtureTool = map[string]string{
 	"list_library_models":           "search_library",
 	"list_library_providers":        "search_library",
 	"get_library_model":             "get_library_model",
+	"get_program_benchmarks":        "get_program_benchmarks",
 	"create_download_authorization": "request_model_download",
 	"create_model_upload":           "upload_model",
 	"get_model_upload":              "upload_model",

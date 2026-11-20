@@ -233,6 +233,7 @@ func TestContractFixturesConformToToolOutputSchemas(t *testing.T) {
 			}
 		},
 		"get_library_model":             passthrough,
+		"get_program_benchmarks":        passthrough,
 		"create_download_authorization": passthrough,
 		// The upload-complete response reaches a caller inside upload_model's
 		// envelope, with its model reference repeated alongside.

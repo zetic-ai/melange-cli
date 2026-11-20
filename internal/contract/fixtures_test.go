@@ -474,6 +474,15 @@ func cases() []contractCase {
 				return err
 			},
 		},
+		{
+			name:         "get_program_benchmarks",
+			responseBody: func() any { return &gen.ProgramBenchmarksResponse{} },
+			drive: func(ctx context.Context, c *gen.ClientWithResponses, fx fixturetest.Fixture) error {
+				program := fixturetest.SegmentAfter(fx.Request.Path, "programs")
+				_, err := c.GetProgramBenchmarksWithResponse(ctx, program)
+				return err
+			},
+		},
 		// Error envelopes: response-only (the CLI surfaces these through the
 		// shared ErrorEnvelope type).
 		{

@@ -1,0 +1,732 @@
+{
+  "request": {
+    "body": null,
+    "headers": {},
+    "method": "GET",
+    "path": "/v1/programs/ACME-PROGRAM/benchmarks"
+  },
+  "response": {
+    "body": {
+      "metrics": {
+        "asr": [
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "per_clip_ms",
+            "keyed_by": null,
+            "label": "Per clip (end to end)",
+            "maximum": null,
+            "summary": true,
+            "unit": "ms"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "encoder_ms",
+            "keyed_by": null,
+            "label": "Encoder (30 s window)",
+            "maximum": null,
+            "summary": false,
+            "unit": "ms"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "decoder_per_token_ms",
+            "keyed_by": null,
+            "label": "Decoder per token",
+            "maximum": null,
+            "summary": false,
+            "unit": "ms"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "energy",
+            "group": "speed",
+            "key": "energy_per_30s_audio_j",
+            "keyed_by": null,
+            "label": "Energy per 30 s of audio",
+            "maximum": null,
+            "summary": false,
+            "unit": "J"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "memory",
+            "group": "speed",
+            "key": "memory_mb",
+            "keyed_by": null,
+            "label": "Memory",
+            "maximum": null,
+            "summary": true,
+            "unit": "MB"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "wer_pct",
+            "keyed_by": "test_set",
+            "label": "WER",
+            "maximum": 100.0,
+            "summary": true,
+            "unit": "%"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "float_token_match_pct",
+            "keyed_by": null,
+            "label": "Clips with the same tokens as float",
+            "maximum": 100.0,
+            "summary": false,
+            "unit": "%"
+          }
+        ],
+        "image_classification": [
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "latency_ms",
+            "keyed_by": null,
+            "label": "Per image",
+            "maximum": null,
+            "summary": true,
+            "unit": "ms"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "speed",
+            "group": "speed",
+            "key": "throughput_ips",
+            "keyed_by": null,
+            "label": "Throughput",
+            "maximum": null,
+            "summary": false,
+            "unit": "images/s"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "energy",
+            "group": "speed",
+            "key": "energy_per_image_mj",
+            "keyed_by": null,
+            "label": "Energy per image",
+            "maximum": null,
+            "summary": true,
+            "unit": "mJ"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "memory",
+            "group": "speed",
+            "key": "memory_mb",
+            "keyed_by": null,
+            "label": "Memory",
+            "maximum": null,
+            "summary": true,
+            "unit": "MB"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "load_time_ms",
+            "keyed_by": null,
+            "label": "Load time",
+            "maximum": null,
+            "summary": false,
+            "unit": "ms"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "top1_pct",
+            "keyed_by": null,
+            "label": "Top-1",
+            "maximum": 100.0,
+            "summary": true,
+            "unit": "%"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "top5_pct",
+            "keyed_by": null,
+            "label": "Top-5",
+            "maximum": 100.0,
+            "summary": true,
+            "unit": "%"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "float_top1_agree_pct",
+            "keyed_by": null,
+            "label": "Same top-1 as float",
+            "maximum": 100.0,
+            "summary": false,
+            "unit": "%"
+          }
+        ],
+        "llm": [
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "speed",
+            "group": "speed",
+            "key": "decode_tps",
+            "keyed_by": null,
+            "label": "Decode",
+            "maximum": null,
+            "summary": true,
+            "unit": "tokens/s"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "ttft_ms",
+            "keyed_by": "prompt_tokens",
+            "label": "Time to first token",
+            "maximum": null,
+            "summary": true,
+            "unit": "ms"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "memory",
+            "group": "speed",
+            "key": "memory_mb",
+            "keyed_by": null,
+            "label": "Memory",
+            "maximum": null,
+            "summary": true,
+            "unit": "MB"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "energy",
+            "group": "speed",
+            "key": "energy_per_token_mj",
+            "keyed_by": null,
+            "label": "Energy per token",
+            "maximum": null,
+            "summary": true,
+            "unit": "mJ"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "size",
+            "group": "speed",
+            "key": "package_size_mb",
+            "keyed_by": null,
+            "label": "Package size",
+            "maximum": null,
+            "summary": false,
+            "unit": "MB"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "ifeval",
+            "keyed_by": null,
+            "label": "IFEval",
+            "maximum": 100.0,
+            "summary": true,
+            "unit": null
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "ifeval_4way",
+            "keyed_by": null,
+            "label": "IFEval 4-way average",
+            "maximum": 100.0,
+            "summary": false,
+            "unit": null
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "ifeval_prompt_strict",
+            "keyed_by": null,
+            "label": "Prompt strict",
+            "maximum": 100.0,
+            "summary": false,
+            "unit": null
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "ifeval_instruction_strict",
+            "keyed_by": null,
+            "label": "Instruction strict",
+            "maximum": 100.0,
+            "summary": false,
+            "unit": null
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "perplexity",
+            "keyed_by": null,
+            "label": "Perplexity",
+            "maximum": null,
+            "summary": false,
+            "unit": null
+          }
+        ],
+        "tts": [
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "time_to_first_audio_ms",
+            "keyed_by": null,
+            "label": "Time to first audio",
+            "maximum": null,
+            "summary": true,
+            "unit": "ms"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "speed",
+            "group": "speed",
+            "key": "real_time_factor",
+            "keyed_by": null,
+            "label": "Real-time factor",
+            "maximum": null,
+            "summary": true,
+            "unit": null
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "energy",
+            "group": "speed",
+            "key": "energy_per_audio_second_mj",
+            "keyed_by": null,
+            "label": "Energy per second of audio",
+            "maximum": null,
+            "summary": true,
+            "unit": "mJ"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "memory",
+            "group": "speed",
+            "key": "memory_mb",
+            "keyed_by": null,
+            "label": "Memory",
+            "maximum": null,
+            "summary": true,
+            "unit": "MB"
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "wer_pct",
+            "keyed_by": null,
+            "label": "WER",
+            "maximum": 100.0,
+            "summary": true,
+            "unit": "%"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "utmos",
+            "keyed_by": null,
+            "label": "UTMOS",
+            "maximum": 5.0,
+            "summary": true,
+            "unit": null
+          },
+          {
+            "approximate": false,
+            "better": "lower",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "wer_vs_float_pct",
+            "keyed_by": null,
+            "label": "WER vs float",
+            "maximum": 100.0,
+            "summary": false,
+            "unit": "%"
+          },
+          {
+            "approximate": false,
+            "better": "higher",
+            "category": "accuracy",
+            "group": "accuracy",
+            "key": "float_exact_pct",
+            "keyed_by": null,
+            "label": "Sentences transcribed exactly as float",
+            "maximum": 100.0,
+            "summary": false,
+            "unit": "%"
+          }
+        ]
+      },
+      "models": [
+        {
+          "description": "Speech to text.",
+          "name": "Demo ASR",
+          "order": 10,
+          "results": [
+            {
+              "as_of": "2026-01-15",
+              "builds": [
+                {
+                  "accuracy": {
+                    "wer_pct": {
+                      "set-1": 5.5,
+                      "set-2": 12.25
+                    }
+                  },
+                  "artifact": null,
+                  "baseline": true,
+                  "highlight": true,
+                  "key": "small-a",
+                  "label": "Build A",
+                  "modes": [
+                    "accuracy"
+                  ],
+                  "notes": [],
+                  "runtime": "qualcomm_qnn",
+                  "speed": {
+                    "memory_mb": 100.0,
+                    "per_clip_ms": 100.0
+                  },
+                  "status": "measured",
+                  "status_note": null,
+                  "variant": "small"
+                },
+                {
+                  "accuracy": {
+                    "wer_pct": {
+                      "set-1": 5.5,
+                      "set-2": 12.25
+                    }
+                  },
+                  "artifact": null,
+                  "baseline": false,
+                  "highlight": true,
+                  "key": "small-b",
+                  "label": "Build B",
+                  "modes": [
+                    "speed"
+                  ],
+                  "notes": [],
+                  "runtime": "qualcomm_qnn",
+                  "speed": {
+                    "memory_mb": 100.0,
+                    "per_clip_ms": 80.0
+                  },
+                  "status": "measured",
+                  "status_note": null,
+                  "variant": "small"
+                },
+                {
+                  "accuracy": {
+                    "wer_pct": {
+                      "set-1": 2.75,
+                      "set-2": 6.125
+                    }
+                  },
+                  "artifact": null,
+                  "baseline": true,
+                  "highlight": true,
+                  "key": "large-a",
+                  "label": "Build A",
+                  "modes": [
+                    "accuracy"
+                  ],
+                  "notes": [],
+                  "runtime": "qualcomm_qnn",
+                  "speed": {
+                    "memory_mb": 200.0,
+                    "per_clip_ms": 400.0
+                  },
+                  "status": "measured",
+                  "status_note": null,
+                  "variant": "large"
+                },
+                {
+                  "accuracy": {
+                    "wer_pct": {
+                      "set-1": 2.75,
+                      "set-2": 6.125
+                    }
+                  },
+                  "artifact": null,
+                  "baseline": false,
+                  "highlight": true,
+                  "key": "large-b",
+                  "label": "Build B",
+                  "modes": [
+                    "speed"
+                  ],
+                  "notes": [],
+                  "runtime": "qualcomm_qnn",
+                  "speed": {
+                    "memory_mb": 200.0,
+                    "per_clip_ms": 320.0
+                  },
+                  "status": "measured",
+                  "status_note": null,
+                  "variant": "large"
+                },
+                {
+                  "accuracy": {
+                    "wer_pct": {
+                      "set-1": 5.0,
+                      "set-2": 11.0
+                    }
+                  },
+                  "artifact": null,
+                  "baseline": false,
+                  "highlight": true,
+                  "key": "small-float",
+                  "label": "Float (reference)",
+                  "modes": [],
+                  "notes": [],
+                  "runtime": "float_reference",
+                  "speed": {},
+                  "status": "measured",
+                  "status_note": null,
+                  "variant": "small"
+                },
+                {
+                  "accuracy": {
+                    "wer_pct": {
+                      "set-1": 5.0,
+                      "set-2": 11.0
+                    }
+                  },
+                  "artifact": null,
+                  "baseline": false,
+                  "highlight": true,
+                  "key": "large-float",
+                  "label": "Float (reference)",
+                  "modes": [],
+                  "notes": [],
+                  "runtime": "float_reference",
+                  "speed": {},
+                  "status": "measured",
+                  "status_note": null,
+                  "variant": "large"
+                }
+              ],
+              "highlights": [
+                "Build B is 1.25x faster per clip than build A."
+              ],
+              "measured_on": "Demo reference board",
+              "method": {
+                "accuracy": "Two test sets.",
+                "speed": "Median of 10 runs."
+              },
+              "notes": {
+                "accuracy": [],
+                "speed": [
+                  "Same board for every build."
+                ]
+              },
+              "revision": 1,
+              "soc": "DEMO100",
+              "software": {
+                "Demo SDK": "1.2.3"
+              },
+              "tables": [],
+              "updated_at": "<datetime>"
+            }
+          ],
+          "slug": "demo-asr",
+          "task": "asr",
+          "variants": [
+            {
+              "key": "small",
+              "label": "small"
+            },
+            {
+              "key": "large",
+              "label": "large"
+            }
+          ],
+          "vendor": "Example Labs"
+        },
+        {
+          "description": null,
+          "name": "Demo TTS",
+          "order": 20,
+          "results": [
+            {
+              "as_of": "2026-01-15",
+              "builds": [
+                {
+                  "accuracy": {
+                    "utmos": 3.5,
+                    "wer_pct": 6.5
+                  },
+                  "artifact": null,
+                  "baseline": true,
+                  "highlight": true,
+                  "key": "a",
+                  "label": "Build A",
+                  "modes": [
+                    "speed",
+                    "accuracy"
+                  ],
+                  "notes": [
+                    "The default recipe."
+                  ],
+                  "runtime": "qualcomm_qnn",
+                  "speed": {
+                    "energy_per_audio_second_mj": 300.0,
+                    "real_time_factor": 0.5,
+                    "time_to_first_audio_ms": 400.0
+                  },
+                  "status": "measured",
+                  "status_note": null,
+                  "variant": null
+                },
+                {
+                  "accuracy": {},
+                  "artifact": null,
+                  "baseline": false,
+                  "highlight": false,
+                  "key": "c",
+                  "label": "Build C (CPU)",
+                  "modes": [],
+                  "notes": [],
+                  "runtime": "llama_cpp",
+                  "speed": {},
+                  "status": "unsupported",
+                  "status_note": "Not available on this board.",
+                  "variant": null
+                }
+              ],
+              "highlights": [],
+              "measured_on": "Demo reference board",
+              "method": {
+                "accuracy": null,
+                "speed": null
+              },
+              "notes": {
+                "accuracy": [],
+                "speed": []
+              },
+              "revision": 1,
+              "soc": "DEMO100",
+              "software": {},
+              "tables": [
+                {
+                  "columns": [
+                    "Input",
+                    "Build A"
+                  ],
+                  "rows": [
+                    [
+                      "short",
+                      "300 ms"
+                    ],
+                    [
+                      "long",
+                      null
+                    ]
+                  ],
+                  "title": "Time by input length"
+                }
+              ],
+              "updated_at": "<datetime>"
+            }
+          ],
+          "slug": "demo-tts",
+          "task": "tts",
+          "variants": [],
+          "vendor": "Example Labs"
+        }
+      ],
+      "program": "ACME-PROGRAM",
+      "schema_version": "program-benchmark/v1",
+      "targets": [
+        {
+          "device": {
+            "model": null,
+            "name": "Demo reference board"
+          },
+          "form_factor": "wearable",
+          "has_results": true,
+          "name": "Demo Chip 100",
+          "notes": [
+            "A synthetic SoC for the contract fixture."
+          ],
+          "npu": "Demo NPU v1",
+          "soc": "DEMO100"
+        },
+        {
+          "device": {
+            "model": "DP-200",
+            "name": "Demo Phone"
+          },
+          "form_factor": "phone",
+          "has_results": false,
+          "name": "Demo Chip 200",
+          "notes": [],
+          "npu": "Demo NPU v2",
+          "soc": "DEMO200"
+        }
+      ],
+      "updated_at": "<datetime>"
+    },
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8"
+    },
+    "status": 200
+  }
+}
